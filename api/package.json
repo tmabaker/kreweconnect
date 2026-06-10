@@ -1,0 +1,21 @@
+{
+  "name": "kreweconnect-api",
+  "private": true,
+  "version": "0.1.0",
+  "description": "KreweConnect backend API — per-tenant Microsoft Graph access via app-only tokens",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "prestart": "npm run build",
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.7.0",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "~5.7.3"
+  }
+}

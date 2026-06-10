@@ -6,7 +6,7 @@
  */
 
 import { msalInstance } from "../shared/auth/AuthProvider";
-import { graphScopes } from "../shared/auth/msalConfig";
+import { graphScopes, apiScopes } from "../shared/auth/msalConfig";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -48,6 +48,8 @@ export interface GraphError {
   code: string;
   message: string;
   statusCode: number;
+  /** Present when code === "consent_required" — the admin-consent URL for the tenant */
+  consentUrl?: string;
 }
 
 // ─── Cache ───────────────────────────────────────────────────────
@@ -116,6 +118,68 @@ async function getAccessToken(): Promise<string> {
       );
     }
   }
+}
+
+// ─── Backend API Mode ───────────────────────────────────────────
+//
+// When VITE_USE_BACKEND_API=true, directory data is fetched through the
+// KreweConnect Functions API (/api/tenants/{tenantId}/...), which acquires
+// app-only Graph tokens against the *target* tenant's authority. This is
+// what makes cross-tenant (GDAP-style) access actually work — delegated
+// tokens from the browser are always scoped to the user's home tenant.
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+const useBackendApi = import.meta.env.VITE_USE_BACKEND_API === "true";
+
+async function getApiToken(): Promise<string> {
+  const account = msalInstance.getActiveAccount();
+  if (!account) {
+    throw createGraphError("no_account", "No active account. Please sign in.", 401);
+  }
+  try {
+    const response = await msalInstance.acquireTokenSilent({ ...apiScopes, account });
+    return response.accessToken;
+  } catch {
+    try {
+      const response = await msalInstance.acquireTokenPopup({ ...apiScopes, account });
+      return response.accessToken;
+    } catch {
+      throw createGraphError(
+        "token_failed",
+        "Failed to acquire access token. Please sign in again.",
+        401
+      );
+    }
+  }
+}
+
+async function apiRequest(path: string): Promise<Response> {
+  const token = await getApiToken();
+  return fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const response = await apiRequest(path);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const error: GraphError = {
+      code: body?.code || "api_error",
+      message: body?.message || `API error: ${response.status} ${response.statusText}`,
+      statusCode: response.status,
+    };
+    if (body?.consentUrl) error.consentUrl = body.consentUrl;
+    throw error;
+  }
+  return response.json();
+}
+
+/** Check whether a client tenant has granted admin consent to the app. */
+export async function fetchTenantAuthStatus(
+  tenantId: string
+): Promise<{ authorized: boolean; consentUrl: string }> {
+  return apiFetch(`/tenants/${tenantId}/status`);
 }
 
 // ─── HTTP Helpers ───────────────────────────────────────────────
@@ -204,11 +268,21 @@ export async function fetchUsers(tenantId?: string): Promise<GraphUser[]> {
   const cached = getCached<GraphUser[]>(cacheKey);
   if (cached) return cached;
 
+  if (useBackendApi) {
+    const data = await apiFetch<{ value: GraphUser[] }>(
+      `/tenants/${tenantId || "home"}/users`
+    );
+    setCache(cacheKey, data.value);
+    return data.value;
+  }
+
   const token = await getAccessToken();
   const allUsers: GraphUser[] = [];
 
-  // Build the initial URL. When accessing a partner customer tenant via GDAP,
-  // the token itself scopes access — no URL prefix change needed for delegated permissions.
+  // Direct-Graph mode (legacy fallback): delegated tokens are always issued
+  // by the signed-in user's home tenant, so this path can only ever read the
+  // home directory regardless of the selected tenant. Cross-tenant access
+  // requires backend mode (VITE_USE_BACKEND_API=true).
   let url = `${GRAPH_BASE}/users?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true`;
 
   while (url) {
@@ -236,10 +310,18 @@ export async function fetchUsers(tenantId?: string): Promise<GraphUser[]> {
 /**
  * Fetch a single user's details.
  */
-export async function fetchUserById(userId: string): Promise<GraphUser> {
-  const cacheKey = `user:${userId}`;
+export async function fetchUserById(userId: string, tenantId?: string): Promise<GraphUser> {
+  const cacheKey = `user:${tenantId || "home"}:${userId}`;
   const cached = getCached<GraphUser>(cacheKey);
   if (cached) return cached;
+
+  if (useBackendApi) {
+    const user = await apiFetch<GraphUser>(
+      `/tenants/${tenantId || "home"}/users/${userId}`
+    );
+    setCache(cacheKey, user);
+    return user;
+  }
 
   const token = await getAccessToken();
   const user = await graphFetch<GraphUser>(
@@ -255,17 +337,20 @@ export async function fetchUserById(userId: string): Promise<GraphUser> {
  * Fetch a user's profile photo as a blob URL.
  * Returns null if no photo is available.
  */
-export async function fetchUserPhoto(userId: string): Promise<string | null> {
-  const cacheKey = `photo:${userId}`;
+export async function fetchUserPhoto(
+  userId: string,
+  tenantId?: string
+): Promise<string | null> {
+  const cacheKey = `photo:${tenantId || "home"}:${userId}`;
   const cached = getCached<string | null>(cacheKey);
   if (cached !== null) return cached;
 
-  const token = await getAccessToken();
-
   try {
-    const response = await fetch(`${GRAPH_BASE}/users/${userId}/photo/$value`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = useBackendApi
+      ? await apiRequest(`/tenants/${tenantId || "home"}/users/${userId}/photo`)
+      : await fetch(`${GRAPH_BASE}/users/${userId}/photo/$value`, {
+          headers: { Authorization: `Bearer ${await getAccessToken()}` },
+        });
 
     if (!response.ok) {
       setCache(cacheKey, ""); // Cache the "no photo" result
@@ -287,7 +372,8 @@ export async function fetchUserPhoto(userId: string): Promise<string | null> {
  * Returns a map of userId -> blob URL (or null).
  */
 export async function fetchUserPhotos(
-  userIds: string[]
+  userIds: string[],
+  tenantId?: string
 ): Promise<Map<string, string | null>> {
   const results = new Map<string, string | null>();
 
@@ -299,7 +385,7 @@ export async function fetchUserPhotos(
     while (queue.length > 0) {
       const id = queue.shift()!;
       try {
-        const photo = await fetchUserPhoto(id);
+        const photo = await fetchUserPhoto(id, tenantId);
         results.set(id, photo);
       } catch {
         results.set(id, null);
@@ -387,12 +473,21 @@ export async function fetchCustomerTenants(): Promise<
  * Fetch direct reports for a user.
  */
 export async function fetchDirectReports(
-  userId: string
+  userId: string,
+  tenantId?: string
 ): Promise<Array<{ id: string; displayName: string; jobTitle: string | null }>> {
-  const cacheKey = `directReports:${userId}`;
+  const cacheKey = `directReports:${tenantId || "home"}:${userId}`;
   const cached =
     getCached<Array<{ id: string; displayName: string; jobTitle: string | null }>>(cacheKey);
   if (cached) return cached;
+
+  if (useBackendApi) {
+    const data = await apiFetch<{
+      value: Array<{ id: string; displayName: string; jobTitle: string | null }>;
+    }>(`/tenants/${tenantId || "home"}/users/${userId}/directReports`);
+    setCache(cacheKey, data.value);
+    return data.value;
+  }
 
   const token = await getAccessToken();
   const response = await graphFetch<{

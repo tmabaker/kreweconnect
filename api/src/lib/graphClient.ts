@@ -1,0 +1,138 @@
+/**
+ * App-only Microsoft Graph client, scoped per tenant.
+ * Mirrors the field selection the SPA's graphService uses.
+ */
+
+import { getAppToken } from "./tokenService";
+
+const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+
+export const USER_SELECT_FIELDS = [
+  "id",
+  "displayName",
+  "givenName",
+  "surname",
+  "jobTitle",
+  "department",
+  "officeLocation",
+  "mail",
+  "businessPhones",
+  "mobilePhone",
+  "userPrincipalName",
+  "accountEnabled",
+].join(",");
+
+const MANAGER_EXPAND = "manager($select=id,displayName)";
+
+export class GraphRequestError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "GraphRequestError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+interface GraphPagedResponse<T> {
+  value: T[];
+  "@odata.nextLink"?: string;
+}
+
+async function graphFetch<T>(tenantId: string, url: string): Promise<T> {
+  const token = await getAppToken(tenantId);
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ConsistencyLevel: "eventual",
+    },
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: { code?: string; message?: string };
+    };
+    throw new GraphRequestError(
+      response.status,
+      body.error?.code || "graph_error",
+      body.error?.message || `Graph API error: ${response.status}`
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
+export interface GraphUser {
+  id: string;
+  displayName: string;
+  givenName: string | null;
+  surname: string | null;
+  jobTitle: string | null;
+  department: string | null;
+  officeLocation: string | null;
+  mail: string | null;
+  businessPhones: string[];
+  mobilePhone: string | null;
+  userPrincipalName: string;
+  accountEnabled: boolean;
+  manager?: { id: string; displayName: string } | null;
+}
+
+export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
+  const allUsers: GraphUser[] = [];
+  let url = `${GRAPH_BASE}/users?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true&$count=true`;
+
+  while (url) {
+    const page = await graphFetch<GraphPagedResponse<GraphUser>>(tenantId, url);
+    allUsers.push(...page.value);
+    url = page["@odata.nextLink"] || "";
+  }
+
+  for (const user of allUsers) {
+    if (user.manager && typeof user.manager === "object") {
+      user.manager = {
+        id: user.manager.id || "",
+        displayName: user.manager.displayName || "",
+      };
+    }
+  }
+  return allUsers;
+}
+
+export async function fetchUserById(tenantId: string, userId: string): Promise<GraphUser> {
+  return graphFetch<GraphUser>(
+    tenantId,
+    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}`
+  );
+}
+
+export async function fetchDirectReports(
+  tenantId: string,
+  userId: string
+): Promise<Array<{ id: string; displayName: string; jobTitle: string | null }>> {
+  const response = await graphFetch<
+    GraphPagedResponse<{ id: string; displayName: string; jobTitle: string | null }>
+  >(
+    tenantId,
+    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/directReports?$select=id,displayName,jobTitle`
+  );
+  return response.value;
+}
+
+/** Returns the photo bytes + content type, or null if the user has no photo. */
+export async function fetchUserPhoto(
+  tenantId: string,
+  userId: string
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const token = await getAppToken(tenantId);
+  const response = await fetch(
+    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/photo/$value`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!response.ok) return null;
+  return {
+    bytes: await response.arrayBuffer(),
+    contentType: response.headers.get("content-type") || "image/jpeg",
+  };
+}

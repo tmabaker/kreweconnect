@@ -99,8 +99,10 @@ export function useGraphEmployees(tenantId: string) {
       setLoading(true);
       setError(null);
 
+      const targetTenant = tenantId === "all" ? undefined : tenantId;
+
       try {
-        const users = await fetchUsers(tenantId === "all" ? undefined : tenantId);
+        const users = await fetchUsers(targetTenant);
 
         if (cancelled) return;
 
@@ -108,7 +110,7 @@ export function useGraphEmployees(tenantId: string) {
 
         // Fetch photos in background (don't block the list)
         const userIds = users.slice(0, 50).map((u) => u.id); // Limit initial photo fetch
-        fetchUserPhotos(userIds).then((photos) => {
+        fetchUserPhotos(userIds, targetTenant).then((photos) => {
           if (!cancelled) {
             setPhotoMap((prev) => {
               const next = new Map(prev);
@@ -121,7 +123,11 @@ export function useGraphEmployees(tenantId: string) {
         if (cancelled) return;
 
         if (isGraphError(err)) {
-          if (err.statusCode === 403 || err.statusCode === 401) {
+          if (err.code === "consent_required" && err.consentUrl) {
+            setError(
+              `This tenant hasn't authorized KreweConnect yet. An administrator must grant one-time consent: ${err.consentUrl}`
+            );
+          } else if (err.statusCode === 403 || err.statusCode === 401) {
             setError(
               `Access denied for this tenant. GDAP permissions may not be configured. (${err.code})`
             );
@@ -208,13 +214,15 @@ export function useGraphEmployees(tenantId: string) {
     async (id: string): Promise<EmployeeDetail | null> => {
       if (isDemoMode) return mockHook.getDetail(id);
 
+      const targetTenant = tenantId === "all" ? undefined : tenantId;
+
       try {
         // Check if we already have the user in our cached list
         let user = graphUsers.find((u) => u.id === id);
 
         if (!user) {
           // Fetch from Graph directly
-          user = await fetchUserById(id);
+          user = await fetchUserById(id, targetTenant);
         }
 
         if (!user) return null;
@@ -222,7 +230,7 @@ export function useGraphEmployees(tenantId: string) {
         // Fetch direct reports
         let directReports: EmployeeRef[] = [];
         try {
-          const reports = await fetchDirectReports(id);
+          const reports = await fetchDirectReports(id, targetTenant);
           directReports = reports.map((r) => ({
             id: r.id,
             displayName: r.displayName,
@@ -243,7 +251,7 @@ export function useGraphEmployees(tenantId: string) {
         return null;
       }
     },
-    [graphUsers, tenantDisplayName, photoMap, mockHook.getDetail]
+    [graphUsers, tenantDisplayName, photoMap, mockHook.getDetail, tenantId]
   );
 
   // Build org chart from Graph data

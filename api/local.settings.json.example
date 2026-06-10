@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AZURE_CLIENT_ID": "eaeafccb-5190-48b6-863d-9e13f449acbb",
+    "AZURE_CLIENT_SECRET": "<client secret from the app registration — never commit>",
+    "MSP_TENANT_ID": "7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e",
+    "CONSENT_REDIRECT_URI": "https://krewesuite.noitgroup.com/app/kreweconnect/"
+  }
+}
