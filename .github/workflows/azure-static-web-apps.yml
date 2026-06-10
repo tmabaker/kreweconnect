@@ -41,6 +41,7 @@ jobs:
         env:
           VITE_USE_BACKEND_API: "true"
           VITE_API_BASE_URL: "/api"
+          VITE_REDIRECT_URI: "https://krewesuite.noitgroup.com/app/kreweconnect/"
         run: |
           npm ci
           npm run build
