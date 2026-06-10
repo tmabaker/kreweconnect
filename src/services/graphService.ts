@@ -155,9 +155,22 @@ async function getApiToken(): Promise<string> {
 
 async function apiRequest(path: string): Promise<Response> {
   const token = await getApiToken();
-  return fetch(`${API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    return await fetch(`${API_BASE}${path}`, {
+      headers: {
+        // Static Web Apps overwrites Authorization en route to managed
+        // functions, so the API reads X-KreweConnect-Auth first.
+        Authorization: `Bearer ${token}`,
+        "X-KreweConnect-Auth": `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw createGraphError("api_timeout", "The directory service took too long to respond. Please try again.", 504);
+    }
+    throw createGraphError("network_error", "Could not reach the directory service.", 0);
+  }
 }
 
 async function apiFetch<T>(path: string): Promise<T> {

@@ -56,7 +56,14 @@ function decodePayloadUnverified(token: string): JWTPayload {
 }
 
 export async function authenticate(request: HttpRequest): Promise<CallerContext> {
-  const authHeader = request.headers.get("authorization") || "";
+  // Static Web Apps overwrites the Authorization header with its own
+  // platform token before the request reaches managed functions, so the
+  // SPA sends the user's token in X-KreweConnect-Auth instead. Plain
+  // Authorization is still honored for direct/local calls.
+  const authHeader =
+    request.headers.get("x-kreweconnect-auth") ||
+    request.headers.get("authorization") ||
+    "";
   if (!authHeader.toLowerCase().startsWith("bearer ")) {
     throw new AuthError("Missing bearer token.");
   }
