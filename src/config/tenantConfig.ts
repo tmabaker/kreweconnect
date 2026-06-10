@@ -51,9 +51,24 @@ const DEFAULT_FEATURES: TenantFeatures = {
 /**
  * Static config for known tenants. Keyed by tenant ID (lowercase).
  * Add new tenants here as they're onboarded.
+ *
+ * NOTE: Geaux Automotive is the only entry with a real tenant ID so far.
+ * The remaining GUIDs are placeholders (NOC-52) — replace each with the
+ * client's actual tenant ID from Partner Center/CIPP before onboarding.
  */
 export const TENANT_CONFIGS: Record<string, TenantConfig> = {
-  // Bayou Automotive — Pilot tenant
+  // Geaux Automotive — PILOT TENANT (real tenant ID)
+  "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa": {
+    tenantId: "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa",
+    displayName: "Geaux Automotive",
+    primaryColor: "#461d7c",
+    secondaryColor: "#fdd023",
+    features: {
+      ...DEFAULT_FEATURES,
+    },
+  },
+
+  // Bayou Automotive
   "aaaaaaaa-1111-2222-3333-444444444444": {
     tenantId: "aaaaaaaa-1111-2222-3333-444444444444",
     displayName: "Bayou Automotive",
