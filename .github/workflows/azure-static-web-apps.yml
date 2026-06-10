@@ -1,0 +1,67 @@
+# Deploys the full KreweSuite site to the existing Azure Static Web App:
+#   - landing pages checked out from tmabaker/krewesuite (site root)
+#   - KreweConnect SPA built fresh from this repo -> /app/kreweconnect/
+#   - api/ deployed as the SWA managed Functions API (/api/*)
+#
+# Setup required before this runs:
+#   1. Add the SWA deployment token as a repo secret named
+#      AZURE_STATIC_WEB_APPS_API_TOKEN (SWA portal -> Manage deployment token).
+#   2. Disable the old workflow in the krewesuite repo (or restrict it),
+#      otherwise the two deployments will overwrite each other.
+#   3. Set the backend app settings in the SWA portal (AZURE_CLIENT_ID,
+#      AZURE_CLIENT_SECRET, MSP_TENANT_ID, CONSENT_REDIRECT_URI) — see
+#      docs/app-registration-setup.md.
+
+name: Deploy to Azure Static Web Apps
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    name: Build and Deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tmabaker/krewesuite
+          path: .krewesuite
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build SPA
+        env:
+          VITE_USE_BACKEND_API: "true"
+          VITE_API_BASE_URL: "/api"
+        run: |
+          npm ci
+          npm run build
+
+      - name: Assemble site (landing pages + app)
+        run: |
+          mkdir -p site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'app/kreweconnect' \
+            .krewesuite/ site/
+          mkdir -p site/app/kreweconnect
+          cp -r dist/* site/app/kreweconnect/
+
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: "upload"
+          app_location: "site"
+          api_location: "api"
+          output_location: ""
+          skip_app_build: true
