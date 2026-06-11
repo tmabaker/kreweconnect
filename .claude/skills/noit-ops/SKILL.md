@@ -32,7 +32,8 @@ changes. Report exactly which piece is missing; don't retry around it.
 ```python
 import boto3, json, os
 prefix = os.environ.get("SECRETS_PREFIX", "noit/")
-sm = boto3.client("secretsmanager")
+region = os.environ.get("SECRETS_REGION", "us-east-1")  # verified 2026-06-11
+sm = boto3.client("secretsmanager", region_name=region)
 index = json.loads(sm.get_secret_value(SecretId=f"{prefix}_index")["SecretString"])
 ```
 
