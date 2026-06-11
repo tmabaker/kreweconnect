@@ -6,6 +6,7 @@ import {
 } from "@fluentui/react-components";
 import { AuthProvider, RequireAuth } from "./shared/auth";
 import { AppShell } from "./shared/components/AppShell";
+import { TenantProvider } from "./shared/hooks/useTenantContext";
 
 // Lazy-loaded page components
 const DashboardPage = lazy(() =>
@@ -47,6 +48,7 @@ function App() {
     <FluentProvider theme={theme} style={{ height: "100vh" }}>
       <AuthProvider>
         <RequireAuth>
+          <TenantProvider>
           <BrowserRouter basename="/app/kreweconnect">
             <Routes>
               <Route element={<AppShell />}>
@@ -64,6 +66,7 @@ function App() {
               </Route>
             </Routes>
           </BrowserRouter>
+          </TenantProvider>
         </RequireAuth>
       </AuthProvider>
     </FluentProvider>
