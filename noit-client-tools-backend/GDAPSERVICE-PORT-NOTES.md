@@ -42,12 +42,20 @@ registry).
   `User.Read.All` (employee sync) and, for GDAP discovery,
   `DelegatedAdminRelationship.Read.All`.
 
+## Also ported (2026-06-11, same UNVERIFIED status)
+
+- **`EmployeeSyncService.SyncTenantAsync`** real path is now implemented:
+  acquires an app-only token via `GdapService.AcquireTokenForTenantAsync`,
+  calls `GET /v1.0/users` (paged, `$select`+`$expand=manager`, eventual
+  consistency for the `accountEnabled` filter), maps into the existing
+  upsert/deactivate/manager-resolution path. Behind `Gdap:UseMockData`.
+  Requires Graph **`User.Read.All`** application permission consented per tenant.
+  Not yet fetched: photos (per-user call) and `HireDate` (`employeeHireDate`
+  needs extra perms) — left null, a later pass. Needs `IHttpClientFactory`
+  (already added to DI via `AddHttpClient()`).
+
 ## Still stubbed (next pieces, out of scope for this change)
 
-- **`EmployeeSyncService.SyncTenantAsync`** still throws
-  `NotImplementedException` for the real path — it needs to call
-  `GdapService.AcquireTokenForTenantAsync(tenant.TenantId, …)` then
-  `GET /v1.0/users` (paged) and map to `Employee`. This is the next port.
 - **Controllers** should catch `TenantNotAuthorizedException` and return its
   `ConsentUrl` to the SPA (mirror the Functions API's `consent_required`
   response) so the UI can prompt for admin consent.
