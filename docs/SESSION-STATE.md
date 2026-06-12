@@ -114,12 +114,19 @@ Full rationale: `docs/architecture-reset.md`.
 
 ## 7. NEXT STEPS (priority order)
 
-1. **DONE (pending review/build):** `GdapService` port — real per-tenant token
-   acquisition + GDAP discovery, on branch `claude/brave-feynman-g2j9v5`
-   (commit `9a7f7c1`), NOT merged to main, UNVERIFIED (no .NET SDK here). See
-   `noit-client-tools-backend/GDAPSERVICE-PORT-NOTES.md`.
-   **Next agent task:** port `EmployeeSyncService.SyncTenantAsync` real path —
-   call `AcquireTokenForTenantAsync` then `GET /v1.0/users` (paged) → `Employee`.
+1. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
+   here; not merged to main):** the whole .NET backend was made build-ready:
+   - `GdapService` port — real per-tenant token + GDAP discovery (`9a7f7c1`)
+   - `EmployeeSyncService` port — real Graph `/users` fetch (`dfc0cf4`)
+   - Reconstructed the 3 build gaps: `Enums/AppEnums.cs`,
+     `Middleware/TenantContextMiddleware.cs`, single `NOIT.ClientTools.csproj`
+   - New `Middleware/ExceptionHandlingMiddleware.cs`: maps
+     `TenantNotAuthorizedException` → 401 `consent_required` + `consentUrl`
+   See `noit-client-tools-backend/GDAPSERVICE-PORT-NOTES.md`. Remaining to
+   build: `dotnet restore/build` (verify package versions), export real
+   `appsettings.Development.json` + EF `Migrations` if using SQL Server.
+   **Agent work is blocked here pending the frontend↔backend consolidation
+   decision (below) and a deploy target for the .NET backend.**
 2. **(Tammy, dev env)** Export the 3 non-search items the build needs:
    second `Enums` file, `TenantContextMiddleware.cs`, and
    `.sln`/`.csproj`/`Migrations/`. Then a fresh session can build/run it.
