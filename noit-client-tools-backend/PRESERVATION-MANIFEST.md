@@ -12,6 +12,7 @@ connector: read each with `read_resource` using the URI
 ## Build files (NOT in SharePoint search — export directly from the dev env)
 - [ ] `*.sln`, `*.csproj` (API / Core / Infrastructure projects)
 - [ ] `Migrations/` (EF Core), `appsettings.Development.json`
+- [ ] **`Enums/` second file** (TenantStatus, AppUserRole, AccessLevel) — referenced by models but NOT in SharePoint search results; locate & pull
 - [ ] `Middleware/TenantContextMiddleware.cs` (referenced by Program.cs; not in search results)
 
 ## Root
@@ -49,20 +50,20 @@ connector: read each with `read_resource` using the URI
 - [ ] `TenantContext.cs` — `01GX36IQFAQUDWQBOPXBCLM6PPFDGFCWVE`
 
 ## Models
-- [ ] `ClientTenant.cs` — `01GX36IQEEQGBONPRC4BGJD3AXB2XDSRPI`
-- [ ] `Employee.cs` — `01GX36IQBCPSHJ2MO3RZCKWBHXOQ3JFDN2`
-- [ ] `EmployeeCustomField.cs` — `01GX36IQDQLGABEHJHSRDZPOHE3CNJ4T4B`
-- [ ] `CustomFieldDefinition.cs` — `01GX36IQBBE5X2MTJ7YZFLV7TU4SVZ5SPG`
-- [ ] `AppUser.cs` — `01GX36IQCVMPEYMLXXYVEIYS5P2E6QWZTC`
-- [ ] `UserTenantAccess.cs` — `01GX36IQBF7O362E5Q65BYFZDYAIJABBHZ`
-- [ ] `AuditLogEntry.cs` — `01GX36IQHIINH4JOMPL5AK42LXTGNZ2IEU`
-- [ ] `Contract.cs` — `01GX36IQDZVIYRRECCKNHZPPP6S5AGW2ES`
-- [ ] `ContractVersion.cs` — `01GX36IQDODDFS5QVOYBBK5526AKJJUNOD`
-- [ ] `ContractDocument.cs` — `01GX36IQCYJZQXIDQUSJE2KGAWQELFORZO`
-- [ ] `ContractApproval.cs` — `01GX36IQACP3JQJKJDCFDZTJRF4EYE37D5`
-- [ ] `ContractTag.cs` — `01GX36IQF6HYXRKYCSGJHZ5TN6D2HFEPMK`
-- [ ] `Tag.cs` — `01GX36IQC3GSKUS4RUTNDIGYBJG5YEZAX4`
-- [ ] `RenewalAlert.cs` — `01GX36IQC5CMLLBDYIM5EJINTCZVP52DQX`
+- [x] `ClientTenant.cs` — `01GX36IQEEQGBONPRC4BGJD3AXB2XDSRPI`
+- [x] `Employee.cs` — `01GX36IQBCPSHJ2MO3RZCKWBHXOQ3JFDN2`
+- [x] `EmployeeCustomField.cs` — `01GX36IQDQLGABEHJHSRDZPOHE3CNJ4T4B`
+- [x] `CustomFieldDefinition.cs` — `01GX36IQBBE5X2MTJ7YZFLV7TU4SVZ5SPG`
+- [x] `AppUser.cs` — `01GX36IQCVMPEYMLXXYVEIYS5P2E6QWZTC`
+- [x] `UserTenantAccess.cs` — `01GX36IQBF7O362E5Q65BYFZDYAIJABBHZ`
+- [x] `AuditLogEntry.cs` — `01GX36IQHIINH4JOMPL5AK42LXTGNZ2IEU`
+- [x] `Contract.cs` — `01GX36IQDZVIYRRECCKNHZPPP6S5AGW2ES`
+- [x] `ContractVersion.cs` — `01GX36IQDODDFS5QVOYBBK5526AKJJUNOD`
+- [x] `ContractDocument.cs` — `01GX36IQCYJZQXIDQUSJE2KGAWQELFORZO`
+- [x] `ContractApproval.cs` — `01GX36IQACP3JQJKJDCFDZTJRF4EYE37D5`
+- [x] `ContractTag.cs` — `01GX36IQF6HYXRKYCSGJHZ5TN6D2HFEPMK`
+- [x] `Tag.cs` — `01GX36IQC3GSKUS4RUTNDIGYBJG5YEZAX4`
+- [x] `RenewalAlert.cs` — `01GX36IQC5CMLLBDYIM5EJINTCZVP52DQX`
 
 ## DTOs
 - [ ] `EmployeeDtos.cs` — `01GX36IQAVGDRDYCNNVREIDJDR76TLNPJF`
@@ -73,4 +74,4 @@ connector: read each with `read_resource` using the URI
 - [ ] `PagedResult.cs` — `01GX36IQBKHJFFDSWFNVHYYRPOYIH7CWSP`
 
 ## Enums
-- [ ] `ContractEnums.cs` — `01GX36IQCBXX6ZCNGRNFH24HS6AFY7QXK2`
+- [x] `ContractEnums.cs` — `01GX36IQCBXX6ZCNGRNFH24HS6AFY7QXK2`
