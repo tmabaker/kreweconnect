@@ -42,12 +42,12 @@ connector: read each with `read_resource` using the URI
 ## Services
 - [x] `GdapService.cs` — `01GX36IQGX3OIQXKI4EVHJVAWZ3CWLN3NX`
 - [x] `EmployeeSyncService.cs` — `01GX36IQGPS3FOOQVZJJHILNZTLSI5GKRB`
-- [ ] `EmployeeService.cs` — `01GX36IQFXREACXUTRNJFJWQSHRPZRXH7A`
-- [ ] `ContractService.cs` — `01GX36IQEDUSEO3VAPC5ELCQEOZBMEGOI6`
-- [ ] `ContractApprovalService.cs` — `01GX36IQF3HB3NBUXFJVFZ6J3ZRQFQDFSL`
-- [ ] `RenewalAlertService.cs` — `01GX36IQDM2JW2WAWG7REJKHUWMOVIQVD7`
-- [ ] `AuditService.cs` — `01GX36IQG3KYE4JISTJVGLSLDYC6ZMIBVL`
-- [ ] `TenantContext.cs` — `01GX36IQFAQUDWQBOPXBCLM6PPFDGFCWVE`
+- [x] `EmployeeService.cs` — `01GX36IQFXREACXUTRNJFJWQSHRPZRXH7A`
+- [x] `ContractService.cs` — `01GX36IQEDUSEO3VAPC5ELCQEOZBMEGOI6`
+- [x] `ContractApprovalService.cs` — `01GX36IQF3HB3NBUXFJVFZ6J3ZRQFQDFSL`
+- [x] `RenewalAlertService.cs` — `01GX36IQDM2JW2WAWG7REJKHUWMOVIQVD7`
+- [x] `AuditService.cs` — `01GX36IQG3KYE4JISTJVGLSLDYC6ZMIBVL`
+- [x] `TenantContext.cs` — `01GX36IQFAQUDWQBOPXBCLM6PPFDGFCWVE`
 
 ## Models
 - [x] `ClientTenant.cs` — `01GX36IQEEQGBONPRC4BGJD3AXB2XDSRPI`
