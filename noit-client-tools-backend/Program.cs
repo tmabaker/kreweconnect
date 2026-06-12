@@ -45,6 +45,7 @@ builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContractApprovalService, ContractApprovalService>();
 builder.Services.AddScoped<IRenewalAlertService, RenewalAlertService>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient(); // IHttpClientFactory for GdapService per-tenant token + Graph calls
 
 // ----- Redis (optional) -----
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
