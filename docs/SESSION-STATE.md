@@ -61,6 +61,9 @@ Full rationale: `docs/architecture-reset.md`.
 - App `eaeafccb`'s **client secret was rotated**. Verified dead (Entra
   `AADSTS7000215`) in BOTH reachable copies: AWS `noit/azure-taila-agent`
   (value `6~j…`) and the SharePoint `appsettings.json` (value `PIO8Q~…`).
+  NOTE (per Tammy): the two SharePoint plaintext values were **init-time
+  secrets, already rotated out** when AWS Secrets Manager was adopted — dead
+  strings, not an active exposure. Scrubbing them is hygiene, not urgent.
 - The **only valid** secret is the one in the **SWA app settings** (created
   during the app-registration update). The deployed app uses it, so the app
   works even though agent sessions cannot mint Graph tokens from here.
@@ -111,10 +114,12 @@ Full rationale: `docs/architecture-reset.md`.
 
 ## 7. NEXT STEPS (priority order)
 
-1. **(agent, no creds) — NOW THE TOP TASK:** Port `api/` per-tenant token
-   logic into the .NET `GdapService.AcquireTokenForTenantAsync` + implement
-   GDAP discovery (`delegatedAdminRelationships`) — as a reviewable change.
-   (Backend preservation is DONE for all search-surfaced files.)
+1. **DONE (pending review/build):** `GdapService` port — real per-tenant token
+   acquisition + GDAP discovery, on branch `claude/brave-feynman-g2j9v5`
+   (commit `9a7f7c1`), NOT merged to main, UNVERIFIED (no .NET SDK here). See
+   `noit-client-tools-backend/GDAPSERVICE-PORT-NOTES.md`.
+   **Next agent task:** port `EmployeeSyncService.SyncTenantAsync` real path —
+   call `AcquireTokenForTenantAsync` then `GET /v1.0/users` (paged) → `Employee`.
 2. **(Tammy, dev env)** Export the 3 non-search items the build needs:
    second `Enums` file, `TenantContextMiddleware.cs`, and
    `.sln`/`.csproj`/`Migrations/`. Then a fresh session can build/run it.
@@ -123,8 +128,10 @@ Full rationale: `docs/architecture-reset.md`.
    the environment network policy.
 4. **(Tammy, browser)** Pilot verification: sign in → switch to Geaux →
    Directory should load real employees (3 prior blockers cleared).
-5. **(Tammy, security)** Scrub the plaintext secret from the SharePoint
-   `appsettings.json`.
+5. **(Tammy, hygiene — not urgent)** Scrub the historical plaintext secrets
+   from the SharePoint `appsettings.json`. These were init-time values already
+   rotated out when AWS Secrets Manager was adopted, so they're dead — cleanup
+   only, no active exposure.
 
 ## 8. Linear (team "NO SE IT Client", project KreweConnect)
 
