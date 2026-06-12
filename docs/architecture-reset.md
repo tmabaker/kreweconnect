@@ -145,10 +145,14 @@ Decisions to standardize on:
 
 ---
 
-## 7. Open decisions for review
+## 7. Decisions (CONFIRMED 2026-06-11 by Tammy)
 
-1. **Which backend is the home** — recommend .NET (more built). Confirm.
-2. **Single secret store** — recommend AWS Secrets Manager. Confirm.
-3. **GDAP out of the product path** — recommend yes. Confirm.
-4. **One domain or two** — keep `techtools` (portal) and `krewesuite`
-   (KreweConnect) separate, or unify? Affects CORS/redirect config.
+1. **Home backend:** the **.NET backend** (deferred to recommendation). Port
+   the Functions API's per-tenant token logic into it.
+2. **Auth model:** **per-tenant admin consent** (Apps365-style), GDAP **off**
+   the auth path.
+3. **GDAP:** used only for **tenant discovery** (listing which client tenants
+   to offer), not for token brokering.
+4. **Single secret store:** recommend AWS Secrets Manager (confirm at execution).
+5. **Domains:** keep `techtools` (portal) and `krewesuite` (KreweConnect)
+   separate unless a reason to unify emerges (confirm at execution).
