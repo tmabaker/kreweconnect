@@ -28,9 +28,12 @@ highest-value, hardest-to-reconstruct files into git immediately.
 deterministically, plus the build files (`.csproj`/`.sln`/Migrations) which
 SharePoint search does not surface and must be exported directly.
 
-This snapshot is **not yet buildable on its own** (missing project files and
-~40 model/DTO/interface/controller files). It is preserved for safety and
-reference, not as a compile target yet.
+**UPDATE 2026-06-11:** all 45 files surfaced by SharePoint search are now
+preserved (the full Controllers/Interfaces/Services/Models/DTOs/Enums tree).
+The snapshot is still **not buildable** only because three things live outside
+SharePoint search and must be exported from the dev environment: the second
+`Enums` file (TenantStatus/AppUserRole/AccessLevel), `Middleware/TenantContextMiddleware.cs`,
+and the build files (`.sln`/`.csproj`/EF `Migrations/`). Everything else is here.
 
 ## Key architectural facts (see `/docs/architecture-reset.md`)
 

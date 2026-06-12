@@ -8,6 +8,13 @@ connector: read each with `read_resource` using the URI
 
 - **driveId:** `b!RY-elKqB3kmtZ1fxbq0lUZbpJ9VNxD5Co2bXshGn6sw8D-YXAXXXSK84dslNiz65`
 - **[x]** = already preserved in this snapshot. **[ ]** = still to pull.
+> **UPDATE 2026-06-11:** All 45 files surfaced by SharePoint search are now
+> preserved. Remaining gaps (NOT in search): the second `Enums` file
+> (TenantStatus/AppUserRole/AccessLevel), `Middleware/TenantContextMiddleware.cs`,
+> and build files (`.sln`/`.csproj`/Migrations). These must be exported
+> directly from the dev environment — they are the only things blocking a
+> clean build.
+
 
 ## Build files (NOT in SharePoint search — export directly from the dev env)
 - [ ] `*.sln`, `*.csproj` (API / Core / Infrastructure projects)
@@ -23,11 +30,11 @@ connector: read each with `read_resource` using the URI
 - [x] `AppDbContext.cs` — `01GX36IQDOGBXZBFGJ6BELXA7JHZ4755VD`
 
 ## Controllers
-- [ ] `HealthController.cs` — `01GX36IQG3E2BTIOTRS5FZ6NWXLSPW7PCU`
-- [ ] `EmployeesController.cs` — `01GX36IQGHDKQWMS24NREIE3RSIRWMT4FD`
-- [ ] `ContractsController.cs` — `01GX36IQHLIFAYAO4HMZHKCDX76FGJ6YTS`
-- [ ] `TenantsController.cs` — `01GX36IQARQG6LTVOCWRD2FXH4T2XB74C5`
-- [ ] `UsersController.cs` — `01GX36IQHVYRCZPTVYZREYIRXYXCIPQWDQ`
+- [x] `HealthController.cs` — `01GX36IQG3E2BTIOTRS5FZ6NWXLSPW7PCU`
+- [x] `EmployeesController.cs` — `01GX36IQGHDKQWMS24NREIE3RSIRWMT4FD`
+- [x] `ContractsController.cs` — `01GX36IQHLIFAYAO4HMZHKCDX76FGJ6YTS`
+- [x] `TenantsController.cs` — `01GX36IQARQG6LTVOCWRD2FXH4T2XB74C5`
+- [x] `UsersController.cs` — `01GX36IQHVYRCZPTVYZREYIRXYXCIPQWDQ`
 
 ## Interfaces
 - [x] `IGdapService.cs` — `01GX36IQCAC42ST743YJA3F4YNEKNTOKXC`
