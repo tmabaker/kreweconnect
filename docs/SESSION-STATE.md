@@ -98,21 +98,26 @@ Full rationale: `docs/architecture-reset.md`.
 - `src/` — KreweConnect React frontend (recovered).
 - `api/` — Azure Functions backend: working per-tenant client-credentials
   token logic + tenant isolation (`api/src/lib/`). The piece to port into .NET.
-- `noit-client-tools-backend/` — **partial** preservation of the .NET backend.
-  See its `PRESERVATION-MANIFEST.md` for the ~40 remaining files (with
-  SharePoint item IDs) + build files still to capture.
+- `noit-client-tools-backend/` — preserved .NET backend. **All 45 files
+  surfaced by SharePoint search are now captured** (full
+  Controllers/Interfaces/Services/Models/DTOs/Enums tree). Still missing,
+  and the only things blocking a clean build (must be exported from the dev
+  env, not in SharePoint search): a second `Enums` file
+  (TenantStatus/AppUserRole/AccessLevel), `Middleware/TenantContextMiddleware.cs`,
+  and `.sln`/`.csproj`/EF `Migrations/`. See its `PRESERVATION-MANIFEST.md`.
 - `docs/` — `architecture-reset.md` (the plan), `app-registration-setup.md`.
 - `.claude/skills/` — `azure-ops` (KreweConnect Azure runbook), `noit-ops`
   (AWS Secrets bootstrap + connection verification).
 
 ## 7. NEXT STEPS (priority order)
 
-1. **(agent, no creds)** Finish preserving the .NET backend: pull the
-   remaining files in `noit-client-tools-backend/PRESERVATION-MANIFEST.md`
-   via the M365 connector. Best done in a fresh session (context-heavy).
-2. **(agent, no creds)** Port `api/` per-tenant token logic into the .NET
-   `GdapService.AcquireTokenForTenantAsync` + implement GDAP discovery
-   (`delegatedAdminRelationships`) — as a reviewable change.
+1. **(agent, no creds) — NOW THE TOP TASK:** Port `api/` per-tenant token
+   logic into the .NET `GdapService.AcquireTokenForTenantAsync` + implement
+   GDAP discovery (`delegatedAdminRelationships`) — as a reviewable change.
+   (Backend preservation is DONE for all search-surfaced files.)
+2. **(Tammy, dev env)** Export the 3 non-search items the build needs:
+   second `Enums` file, `TenantContextMiddleware.cs`, and
+   `.sln`/`.csproj`/`Migrations/`. Then a fresh session can build/run it.
 3. **(Tammy, keyboard)** Mint a fresh client secret on `eaeafccb`; store in
    AWS `noit/azure-taila-agent`. Rotate the pasted AWS key. Optionally widen
    the environment network policy.
