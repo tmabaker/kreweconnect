@@ -143,6 +143,8 @@ export function DirectoryPage() {
     setDepartmentFilter,
     officeFilter,
     setOfficeFilter,
+    titleFilter,
+    setTitleFilter,
     sortBy,
     setSortBy,
     loading,
@@ -150,7 +152,7 @@ export function DirectoryPage() {
     refresh,
   } = useGraphEmployees(selectedTenant.tenantId);
 
-  const activeFilterCount = [departmentFilter, officeFilter].filter(Boolean).length;
+  const activeFilterCount = [departmentFilter, officeFilter, titleFilter].filter(Boolean).length;
 
   return (
     <div className={styles.page}>
@@ -230,16 +232,31 @@ export function DirectoryPage() {
           </Dropdown>
           <Dropdown
             className={styles.filterDropdown}
-            placeholder="Office"
+            placeholder="Location"
             value={officeFilter ?? ""}
             onOptionSelect={(_, data) =>
               setOfficeFilter(data.optionValue === "" ? null : (data.optionValue ?? null))
             }
           >
-            <Option value="">All Offices</Option>
+            <Option value="">All Locations</Option>
             {facets.offices.map((o) => (
               <Option key={o} value={o}>
                 {o}
+              </Option>
+            ))}
+          </Dropdown>
+          <Dropdown
+            className={styles.filterDropdown}
+            placeholder="Job Title"
+            value={titleFilter ?? ""}
+            onOptionSelect={(_, data) =>
+              setTitleFilter(data.optionValue === "" ? null : (data.optionValue ?? null))
+            }
+          >
+            <Option value="">All Job Titles</Option>
+            {facets.titles.map((t) => (
+              <Option key={t} value={t}>
+                {t}
               </Option>
             ))}
           </Dropdown>
@@ -251,6 +268,7 @@ export function DirectoryPage() {
               onClick={() => {
                 setDepartmentFilter(null);
                 setOfficeFilter(null);
+                setTitleFilter(null);
               }}
             >
               Clear
@@ -317,9 +335,19 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
           <Text weight="semibold" size={400} className={styles.cardName}>
             {employee.displayName}
           </Text>
-          <Text size={200} className={styles.cardTitle}>
+          <Text size={300} className={styles.cardTitle}>
             {employee.jobTitle || "No title"}
           </Text>
+          {employee.tenantDisplayName && (
+            <Text
+              size={200}
+              weight="semibold"
+              className={styles.cardTitle}
+              style={{ color: tokens.colorBrandForeground1 }}
+            >
+              {employee.tenantDisplayName}
+            </Text>
+          )}
         </div>
       </div>
 
@@ -351,13 +379,6 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
         )}
       </div>
 
-      {employee.tenantDisplayName && (
-        <div className={styles.tenantBadge}>
-          <Badge appearance="outline" color="informative" size="small">
-            {employee.tenantDisplayName}
-          </Badge>
-        </div>
-      )}
     </Card>
   );
 }
