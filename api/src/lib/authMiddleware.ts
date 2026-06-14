@@ -115,6 +115,14 @@ const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * requires the caller to be an MSP admin.
  */
 export function authorizeTenant(caller: CallerContext, requestedTenantId: string): string {
+  // "all" — MSP-admin-only aggregate across configured client tenants.
+  if (requestedTenantId === "all") {
+    if (!caller.isMspAdmin) {
+      throw new AuthError("Not authorized to view all tenants.", 403);
+    }
+    return "all";
+  }
+
   const target =
     !requestedTenantId || requestedTenantId === "home"
       ? caller.tenantId

@@ -31,6 +31,25 @@ export const config = {
   get consentRedirectUri(): string {
     return process.env.CONSENT_REDIRECT_URI || "https://krewesuite.noitgroup.com/app/kreweconnect/";
   },
+  /**
+   * Client tenants to merge in the MSP "all clients" view. Configure via the
+   * CLIENT_TENANTS app setting (JSON array of {id,name}); defaults to the pilot
+   * tenant. Tenants that haven't consented are skipped gracefully at fetch time.
+   */
+  get clientTenants(): Array<{ id: string; name: string }> {
+    const raw = process.env.CLIENT_TENANTS;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((t) => t && typeof t.id === "string");
+        }
+      } catch {
+        // malformed setting — fall through to default
+      }
+    }
+    return [{ id: "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa", name: "Geaux Automotive" }];
+  },
 };
 
 /** Build the one-time admin-consent URL for a client tenant. */

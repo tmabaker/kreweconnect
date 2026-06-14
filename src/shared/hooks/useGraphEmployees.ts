@@ -47,7 +47,10 @@ function graphUserToListItem(
     businessPhone: user.businessPhones?.[0] || null,
     photo: photoUrl || null,
     isActive: user.accountEnabled !== false,
-    tenantDisplayName,
+    // In the aggregate view each user carries its own tenant; otherwise use
+    // the single selected tenant's display name.
+    tenantDisplayName: user.tenantDisplayName ?? tenantDisplayName,
+    tenantId: user.tenantId ?? null,
   };
 }
 
@@ -99,26 +102,31 @@ export function useGraphEmployees(tenantId: string) {
       setLoading(true);
       setError(null);
 
-      const targetTenant = tenantId === "all" ? undefined : tenantId;
+      const isAll = tenantId === "all";
+      const targetTenant = isAll ? undefined : tenantId;
 
       try {
-        const users = await fetchUsers(targetTenant);
+        // "all" hits the MSP aggregate endpoint; a GUID hits that one tenant.
+        const users = await fetchUsers(isAll ? "all" : tenantId);
 
         if (cancelled) return;
 
         setGraphUsers(users);
 
-        // Fetch photos in background (don't block the list)
-        const userIds = users.slice(0, 50).map((u) => u.id); // Limit initial photo fetch
-        fetchUserPhotos(userIds, targetTenant).then((photos) => {
-          if (!cancelled) {
-            setPhotoMap((prev) => {
-              const next = new Map(prev);
-              photos.forEach((url, id) => next.set(id, url));
-              return next;
-            });
-          }
-        });
+        // Photos are a per-tenant Graph call, so skip the batch fetch in the
+        // aggregate view (cards fall back to initials).
+        if (!isAll) {
+          const userIds = users.slice(0, 50).map((u) => u.id); // Limit initial photo fetch
+          fetchUserPhotos(userIds, targetTenant).then((photos) => {
+            if (!cancelled) {
+              setPhotoMap((prev) => {
+                const next = new Map(prev);
+                photos.forEach((url, id) => next.set(id, url));
+                return next;
+              });
+            }
+          });
+        }
       } catch (err) {
         if (cancelled) return;
 
@@ -214,15 +222,19 @@ export function useGraphEmployees(tenantId: string) {
     async (id: string): Promise<EmployeeDetail | null> => {
       if (isDemoMode) return mockHook.getDetail(id);
 
-      const targetTenant = tenantId === "all" ? undefined : tenantId;
+      const selectedTenant = tenantId === "all" ? undefined : tenantId;
 
       try {
         // Check if we already have the user in our cached list
         let user = graphUsers.find((u) => u.id === id);
 
+        // In the aggregate view, each user carries its own source tenant — use
+        // that so detail/reports come from the right tenant, not "all".
+        const userTenant = user?.tenantId ?? selectedTenant;
+
         if (!user) {
           // Fetch from Graph directly
-          user = await fetchUserById(id, targetTenant);
+          user = await fetchUserById(id, userTenant);
         }
 
         if (!user) return null;
@@ -230,7 +242,7 @@ export function useGraphEmployees(tenantId: string) {
         // Fetch direct reports
         let directReports: EmployeeRef[] = [];
         try {
-          const reports = await fetchDirectReports(id, targetTenant);
+          const reports = await fetchDirectReports(id, userTenant);
           directReports = reports.map((r) => ({
             id: r.id,
             displayName: r.displayName,

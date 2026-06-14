@@ -77,6 +77,9 @@ export interface GraphUser {
   userPrincipalName: string;
   accountEnabled: boolean;
   manager?: { id: string; displayName: string } | null;
+  /** Set only in the aggregated "all clients" response — the source tenant */
+  tenantId?: string;
+  tenantDisplayName?: string;
 }
 
 export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
@@ -98,6 +101,34 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
     }
   }
   return allUsers;
+}
+
+/**
+ * Aggregate users across multiple client tenants for the MSP "all clients"
+ * view. Each user is tagged with its source tenant. Tenants that fail (not
+ * consented, secret issue, etc.) are skipped so one bad tenant can't break the
+ * whole view.
+ */
+export async function fetchUsersAllTenants(
+  tenants: Array<{ id: string; name: string }>
+): Promise<GraphUser[]> {
+  const all: GraphUser[] = [];
+  await Promise.all(
+    tenants.map(async (t) => {
+      try {
+        const users = await fetchUsers(t.id);
+        for (const u of users) {
+          u.tenantId = t.id;
+          u.tenantDisplayName = t.name;
+        }
+        all.push(...users);
+      } catch {
+        // tenant not reachable/consented — skip it
+      }
+    })
+  );
+  all.sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+  return all;
 }
 
 export async function fetchUserById(tenantId: string, userId: string): Promise<GraphUser> {

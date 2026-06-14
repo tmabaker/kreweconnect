@@ -26,6 +26,8 @@ export interface EmployeeListItem {
   photo: string | null;
   isActive: boolean;
   tenantDisplayName: string | null;
+  /** Source tenant GUID — set in the aggregated "all clients" view */
+  tenantId?: string | null;
 }
 
 export interface CustomFieldValue {
