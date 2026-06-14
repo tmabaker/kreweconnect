@@ -20,11 +20,13 @@ import { authenticate, authorizeTenant, AuthError, type CallerContext } from "..
 import { TenantNotAuthorizedError, checkTenantAuthorization } from "../lib/tokenService";
 import {
   fetchUsers,
+  fetchUsersAllTenants,
   fetchUserById,
   fetchDirectReports,
   fetchUserPhoto,
   GraphRequestError,
 } from "../lib/graphClient";
+import { config } from "../lib/config";
 
 type Handler = (
   request: HttpRequest,
@@ -86,7 +88,10 @@ app.http("tenantUsers", {
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users",
   handler: withAuth(async (_request, _caller, tenantId) => {
-    const users = await fetchUsers(tenantId);
+    const users =
+      tenantId === "all"
+        ? await fetchUsersAllTenants(config.clientTenants)
+        : await fetchUsers(tenantId);
     return { status: 200, jsonBody: { value: users } };
   }),
 });

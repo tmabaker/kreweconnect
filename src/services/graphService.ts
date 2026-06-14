@@ -27,6 +27,9 @@ export interface GraphUser {
     id: string;
     displayName: string;
   } | null;
+  /** Present only in the aggregated "all clients" response — the source tenant */
+  tenantId?: string;
+  tenantDisplayName?: string;
 }
 
 export interface GraphOrganization {
