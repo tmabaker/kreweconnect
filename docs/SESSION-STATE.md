@@ -55,6 +55,14 @@ Full rationale: `docs/architecture-reset.md`.
 - Frontend fixes live: MSAL redirect URI, `X-KreweConnect-Auth` header (SWA
   overwrites `Authorization`), tenant-context React Context fix, client-tenant
   pinning.
+- **Directory enhancements live:** Job Title filter, Location filter, company
+  name on cards (run #11).
+- **NOIT "all clients" aggregated view live:** selecting "All Tenants" (MSP
+  admins only) merges employees across every configured client tenant, each
+  card tagged with its company; clients still see only their own. To add more
+  clients to the aggregate, set the **`CLIENT_TENANTS`** app setting in the SWA
+  (JSON: `[{"id":"<tenantGuid>","name":"<Company>"}]`); defaults to Geaux. Each
+  added tenant must also have granted admin consent (use the consent URL).
 
 ## 4. The credential situation (DEFINITIVE — don't re-litigate)
 
