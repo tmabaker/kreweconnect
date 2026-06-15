@@ -67,6 +67,12 @@ Tammy to save.
 ### Per-secret payload shapes
 
 - `oauth2_client_credentials`: `{"client_id","client_secret","tenant_id"}`
+- `cipp`: `{"base_url","client_id","client_secret","tenant_id","scope"}` —
+  client-credentials token against `tenant_id` with `scope`, then call
+  `GET {base_url}/api/ListTenants` (authoritative client tenant-ID source:
+  `customerId`/`displayName`/`defaultDomainName`). Role is read-write/admin →
+  treat destructive client-tenant writes as needing explicit per-action OK.
+  Full setup: `docs/cipp-access-setup.md`.
 - `api_key`: `{"key","header"}` (e.g. header `"X-API-Key"`)
 - `basic`: `{"username","password"}`
 - `bearer`: `{"token"}`
