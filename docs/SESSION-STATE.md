@@ -135,13 +135,30 @@ Full rationale: `docs/architecture-reset.md`.
 
 ## 7. NEXT STEPS (priority order)
 
-> **PRODUCT STATUS 2026-06-15:** Both halves of the north star are LIVE and
-> verified — clients see only their own tenant; NOIT "All Tenants" merges
-> across consented clients. Geaux pilot loads real data. Remaining work is
-> onboarding/ops + the agent-enablement + the optional .NET consolidation,
-> NOT core product gaps.
+> **PRODUCT STATUS 2026-06-15:** ⚠️ **SECURITY** — a client user
+> (guest in NOIT) was being treated as an MSP admin and could see the
+> cross-client dashboard/switcher + reach other tenants' directory data. Root
+> cause: MSAL authority was pinned to the NOIT single tenant, so every token's
+> `tid` was NOIT. **Fix is committed on branch `claude/determined-archimedes-wor91s`
+> (commit `798aaac`) but STAGED — not yet on `main`/deployed** (Tammy's call,
+> pending the client-consent rollout). The NOIT "All Tenants" merge works; the
+> .NET consolidation is optional. See item 0 below before anything else.
 
-0. **DECIDED (Tammy 2026-06-15) — agent identity intent: directory/users read
+0. **⚠️ STAGED SECURITY FIX — deploy once clients are consented.** Client users
+   were seeing the MSP dashboard + cross-client switcher + other tenants' data
+   because the SPA's MSAL authority was the NOIT single tenant (→ every token
+   `tid`=NOIT → `isMspAdmin=true` for everyone, defeating the API's tid
+   isolation too). Fix (branch `claude/determined-archimedes-wor91s`, `798aaac`):
+   authority → `/organizations` (each user auths in their own tenant) + frontend
+   `MspAdminRoute` guards + role-filtered nav so clients see only Directory +
+   Org Chart. **Verified 2026-06-15:** product app `eaeafccb` is already
+   multi-tenant and the redirect URI is registered (probe returned AADSTS50058,
+   not 50194), so the fix won't break sign-in mechanics. **To go live:** (1) send
+   each active client its admin-consent URL (Geaux already consented; see the
+   onboarding helper `scripts/onboard-client.mjs`); (2) merge the branch → `main`
+   to deploy. Client login fails *closed* until a tenant consents (no leak).
+
+1. **DECIDED (Tammy 2026-06-15) — agent identity intent: directory/users read
    + MSP device/Intune ops (cross-tenant).** Full step-by-step in
    `docs/agent-identity-runbook.md`. Remaining (all Tammy portal/env actions):
    (A) add Graph app perms `User.Read.All` + `Directory.Read.All` and — for
@@ -152,7 +169,7 @@ Full rationale: `docs/architecture-reset.md`.
    `AADSTS700016`); (C) open `graph.microsoft.com` in the network policy;
    (D) rotate the leaked secret + re-store as `{clientId,clientSecret,tenantId}`.
 
-1. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
+2. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
    here; not merged to main):** the whole .NET backend was made build-ready:
    - `GdapService` port — real per-tenant token + GDAP discovery (`9a7f7c1`)
    - `EmployeeSyncService` port — real Graph `/users` fetch (`dfc0cf4`)
@@ -165,15 +182,18 @@ Full rationale: `docs/architecture-reset.md`.
    `appsettings.Development.json` + EF `Migrations` if using SQL Server.
    **Agent work is blocked here pending the frontend↔backend consolidation
    decision (below) and a deploy target for the .NET backend.**
-2. **(Tammy, dev env)** Export the 3 non-search items the build needs:
+3. **(Tammy, dev env)** Export the 3 non-search items the build needs:
    second `Enums` file, `TenantContextMiddleware.cs`, and
    `.sln`/`.csproj`/`Migrations/`. Then a fresh session can build/run it.
-3. **(Tammy)** Onboard more clients: send each the admin-consent URL, then add
+4. **(Tammy)** Onboard more clients: send each the admin-consent URL, then add
    to the `CLIENT_TENANTS` SWA app setting so they appear in the NOIT all-clients
-   view. This is how the multi-client vision is realized in practice.
-4. **(Tammy, browser) — DONE:** Geaux pilot verified (directory + org chart load
+   view. This is how the multi-client vision is realized in practice. **8 clients
+   staged this session** (tenant IDs resolved, consent URLs + merged
+   `CLIENT_TENANTS` generated; roster kept out of git per Tammy). Level Homes
+   domain still needed. Helper: `scripts/onboard-client.mjs`.
+5. **(Tammy, browser) — DONE:** Geaux pilot verified (directory + org chart load
    real data in incognito). Org-chart gaps = managers not set in Geaux's Entra.
-5. **(Tammy, hygiene — not urgent)** Scrub the historical plaintext secrets
+6. **(Tammy, hygiene — not urgent)** Scrub the historical plaintext secrets
    from the SharePoint `appsettings.json`. These were init-time values already
    rotated out when AWS Secrets Manager was adopted, so they're dead — cleanup
    only, no active exposure.
