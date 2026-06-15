@@ -9,14 +9,19 @@ Three independent things must all be true (none can be done from inside a
 session — they're CIPP-portal / AWS / Claude-environment config):
 
 ## Part 1 — CIPP: create an API client (partner/NOIT tenant)
-1. CIPP → **Settings → CIPP → API Access** (a.k.a. Application Settings → API).
-   **Enable the API** if not already, then **Add API Client / Application**.
-   CIPP provisions an Azure AD app ("CIPP-API…") in the NOIT tenant + a secret.
-2. Assign it an **admin/editor (read-write) role** (per decision; can be narrowed
-   later). Set a secret expiry and a renewal reminder.
-3. Record (do NOT paste secrets into chat): the **client_id**, **client_secret**,
-   the **API scope** (`api://<cipp-api-app-id>/.default`), and the **CIPP base
-   URL** (e.g. `https://cipp.noitgroup.com` or the `*.azurestaticapps.net` host).
+Path: **CIPP → Integrations → CIPP-API** (verified against docs.cipp.app, 2026-06).
+1. **Actions → Create New Client.** Set an **App Name**, and **toggle Enable**
+   (required — this saves the client into the Function App auth settings).
+   Optionally set **Custom Roles**, **Allowed IP Ranges**, and **MCP Access
+   Allowed**. For our decision, give it a role with **Read/Write** across the
+   categories you want (or an admin role).
+2. **Submit, then copy the Application secret immediately** to a secure place —
+   it is shown once. (To rotate later: row **Actions → Reset Application Secret**.)
+3. **Actions → Save Azure Configuration** — pushes the new Client ID into the
+   Function App authentication settings. Skipping this makes tokens be rejected.
+4. From the client's row, **Actions → Copy API Scope** → it's
+   `api://<ApplicationId>/.default`. Also note the **Application (client) ID** and
+   your **CIPP base URL** (e.g. `https://cipp.noitgroup.com`).
    Tokens are acquired via **client credentials** against the NOIT tenant.
 
 ## Part 2 — AWS Secrets Manager: store `noit/cipp`
