@@ -66,23 +66,35 @@ Full rationale: `docs/architecture-reset.md`.
 
 ## 4. The credential situation (DEFINITIVE — don't re-litigate)
 
-- App `eaeafccb`'s **client secret was rotated**. Verified dead (Entra
-  `AADSTS7000215`) in BOTH reachable copies: AWS `noit/azure-taila-agent`
-  (value `6~j…`) and the SharePoint `appsettings.json` (value `PIO8Q~…`).
-  NOTE (per Tammy): the two SharePoint plaintext values were **init-time
-  secrets, already rotated out** when AWS Secrets Manager was adopted — dead
-  strings, not an active exposure. Scrubbing them is hygiene, not urgent.
-- The **only valid** secret is the one in the **SWA app settings** (created
-  during the app-registration update). The deployed app uses it, so the app
-  works even though agent sessions cannot mint Graph tokens from here.
-- "Taila" is the agent identity (OpenClaw). It authenticates via **device-code
-  flow** (interactive, satisfies conditional access) — NOT via the AWS secret
-  as a password/app-secret. Repeated agent attempts to reuse that secret fail
-  by design. Do not brute-force user passwords (lockout risk to OpenClaw).
-- **Unblock = Tammy mints a fresh client secret on `eaeafccb` and stores it
-  where the agent can read it (e.g. `noit/azure-taila-agent`).** Until then,
-  agent-side Graph/Azure testing is blocked; use the M365 connector for
-  home-tenant data.
+- **Agent identity (NEW 2026-06-15):** dedicated app **"MS Claude Agent"**,
+  client ID **`90f52d62-9133-47e0-a6a1-45c9bec69558`**, in the NOIT tenant
+  (`7fb15bf6…`). Secret stored at AWS **`noit/0626_MSClaudeAgent`**. **Verified
+  valid** — acquires app-only tokens against the NOIT tenant.
+  - **App permissions consented (from token `roles`):** `Device.Read.All`,
+    `DeviceManagementConfiguration.ReadWrite.All` (Intune *write*),
+    `Calendars.ReadBasic.All`, `APIConnectors.Read.All`,
+    `MultiTenantOrganization.Read.All`. **NO `User.Read.All`/`Directory.Read.All`**
+    → it CANNOT read users/the directory yet.
+  - **Single-tenant** — Geaux returns `AADSTS700016` (app not in client tenants),
+    so it acts in NOIT only, not client tenants.
+  - **Two blockers before it's usable from a session:** (a) network policy must
+    allow `graph.microsoft.com` (tokens work, but Graph calls return "Host not
+    in allowlist"); (b) add `User.Read.All`/`Directory.Read.All` + consent if
+    directory read is wanted. **OPEN DECISION (Tammy):** what should this
+    identity do? → determines which perms to add.
+  - **Storage fix needed:** the value was stored as the JSON *key*
+    (`{"<secret>": ""}`); read code recovers it via the single key, but please
+    re-store as `{"clientId","clientSecret","tenantId"}`. **Also: the secret
+    value leaked into the chat transcript via the key/value mixup — ROTATE it
+    once setup is settled.**
+
+- **KreweConnect product app `eaeafccb` (separate, unchanged):** its client
+  secret was rotated; the **only valid copy is in the SWA app settings**, which
+  the deployed app uses (the live pilot works). The old AWS `noit/azure-taila-agent`
+  (`6~j…`) and SharePoint `appsettings.json` (`PIO8Q…`) copies are dead but were
+  init-time secrets already rotated out — hygiene cleanup, not active exposure.
+  "Taila"/OpenClaw authenticates to this app via **device-code** (interactive),
+  not via a stored app secret. Don't brute-force user passwords (lockout risk).
 
 ## 5. Access / environment state (NOT in git)
 
@@ -91,10 +103,11 @@ Full rationale: `docs/architecture-reset.md`.
   then set `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_DEFAULT_REGION`
   in the Claude environment config (not in repo).
 - **Network policy:** this environment only allows GitHub + AWS +
-  `login.microsoftonline.com`. To let the agent reach Graph/Azure/MSP tools,
-  add domains under the environment's **Custom** network access (see the
-  `noit-ops` skill for the list). Until then those hosts return
-  "Host not in allowlist".
+  `login.microsoftonline.com`. **Confirmed 2026-06-15:** `graph.microsoft.com`
+  is BLOCKED ("Host not in allowlist") — so the agent can mint tokens but call
+  no Graph/Azure. To enable direct agent work, add `graph.microsoft.com` (+
+  `management.azure.com` for ARM) under the environment's **Custom** network
+  access (see the `noit-ops` skill for the full list).
 - **M365 connector:** attached and working (SharePoint/mail/Teams/calendar/
   OneDrive as Tammy) — bypasses the network allowlist.
 - **Connection matrix (2026-06-11):** GitHub PAT ✅; everything else under
@@ -122,20 +135,40 @@ Full rationale: `docs/architecture-reset.md`.
 
 ## 7. NEXT STEPS (priority order)
 
-1. **DONE (pending review/build):** `GdapService` port — real per-tenant token
-   acquisition + GDAP discovery, on branch `claude/brave-feynman-g2j9v5`
-   (commit `9a7f7c1`), NOT merged to main, UNVERIFIED (no .NET SDK here). See
-   `noit-client-tools-backend/GDAPSERVICE-PORT-NOTES.md`.
-   **Next agent task:** port `EmployeeSyncService.SyncTenantAsync` real path —
-   call `AcquireTokenForTenantAsync` then `GET /v1.0/users` (paged) → `Employee`.
+> **PRODUCT STATUS 2026-06-15:** Both halves of the north star are LIVE and
+> verified — clients see only their own tenant; NOIT "All Tenants" merges
+> across consented clients. Geaux pilot loads real data. Remaining work is
+> onboarding/ops + the agent-enablement + the optional .NET consolidation,
+> NOT core product gaps.
+
+0. **OPEN DECISION (Tammy) — agent identity intent.** The new `90f52d62`
+   "MS Claude Agent" credential is valid but (a) Graph is network-blocked and
+   (b) it lacks directory-read perms + is single-tenant. Decide what it should
+   do → then open `graph.microsoft.com` in the network policy and (if directory
+   read is wanted) add `User.Read.All`/`Directory.Read.All` + consent. Rotate
+   the secret (leaked in transcript) and re-store in proper JSON shape. See §4.
+
+1. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
+   here; not merged to main):** the whole .NET backend was made build-ready:
+   - `GdapService` port — real per-tenant token + GDAP discovery (`9a7f7c1`)
+   - `EmployeeSyncService` port — real Graph `/users` fetch (`dfc0cf4`)
+   - Reconstructed the 3 build gaps: `Enums/AppEnums.cs`,
+     `Middleware/TenantContextMiddleware.cs`, single `NOIT.ClientTools.csproj`
+   - New `Middleware/ExceptionHandlingMiddleware.cs`: maps
+     `TenantNotAuthorizedException` → 401 `consent_required` + `consentUrl`
+   See `noit-client-tools-backend/GDAPSERVICE-PORT-NOTES.md`. Remaining to
+   build: `dotnet restore/build` (verify package versions), export real
+   `appsettings.Development.json` + EF `Migrations` if using SQL Server.
+   **Agent work is blocked here pending the frontend↔backend consolidation
+   decision (below) and a deploy target for the .NET backend.**
 2. **(Tammy, dev env)** Export the 3 non-search items the build needs:
    second `Enums` file, `TenantContextMiddleware.cs`, and
    `.sln`/`.csproj`/`Migrations/`. Then a fresh session can build/run it.
-3. **(Tammy, keyboard)** Mint a fresh client secret on `eaeafccb`; store in
-   AWS `noit/azure-taila-agent`. Rotate the pasted AWS key. Optionally widen
-   the environment network policy.
-4. **(Tammy, browser)** Pilot verification: sign in → switch to Geaux →
-   Directory should load real employees (3 prior blockers cleared).
+3. **(Tammy)** Onboard more clients: send each the admin-consent URL, then add
+   to the `CLIENT_TENANTS` SWA app setting so they appear in the NOIT all-clients
+   view. This is how the multi-client vision is realized in practice.
+4. **(Tammy, browser) — DONE:** Geaux pilot verified (directory + org chart load
+   real data in incognito). Org-chart gaps = managers not set in Geaux's Entra.
 5. **(Tammy, hygiene — not urgent)** Scrub the historical plaintext secrets
    from the SharePoint `appsettings.json`. These were init-time values already
    rotated out when AWS Secrets Manager was adopted, so they're dead — cleanup
