@@ -76,6 +76,20 @@ Expected systems (confirm against the live index, which wins):
 `azure-arm` (subscription Reader), `cipp`, `openclaw` (AWS),
 `msp-tools/*`, plus whatever Tammy adds later.
 
+### Dedicated agent identity (verified 2026-06-15)
+- Secret **`noit/0626_MSClaudeAgent`** → app-only client credentials for the
+  **"MS Claude Agent"** app, client ID **`90f52d62-9133-47e0-a6a1-45c9bec69558`**,
+  NOIT tenant `7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e`. Token acquisition works.
+- Known shape quirk: value may be stored as the JSON *key* — recover with
+  `list(d.keys())[0]` when there's no `clientSecret` key. (Re-store ideally as
+  `{"clientId","clientSecret","tenantId"}`.) Treat the current value as exposed
+  (was in a chat transcript) → rotate.
+- Permissions consented so far (token `roles`): `Device.Read.All`,
+  `DeviceManagementConfiguration.ReadWrite.All`, `Calendars.ReadBasic.All`,
+  `APIConnectors.Read.All`, `MultiTenantOrganization.Read.All`. **No directory
+  read** and **single-tenant** (NOIT only). `graph.microsoft.com` must be in the
+  network allowlist before any Graph call works (tokens alone are reachable).
+
 ## Phase 2 — Connection test matrix
 
 For every system in the index: fetch its secret, authenticate per `auth`,
