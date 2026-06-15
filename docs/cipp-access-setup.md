@@ -43,6 +43,8 @@ environment restarts:
    `AWS_DEFAULT_REGION=us-east-1`. **First rotate** the `claude_agent` access key
    that was previously exposed in chat (see SESSION-STATE §5), then set the new
    one here. Without these, the `noit/*` store (incl. `noit/cipp`) is unreadable.
+   Least-privilege IAM policy for the `claude_agent` user (read `noit/*` only):
+   `docs/aws-claude-agent-iam-policy.json`.
 
 ## Part 4 — Verify (from a session, after the env restarts)
 ```bash
