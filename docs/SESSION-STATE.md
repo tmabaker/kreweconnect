@@ -141,12 +141,16 @@ Full rationale: `docs/architecture-reset.md`.
 > onboarding/ops + the agent-enablement + the optional .NET consolidation,
 > NOT core product gaps.
 
-0. **OPEN DECISION (Tammy) — agent identity intent.** The new `90f52d62`
-   "MS Claude Agent" credential is valid but (a) Graph is network-blocked and
-   (b) it lacks directory-read perms + is single-tenant. Decide what it should
-   do → then open `graph.microsoft.com` in the network policy and (if directory
-   read is wanted) add `User.Read.All`/`Directory.Read.All` + consent. Rotate
-   the secret (leaked in transcript) and re-store in proper JSON shape. See §4.
+0. **DECIDED (Tammy 2026-06-15) — agent identity intent: directory/users read
+   + MSP device/Intune ops (cross-tenant).** Full step-by-step in
+   `docs/agent-identity-runbook.md`. Remaining (all Tammy portal/env actions):
+   (A) add Graph app perms `User.Read.All` + `Directory.Read.All` and — for
+   Intune *managed-device inventory* — `DeviceManagementManagedDevices.Read.All`
+   (the existing `Device.Read.All` is Entra device objects, not Intune devices),
+   then grant NOIT admin consent; (B) make the app multi-tenant + per-client
+   consent so ops reach client tenants (today it's single-tenant →
+   `AADSTS700016`); (C) open `graph.microsoft.com` in the network policy;
+   (D) rotate the leaked secret + re-store as `{clientId,clientSecret,tenantId}`.
 
 1. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
    here; not merged to main):** the whole .NET backend was made build-ready:

@@ -89,6 +89,11 @@ Expected systems (confirm against the live index, which wins):
   `APIConnectors.Read.All`, `MultiTenantOrganization.Read.All`. **No directory
   read** and **single-tenant** (NOIT only). `graph.microsoft.com` must be in the
   network allowlist before any Graph call works (tokens alone are reachable).
+- **Intended scope (DECIDED 2026-06-15):** directory/users read + MSP
+  device/Intune ops, cross-tenant. Perms still to add/consent + multi-tenant
+  conversion + network/secret steps are in `docs/agent-identity-runbook.md`.
+  Note: Intune *managed-device* inventory needs
+  `DeviceManagementManagedDevices.Read.All` (distinct from `Device.Read.All`).
 
 ## Phase 2 — Connection test matrix
 
