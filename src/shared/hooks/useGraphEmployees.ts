@@ -47,6 +47,9 @@ function graphUserToListItem(
     businessPhone: user.businessPhones?.[0] || null,
     photo: photoUrl || null,
     isActive: user.accountEnabled !== false,
+    companyName: user.companyName ?? null,
+    hireDate: user.employeeHireDate ?? null,
+    birthday: user.birthday ?? null,
     // In the aggregate view each user carries its own tenant; otherwise use
     // the single selected tenant's display name.
     tenantDisplayName: user.tenantDisplayName ?? tenantDisplayName,
@@ -63,7 +66,7 @@ function graphUserToDetail(
   return {
     ...graphUserToListItem(user, tenantDisplayName, photoUrl),
     employeeId: null,
-    hireDate: null,
+    hireDate: user.employeeHireDate ?? null,
     lastSyncedAt: new Date().toISOString(),
     manager: user.manager
       ? { id: user.manager.id, displayName: user.manager.displayName, jobTitle: null, photo: null }
@@ -87,6 +90,7 @@ export function useGraphEmployees(tenantId: string) {
   const [departmentFilter, setDepartmentFilter] = useState<string | null>(null);
   const [officeFilter, setOfficeFilter] = useState<string | null>(null);
   const [titleFilter, setTitleFilter] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "department" | "recent">("name");
 
   const currentTenantRef = useRef(tenantId);
@@ -188,6 +192,7 @@ export function useGraphEmployees(tenantId: string) {
     if (departmentFilter) list = list.filter((e) => e.department === departmentFilter);
     if (officeFilter) list = list.filter((e) => e.officeLocation === officeFilter);
     if (titleFilter) list = list.filter((e) => e.jobTitle === titleFilter);
+    if (companyFilter) list = list.filter((e) => e.companyName === companyFilter);
 
     // Sort
     if (sortBy === "department") {
@@ -201,7 +206,7 @@ export function useGraphEmployees(tenantId: string) {
     }
 
     return list;
-  }, [isDemoMode, mockHook.employees, graphUsers, photoMap, tenantDisplayName, searchQuery, departmentFilter, officeFilter, titleFilter, sortBy]);
+  }, [isDemoMode, mockHook.employees, graphUsers, photoMap, tenantDisplayName, searchQuery, departmentFilter, officeFilter, titleFilter, companyFilter, sortBy]);
 
   // Compute facets
   const facets = useMemo<EmployeeFacets>(() => {
@@ -214,6 +219,7 @@ export function useGraphEmployees(tenantId: string) {
         ...new Set(list.map((e) => e.officeLocation).filter(Boolean) as string[]),
       ].sort(),
       titles: [...new Set(list.map((e) => e.jobTitle).filter(Boolean) as string[])].sort(),
+      companies: [...new Set(list.map((e) => e.companyName).filter(Boolean) as string[])].sort(),
     };
   }, [isDemoMode, mockHook.facets, graphUsers]);
 
@@ -344,6 +350,8 @@ export function useGraphEmployees(tenantId: string) {
   if (isDemoMode) {
     return {
       ...mockHook,
+      companyFilter,
+      setCompanyFilter,
       loading: false,
       error: null,
       refresh: () => {},
@@ -362,6 +370,8 @@ export function useGraphEmployees(tenantId: string) {
     setOfficeFilter,
     titleFilter,
     setTitleFilter,
+    companyFilter,
+    setCompanyFilter,
     sortBy,
     setSortBy,
     getDetail,

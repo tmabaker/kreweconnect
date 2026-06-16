@@ -23,6 +23,12 @@ export interface GraphUser {
   mobilePhone: string | null;
   userPrincipalName: string;
   accountEnabled: boolean;
+  /** Per-employee company (e.g. physical location); distinct from the tenant */
+  companyName?: string | null;
+  /** Work anniversary source; may be null/unset or a 1604 sentinel in Graph */
+  employeeHireDate?: string | null;
+  /** Birthday; only month/day is surfaced. May be null/unset in Graph */
+  birthday?: string | null;
   manager?: {
     id: string;
     displayName: string;
@@ -271,6 +277,9 @@ const USER_SELECT_FIELDS = [
   "mobilePhone",
   "userPrincipalName",
   "accountEnabled",
+  "companyName",
+  "employeeHireDate",
+  "birthday",
 ].join(",");
 
 const MANAGER_EXPAND = "manager($select=id,displayName)";

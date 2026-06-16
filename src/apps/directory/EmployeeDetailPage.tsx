@@ -16,12 +16,15 @@ import {
   ArrowLeft24Regular,
   Mail24Regular,
   Phone24Regular,
+  Call24Regular,
+  Chat24Regular,
   Person24Regular,
   People24Regular,
   Briefcase24Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
+import { teamsChatLink, telLink, monthDay, yearsSince } from "./contactUtils";
 import type { EmployeeDetail } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -181,14 +184,36 @@ export function EmployeeDetailPage() {
                 Email
               </Button>
             )}
-            {employee.mobilePhone && (
+            {employee.email && (
+              <Button
+                appearance="outline"
+                icon={<Chat24Regular />}
+                as="a"
+                href={teamsChatLink(employee.email)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Teams
+              </Button>
+            )}
+            {employee.businessPhone && (
               <Button
                 appearance="outline"
                 icon={<Phone24Regular />}
                 as="a"
-                href={`tel:${employee.mobilePhone}`}
+                href={telLink(employee.businessPhone)}
               >
-                Call
+                Office
+              </Button>
+            )}
+            {employee.mobilePhone && (
+              <Button
+                appearance="outline"
+                icon={<Call24Regular />}
+                as="a"
+                href={telLink(employee.mobilePhone)}
+              >
+                Mobile
               </Button>
             )}
           </div>
@@ -205,11 +230,24 @@ export function EmployeeDetailPage() {
           <InfoItem label="Email" value={employee.email} />
           <InfoItem label="Mobile Phone" value={employee.mobilePhone} />
           <InfoItem label="Business Phone" value={employee.businessPhone} />
+          <InfoItem label="Company" value={employee.companyName} />
           <InfoItem label="Department" value={employee.department} />
           <InfoItem label="Job Title" value={employee.jobTitle} />
           <InfoItem label="Office Location" value={employee.officeLocation} />
           <InfoItem label="Employee ID" value={employee.employeeId} />
-          <InfoItem label="Hire Date" value={employee.hireDate} />
+          <InfoItem
+            label="Work Anniversary"
+            value={
+              monthDay(employee.hireDate)
+                ? `${monthDay(employee.hireDate)}${
+                    yearsSince(employee.hireDate) != null
+                      ? ` · ${yearsSince(employee.hireDate)} yr${yearsSince(employee.hireDate) === 1 ? "" : "s"}`
+                      : ""
+                  }`
+                : null
+            }
+          />
+          <InfoItem label="Birthday" value={monthDay(employee.birthday)} />
         </div>
       </Card>
 

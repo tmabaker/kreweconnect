@@ -22,12 +22,18 @@ import {
   ArrowSync24Regular,
   Mail24Regular,
   Phone24Regular,
+  Call24Regular,
+  Chat24Regular,
   Building24Regular,
+  Briefcase24Regular,
+  CalendarLtr24Regular,
+  Gift24Regular,
   Filter24Regular,
   Dismiss24Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
+import { teamsChatLink, telLink, monthDay } from "./contactUtils";
 import type { EmployeeListItem } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -90,6 +96,13 @@ const useStyles = makeStyles({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  cardActions: {
+    display: "flex",
+    gap: "4px",
+    marginTop: "10px",
+    paddingTop: "10px",
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
   tenantBadge: { marginTop: "8px" },
   statsBar: {
     display: "flex",
@@ -131,7 +144,7 @@ export function DirectoryPage() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   const {
     employees,
@@ -145,6 +158,8 @@ export function DirectoryPage() {
     setOfficeFilter,
     titleFilter,
     setTitleFilter,
+    companyFilter,
+    setCompanyFilter,
     sortBy,
     setSortBy,
     loading,
@@ -152,7 +167,7 @@ export function DirectoryPage() {
     refresh,
   } = useGraphEmployees(selectedTenant.tenantId);
 
-  const activeFilterCount = [departmentFilter, officeFilter, titleFilter].filter(Boolean).length;
+  const activeFilterCount = [departmentFilter, officeFilter, titleFilter, companyFilter].filter(Boolean).length;
 
   return (
     <div className={styles.page}>
@@ -164,7 +179,9 @@ export function DirectoryPage() {
             size={300}
             style={{ display: "block", color: tokens.colorNeutralForeground3, marginTop: "4px" }}
           >
-            Search and manage employees across all client tenants
+            {selectedTenant.tenantId === "all"
+              ? "Search employees across all client tenants"
+              : `${selectedTenant.displayName} employee directory`}
           </Text>
         </div>
         <div className={styles.toolbar}>
@@ -215,6 +232,23 @@ export function DirectoryPage() {
       {/* Filter Bar */}
       {showFilters && (
         <div className={styles.filterBar}>
+          {facets.companies.length > 0 && (
+            <Dropdown
+              className={styles.filterDropdown}
+              placeholder="Company"
+              value={companyFilter ?? ""}
+              onOptionSelect={(_, data) =>
+                setCompanyFilter(data.optionValue === "" ? null : (data.optionValue ?? null))
+              }
+            >
+              <Option value="">All Companies</Option>
+              {facets.companies.map((c) => (
+                <Option key={c} value={c}>
+                  {c}
+                </Option>
+              ))}
+            </Dropdown>
+          )}
           <Dropdown
             className={styles.filterDropdown}
             placeholder="Department"
@@ -269,6 +303,7 @@ export function DirectoryPage() {
                 setDepartmentFilter(null);
                 setOfficeFilter(null);
                 setTitleFilter(null);
+                setCompanyFilter(null);
               }}
             >
               Clear
@@ -352,33 +387,103 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
       </div>
 
       <div className={styles.cardDetails}>
-        {employee.department && (
+        {employee.companyName && (
           <div className={styles.cardDetailRow}>
             <Building24Regular className={styles.cardDetailIcon} />
+            <Text size={200} className={styles.cardDetailText}>
+              {employee.companyName}
+            </Text>
+          </div>
+        )}
+        {employee.department && (
+          <div className={styles.cardDetailRow}>
+            <Briefcase24Regular className={styles.cardDetailIcon} />
             <Text size={200} className={styles.cardDetailText}>
               {employee.department}
               {employee.officeLocation ? ` · ${employee.officeLocation}` : ""}
             </Text>
           </div>
         )}
-        {employee.email && (
+        {monthDay(employee.hireDate) && (
           <div className={styles.cardDetailRow}>
-            <Mail24Regular className={styles.cardDetailIcon} />
+            <CalendarLtr24Regular className={styles.cardDetailIcon} />
             <Text size={200} className={styles.cardDetailText}>
-              {employee.email}
+              Work anniversary: {monthDay(employee.hireDate)}
             </Text>
           </div>
         )}
-        {(employee.mobilePhone || employee.businessPhone) && (
+        {monthDay(employee.birthday) && (
           <div className={styles.cardDetailRow}>
-            <Phone24Regular className={styles.cardDetailIcon} />
+            <Gift24Regular className={styles.cardDetailIcon} />
             <Text size={200} className={styles.cardDetailText}>
-              {employee.mobilePhone || employee.businessPhone}
+              Birthday: {monthDay(employee.birthday)}
             </Text>
           </div>
         )}
       </div>
 
+      <ContactActions employee={employee} />
     </Card>
+  );
+}
+
+/** Row of click-to-contact buttons. Stops propagation so the card's own
+ *  navigation doesn't fire when a contact link is clicked. */
+function ContactActions({ employee }: { employee: EmployeeListItem }) {
+  const styles = useStyles();
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
+  return (
+    <div className={styles.cardActions}>
+      {employee.email && (
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Mail24Regular />}
+          as="a"
+          href={`mailto:${employee.email}`}
+          title={`Email ${employee.email}`}
+          aria-label="Send email"
+          onClick={stop}
+        />
+      )}
+      {employee.email && (
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Chat24Regular />}
+          as="a"
+          href={teamsChatLink(employee.email)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Message on Teams"
+          aria-label="Message on Teams"
+          onClick={stop}
+        />
+      )}
+      {employee.businessPhone && (
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Phone24Regular />}
+          as="a"
+          href={telLink(employee.businessPhone)}
+          title={`Call office ${employee.businessPhone}`}
+          aria-label="Call office phone"
+          onClick={stop}
+        />
+      )}
+      {employee.mobilePhone && (
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Call24Regular />}
+          as="a"
+          href={telLink(employee.mobilePhone)}
+          title={`Call mobile ${employee.mobilePhone}`}
+          aria-label="Call mobile phone"
+          onClick={stop}
+        />
+      )}
+    </div>
   );
 }
