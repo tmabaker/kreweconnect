@@ -297,24 +297,30 @@ export function useGraphEmployees(tenantId: string) {
         }
       }
 
-      const buildNode = (user: GraphUser): OrgChartNode => ({
-        id: user.id,
-        displayName: user.displayName,
-        jobTitle: user.jobTitle,
-        department: user.department,
-        photo: photoMap.get(user.id) || null,
-        directReports: (childrenMap.get(user.id) || [])
-          .sort((a, b) => a.displayName.localeCompare(b.displayName))
-          .map(buildNode),
-      });
+      const buildNode = (user: GraphUser, visited: Set<string>): OrgChartNode => {
+        visited.add(user.id);
+        return {
+          id: user.id,
+          displayName: user.displayName,
+          jobTitle: user.jobTitle,
+          department: user.department,
+          photo: photoMap.get(user.id) || null,
+          directReports: (childrenMap.get(user.id) || [])
+            // Guard against manager cycles / self-manager in the source data,
+            // which would otherwise recurse infinitely and crash the page.
+            .filter((child) => !visited.has(child.id))
+            .sort((a, b) => a.displayName.localeCompare(b.displayName))
+            .map((child) => buildNode(child, visited)),
+        };
+      };
 
       if (rootId) {
         const rootUser = userMap.get(rootId);
-        return rootUser ? buildNode(rootUser) : null;
+        return rootUser ? buildNode(rootUser, new Set()) : null;
       }
 
       // Find the best root: either no manager, or the person with most reports
-      if (roots.length === 1) return buildNode(roots[0]);
+      if (roots.length === 1) return buildNode(roots[0], new Set());
       if (roots.length > 1) {
         // Pick root with most descendant reports
         const rootWithMostReports = roots.reduce((best, r) => {
@@ -322,7 +328,7 @@ export function useGraphEmployees(tenantId: string) {
           const rCount = childrenMap.get(r.id)?.length || 0;
           return rCount > bestCount ? r : best;
         });
-        return buildNode(rootWithMostReports);
+        return buildNode(rootWithMostReports, new Set());
       }
 
       return null;

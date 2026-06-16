@@ -29,6 +29,7 @@ import {
   CalendarClock24Regular,
 } from "@fluentui/react-icons";
 import { TenantSwitcher } from "../../components/TenantSwitcher";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { useTenantContext } from "../hooks/useTenantContext";
 import { detectUserTenantContext } from "../../services/tenantService";
 
@@ -271,9 +272,13 @@ export function AppShell() {
         </div>
 
         <div className={styles.content}>
-          <Suspense fallback={<Spinner label="Loading..." />}>
-            <Outlet />
-          </Suspense>
+          {/* Keyed by route so a crash on one page clears when navigating away,
+              instead of the old behavior where one error blanked the whole app. */}
+          <ErrorBoundary key={location.pathname}>
+            <Suspense fallback={<Spinner label="Loading..." />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
     </div>
