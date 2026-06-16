@@ -33,7 +33,7 @@ import {
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
-import { teamsChatLink, telLink, monthDay } from "./contactUtils";
+import { teamsChatLink, telLink, monthDay, birthdayDisplay } from "./contactUtils";
 import type { EmployeeListItem } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -412,11 +412,11 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
             </Text>
           </div>
         )}
-        {monthDay(employee.birthday) && (
+        {birthdayDisplay(employee.birthday) && (
           <div className={styles.cardDetailRow}>
             <Gift24Regular className={styles.cardDetailIcon} />
             <Text size={200} className={styles.cardDetailText}>
-              Birthday: {monthDay(employee.birthday)}
+              Birthday: {birthdayDisplay(employee.birthday)}
             </Text>
           </div>
         )}

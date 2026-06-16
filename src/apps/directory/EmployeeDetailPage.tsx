@@ -24,7 +24,7 @@ import {
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
-import { teamsChatLink, telLink, monthDay, yearsSince } from "./contactUtils";
+import { teamsChatLink, telLink, monthDay, yearsSince, birthdayDisplay } from "./contactUtils";
 import type { EmployeeDetail } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -247,7 +247,7 @@ export function EmployeeDetailPage() {
                 : null
             }
           />
-          <InfoItem label="Birthday" value={monthDay(employee.birthday)} />
+          <InfoItem label="Birthday" value={birthdayDisplay(employee.birthday)} />
         </div>
       </Card>
 

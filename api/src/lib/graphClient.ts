@@ -4,6 +4,7 @@
  */
 
 import { getAppToken } from "./tokenService";
+import { config, selectFieldForAttribute, readAttribute } from "./config";
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
@@ -29,8 +30,35 @@ const USER_SELECT_BASE = [
 // the base list so the directory never breaks because of an optional field.
 const USER_SELECT_OPTIONAL = ["employeeHireDate", "birthday"];
 
-export const USER_SELECT_FIELDS = [...USER_SELECT_BASE, ...USER_SELECT_OPTIONAL].join(",");
 const USER_SELECT_FIELDS_BASE = USER_SELECT_BASE.join(",");
+
+/**
+ * Extended $select: base + standard optional fields + any configured custom
+ * birthday/anniversary attributes (directory extension or extensionAttributeN).
+ * Built per-call so the BIRTHDAY_ATTRIBUTE / ANNIVERSARY_ATTRIBUTE app settings
+ * take effect without a code change.
+ */
+function buildExtendedSelect(): string {
+  const fields = [...USER_SELECT_BASE, ...USER_SELECT_OPTIONAL];
+  for (const attr of [config.birthdayAttribute, config.anniversaryAttribute]) {
+    const f = selectFieldForAttribute(attr);
+    if (f && !fields.includes(f)) fields.push(f);
+  }
+  return fields.join(",");
+}
+
+export const USER_SELECT_FIELDS = buildExtendedSelect();
+
+/** Overlay configured custom attributes onto the birthday/hireDate fields. */
+function resolveCustomAttributes(user: GraphUser): void {
+  const rec = user as unknown as Record<string, unknown>;
+  if (config.birthdayAttribute) {
+    user.birthday = readAttribute(rec, config.birthdayAttribute) ?? user.birthday ?? null;
+  }
+  if (config.anniversaryAttribute) {
+    user.employeeHireDate = readAttribute(rec, config.anniversaryAttribute) ?? user.employeeHireDate ?? null;
+  }
+}
 
 const MANAGER_EXPAND = "manager($select=id,displayName)";
 
@@ -112,7 +140,7 @@ async function fetchUsersWithSelect(tenantId: string, select: string): Promise<G
 export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
   let allUsers: GraphUser[];
   try {
-    allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS);
+    allUsers = await fetchUsersWithSelect(tenantId, buildExtendedSelect());
   } catch (err) {
     // An optional $select field (e.g. birthday) may be unsupported for this
     // app/tenant — retry with only the always-safe base fields rather than
@@ -131,6 +159,7 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
         displayName: user.manager.displayName || "",
       };
     }
+    resolveCustomAttributes(user);
   }
   return allUsers;
 }
@@ -166,14 +195,18 @@ export async function fetchUsersAllTenants(
 export async function fetchUserById(tenantId: string, userId: string): Promise<GraphUser> {
   const path = (select: string) =>
     `${GRAPH_BASE}/users/${encodeURIComponent(userId)}?$select=${select}&$expand=${MANAGER_EXPAND}`;
+  let user: GraphUser;
   try {
-    return await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS));
+    user = await graphFetch<GraphUser>(tenantId, path(buildExtendedSelect()));
   } catch (err) {
     if (err instanceof GraphRequestError && err.status === 400) {
-      return graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
+      user = await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
+    } else {
+      throw err;
     }
-    throw err;
   }
+  resolveCustomAttributes(user);
+  return user;
 }
 
 export async function fetchDirectReports(
