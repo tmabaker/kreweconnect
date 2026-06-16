@@ -7,7 +7,8 @@ import { getAppToken } from "./tokenService";
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
-export const USER_SELECT_FIELDS = [
+// Base fields are always selectable with User.Read.All.
+const USER_SELECT_BASE = [
   "id",
   "displayName",
   "givenName",
@@ -21,9 +22,15 @@ export const USER_SELECT_FIELDS = [
   "userPrincipalName",
   "accountEnabled",
   "companyName",
-  "employeeHireDate",
-  "birthday",
-].join(",");
+];
+
+// Optional fields may be unreadable/unselectable depending on tenant + the
+// app's permissions (e.g. birthday). If selecting them 400s, we fall back to
+// the base list so the directory never breaks because of an optional field.
+const USER_SELECT_OPTIONAL = ["employeeHireDate", "birthday"];
+
+export const USER_SELECT_FIELDS = [...USER_SELECT_BASE, ...USER_SELECT_OPTIONAL].join(",");
+const USER_SELECT_FIELDS_BASE = USER_SELECT_BASE.join(",");
 
 const MANAGER_EXPAND = "manager($select=id,displayName)";
 
@@ -91,14 +98,30 @@ export interface GraphUser {
   tenantDisplayName?: string;
 }
 
-export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
-  const allUsers: GraphUser[] = [];
-  let url = `${GRAPH_BASE}/users?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true&$count=true`;
-
+async function fetchUsersWithSelect(tenantId: string, select: string): Promise<GraphUser[]> {
+  const users: GraphUser[] = [];
+  let url = `${GRAPH_BASE}/users?$select=${select}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true&$count=true`;
   while (url) {
     const page = await graphFetch<GraphPagedResponse<GraphUser>>(tenantId, url);
-    allUsers.push(...page.value);
+    users.push(...page.value);
     url = page["@odata.nextLink"] || "";
+  }
+  return users;
+}
+
+export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
+  let allUsers: GraphUser[];
+  try {
+    allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS);
+  } catch (err) {
+    // An optional $select field (e.g. birthday) may be unsupported for this
+    // app/tenant — retry with only the always-safe base fields rather than
+    // letting one optional column take down the whole directory.
+    if (err instanceof GraphRequestError && err.status === 400) {
+      allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS_BASE);
+    } else {
+      throw err;
+    }
   }
 
   for (const user of allUsers) {
@@ -141,10 +164,16 @@ export async function fetchUsersAllTenants(
 }
 
 export async function fetchUserById(tenantId: string, userId: string): Promise<GraphUser> {
-  return graphFetch<GraphUser>(
-    tenantId,
-    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}`
-  );
+  const path = (select: string) =>
+    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}?$select=${select}&$expand=${MANAGER_EXPAND}`;
+  try {
+    return await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS));
+  } catch (err) {
+    if (err instanceof GraphRequestError && err.status === 400) {
+      return graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
+    }
+    throw err;
+  }
 }
 
 export async function fetchDirectReports(
