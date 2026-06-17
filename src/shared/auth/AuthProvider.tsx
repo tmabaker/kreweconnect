@@ -41,6 +41,24 @@ if (!isDemoMode) {
 export async function initializeMsal(): Promise<void> {
   if (isDemoMode || !msalInstance) return;
   await msalInstance.initialize();
+
+  // CRITICAL for redirect login: on the way back from Entra the auth code is in
+  // the URL hash and is NOT yet processed — getAllAccounts() is still empty.
+  // We must consume the redirect response here, before React renders, so the
+  // account exists when RequireAuth checks. Skipping this leaves the hash
+  // unconsumed → the app shows the sign-in screen again AND MSAL stays in
+  // `interaction_in_progress`, so the next loginRedirect() silently no-ops
+  // (the "click Sign in and nothing happens" loop).
+  try {
+    const result = await msalInstance.handleRedirectPromise();
+    if (result?.account) {
+      msalInstance.setActiveAccount(result.account);
+    }
+  } catch (err) {
+    // A failed/duplicate redirect shouldn't wedge startup; clear and continue.
+    console.error("MSAL redirect handling failed:", err);
+  }
+
   if (!msalInstance.getActiveAccount()) {
     const accounts = msalInstance.getAllAccounts();
     if (accounts.length > 0) {

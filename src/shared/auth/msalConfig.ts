@@ -23,6 +23,11 @@ export const msalConfig: Configuration = {
     ],
     redirectUri,
     postLogoutRedirectUri: redirectUri,
+    // Stay on the redirect URI after processing the login response instead of
+    // navigating back to the page that started login. With the SPA under a
+    // subpath behind Static Web Apps, that extra navigation can drop the auth
+    // hash and bounce the user back to the sign-in screen (login loop).
+    navigateToLoginRequestUrl: false,
   },
   cache: {
     cacheLocation: "localStorage",
