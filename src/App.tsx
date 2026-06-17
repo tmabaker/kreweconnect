@@ -6,6 +6,7 @@ import {
 } from "@fluentui/react-components";
 import { AuthProvider, RequireAuth, MspAdminRoute } from "./shared/auth";
 import { AppShell } from "./shared/components/AppShell";
+import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import { TenantProvider } from "./shared/hooks/useTenantContext";
 
 // Lazy-loaded page components
@@ -46,6 +47,7 @@ const theme = webDarkTheme;
 function App() {
   return (
     <FluentProvider theme={theme} style={{ height: "100vh" }}>
+      <ErrorBoundary>
       <AuthProvider>
         <RequireAuth>
           <TenantProvider>
@@ -72,6 +74,7 @@ function App() {
           </TenantProvider>
         </RequireAuth>
       </AuthProvider>
+      </ErrorBoundary>
     </FluentProvider>
   );
 }

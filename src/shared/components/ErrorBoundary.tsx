@@ -6,6 +6,7 @@ interface Props {
 }
 interface State {
   hasError: boolean;
+  message: string;
 }
 
 const CHUNK_RELOAD_KEY = "kc-chunk-reloaded";
@@ -19,19 +20,20 @@ function isChunkLoadError(err: unknown): boolean {
 }
 
 /**
- * Catches render errors in routed pages so one page crashing (e.g. a data-driven
- * exception) degrades to a recoverable message instead of unmounting the whole
- * app — which previously left every subsequent navigation blank. Keyed by route
- * in AppShell so navigating elsewhere clears the error automatically.
+ * Catches render errors so one crash degrades to a recoverable, *diagnostic*
+ * message instead of unmounting the whole app (which left navigation blank).
+ * Used both at the app root and (keyed by route) around the page content.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+  state: State = { hasError: false, message: "" };
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(err: unknown): State {
+    return { hasError: true, message: err instanceof Error ? `${err.name}: ${err.message}` : String(err) };
   }
 
   componentDidCatch(err: unknown) {
+    // Surface the error so it can be diagnosed from a user's report.
+    console.error("[KreweConnect] render error:", err);
     // A stale chunk after a fresh deploy: reload once to pull the new assets.
     if (isChunkLoadError(err) && !sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
       sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
@@ -54,6 +56,20 @@ export class ErrorBoundary extends Component<Props, State> {
         >
           <Title2>This page didn’t load</Title2>
           <Text>Something went wrong rendering this view. Reloading usually fixes it.</Text>
+          <Text
+            font="monospace"
+            size={200}
+            style={{
+              maxWidth: 680,
+              wordBreak: "break-word",
+              color: "#c50f1f",
+              background: "rgba(0,0,0,0.04)",
+              padding: "8px 12px",
+              borderRadius: 6,
+            }}
+          >
+            {this.state.message}
+          </Text>
           <Button
             appearance="primary"
             onClick={() => {
