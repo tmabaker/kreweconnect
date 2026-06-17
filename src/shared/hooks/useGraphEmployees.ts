@@ -120,12 +120,16 @@ export function useGraphEmployees(tenantId: string) {
         // Photos are a per-tenant Graph call, so skip the batch fetch in the
         // aggregate view (cards fall back to initials).
         if (!isAll) {
-          const userIds = users.slice(0, 50).map((u) => u.id); // Limit initial photo fetch
-          fetchUserPhotos(userIds, targetTenant).then((photos) => {
-            if (!cancelled) {
+          // Fetch photos for ALL users (not just the first 50) so cards show
+          // real photos instead of initials. They stream in progressively via
+          // the onPhoto callback, so a large tenant fills in as it loads
+          // rather than waiting for the whole batch.
+          const userIds = users.map((u) => u.id);
+          fetchUserPhotos(userIds, targetTenant, (id, url) => {
+            if (!cancelled && url) {
               setPhotoMap((prev) => {
                 const next = new Map(prev);
-                photos.forEach((url, id) => next.set(id, url));
+                next.set(id, url);
                 return next;
               });
             }

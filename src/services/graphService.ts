@@ -410,27 +410,32 @@ export async function fetchUserPhoto(
 
 /**
  * Batch-fetch profile photos for multiple users.
- * Returns a map of userId -> blob URL (or null).
+ * Returns a map of userId -> blob URL (or null). `onPhoto` (optional) fires as
+ * each photo resolves so callers can render photos progressively instead of
+ * waiting for the whole batch — important for large tenants (hundreds of users).
  */
 export async function fetchUserPhotos(
   userIds: string[],
-  tenantId?: string
+  tenantId?: string,
+  onPhoto?: (id: string, url: string | null) => void
 ): Promise<Map<string, string | null>> {
   const results = new Map<string, string | null>();
 
-  // Fetch in parallel with concurrency limit
-  const CONCURRENCY = 5;
+  // Fetch in parallel with a bounded concurrency so we don't flood the API.
+  const CONCURRENCY = 8;
   const queue = [...userIds];
 
   async function worker() {
     while (queue.length > 0) {
       const id = queue.shift()!;
+      let photo: string | null = null;
       try {
-        const photo = await fetchUserPhoto(id, tenantId);
-        results.set(id, photo);
+        photo = await fetchUserPhoto(id, tenantId);
       } catch {
-        results.set(id, null);
+        photo = null;
       }
+      results.set(id, photo);
+      if (photo && onPhoto) onPhoto(id, photo); // stream hits as they land
     }
   }
 
