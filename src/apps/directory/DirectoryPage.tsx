@@ -33,7 +33,7 @@ import {
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
-import { teamsChatLink, telLink, monthDay, birthdayDisplay } from "./contactUtils";
+import { teamsChatLink, telLink, monthDay, birthdayDisplay, looksLikeGuid } from "./contactUtils";
 import type { EmployeeListItem } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -373,7 +373,9 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
           <Text size={300} className={styles.cardTitle}>
             {employee.jobTitle || "No title"}
           </Text>
-          {employee.tenantDisplayName && (
+          {/* Tenant tag: only meaningful in the MSP "All Tenants" aggregate
+              (employee.tenantId is set there). Never render a raw GUID. */}
+          {employee.tenantId && employee.tenantDisplayName && !looksLikeGuid(employee.tenantDisplayName) && (
             <Text
               size={200}
               weight="semibold"

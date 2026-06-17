@@ -24,7 +24,7 @@ import {
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
-import { teamsChatLink, telLink, monthDay, yearsSince, birthdayDisplay } from "./contactUtils";
+import { teamsChatLink, telLink, monthDay, yearsSince, birthdayDisplay, looksLikeGuid } from "./contactUtils";
 import type { EmployeeDetail } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -168,7 +168,7 @@ export function EmployeeDetailPage() {
               {employee.officeLocation ? ` · ${employee.officeLocation}` : ""}
             </Text>
           )}
-          {employee.tenantDisplayName && (
+          {employee.tenantId && employee.tenantDisplayName && !looksLikeGuid(employee.tenantDisplayName) && (
             <Badge appearance="outline" color="informative" style={{ marginTop: "8px" }}>
               {employee.tenantDisplayName}
             </Badge>

@@ -2,6 +2,11 @@
  * Helpers for directory contact actions and date display.
  */
 
+/** True if a string is a bare GUID (so we never render one as a label). */
+export function looksLikeGuid(s: string | null | undefined): boolean {
+  return !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
+}
+
 /** Deep link that opens a 1:1 Teams chat with the given user. */
 export function teamsChatLink(email: string): string {
   return `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
