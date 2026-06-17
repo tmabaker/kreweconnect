@@ -98,3 +98,57 @@ were resolved, so future development doesn't re-hit them. Pair with
 - Mock-data stubs leak: the .NET `GdapService` mock GUIDs
   (`aaaaaaaa-1111-…`) propagated into the frontend `tenantConfig` as
   placeholders. Treat mock fixtures as a liability to replace, not seed data.
+
+## 2026-06-16 session — multi-tenant isolation, directory UX, onboarding
+
+- **Single-tenant MSAL authority silently breaks the whole isolation model.**
+  `msalConfig` had `authority = login.microsoftonline.com/<NOIT-tenant>`. Client
+  users (who are guests in NOIT) then got tokens with `tid = NOIT`, so
+  `isMspAdmin` (`tid === NOIT`) was **true for everyone** — clients saw the MSP
+  dashboard + cross-client switcher + other tenants' data, and the API's
+  tid-based isolation was defeated too. Fix: authority → **`/organizations`**
+  (each user authenticates in their own tenant) + frontend route guards
+  (`MspAdminRoute`) + role-gated nav. Verify multi-tenant readiness with a probe:
+  the `/organizations` authorize endpoint returns **AADSTS50058** (no session)
+  for a multi-tenant app, **AADSTS50194** if it's single-tenant.
+- **`companyName` is a per-employee Graph attribute (the physical location), not
+  the tenant/org name.** Geaux → dealership, Xtreme → "Xtreme Nissan"/"Xtreme
+  CDJR". The directory's Company filter must source `companyName`, and one tenant
+  can legitimately contain many companies. Never render a tenant GUID as a label.
+- **App-only Graph generally cannot read `birthday`** (a personal property). The
+  workable pattern: store birthday MM/DD (year omitted for privacy; **12/31 =
+  opt-out sentinel, hidden**) in a **custom extension attribute** that IS
+  app-readable — either a directory extension (`extension_<appId>_name`) or
+  `extensionAttribute1..15` (via `onPremisesExtensionAttributes`). Make the
+  attribute name a config knob (`BIRTHDAY_ATTRIBUTE` / `ANNIVERSARY_ATTRIBUTE`)
+  so it's the same setting across clients with no code change.
+- **Never let one optional `$select` field break the directory.** Adding
+  `birthday`/`employeeHireDate`/custom attrs to `/users` can 400 (or surface an
+  opaque 404); wrap the fetch to **retry with a base `$select`** on 400/404, and
+  surface the **real Graph error** (code + message + request-id), not a bare
+  status.
+- **Render crashes must not blank the whole SPA.** The org chart built its tree
+  eagerly and recursively with no cycle guard — a manager cycle/self-manager in
+  real Entra data caused infinite recursion → crash → (no error boundary) → the
+  entire app unmounted, so Back/refresh "wouldn't load". Fix: cycle guard
+  (visited set) + a **top-level ErrorBoundary** and a per-route one (keyed by
+  pathname) that show the actual error instead of a blank page.
+- **Admin consent must be performed by a Global Admin native to the target
+  tenant, signing in directly** (use incognito + "Use another account" so
+  browser SSO doesn't silently sign you in as the NOIT partner account). If it
+  runs under the partner identity, Azure tries the **delegated/GDAP** path and
+  fails with **"GDAP not in place"** unless the GDAP relationship includes a role
+  that can grant app consent (Application Administrator / Privileged Role Admin).
+  Also: app-only permissions take **~10–15+ min to propagate** after consent —
+  a freshly consented tenant can transiently 403/404.
+- **Domain guessing is unreliable** — confirm tenant IDs from the tenant's own
+  OIDC discovery (`/<domain>/v2.0/.well-known/openid-configuration`) or, better,
+  CIPP `ListTenants`. Two surprises this session: a guessed domain resolved to a
+  *different* org (wrong tenant), and **two different companies shared one Entra
+  tenant** (multiple verified domains) — use `companyName` to separate them in
+  the UI, and list the tenant once in `CLIENT_TENANTS`.
+- **Environment config only applies to a NEW session.** Network-allowlist and
+  env-var/AWS-key changes never reach the running container — set them, then
+  start a fresh session. Also: this repo's **default branch is
+  `claude/brave-feynman-g2j9v5`, not `main`** — a fresh clone lands there, so
+  `git fetch && git checkout main` (or set `main` as default) to see current work.

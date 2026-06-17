@@ -1,22 +1,60 @@
 # Session Handoff / State — pick up exactly where we left off
 
-**Last updated:** 2026-06-11. Read this first in any new session, then the
+**Last updated:** 2026-06-16. Read this first in any new session, then the
 files it points to. Everything below is committed to git (branch `main` and
 `claude/brave-feynman-g2j9v5`) unless explicitly marked "not in git".
+Note: the repo's **default branch is `claude/brave-feynman-g2j9v5`**, but `main`
+holds the latest deployed work — `git fetch && git checkout main`.
 
 ---
 
-## 0. One-paragraph status
+## 0. One-paragraph status (2026-06-16)
 
-KreweConnect frontend is recovered, deployed, and the foundational
-tenant-switching bug is fixed (live). A working per-tenant GDAP backend exists
-as Azure Functions (`api/`). We discovered the *real* product backend — a .NET
-app ("NOIT Client Tools") that lived only in SharePoint — and began preserving
-it into git. Decisions are locked to consolidate onto the .NET backend on the
-Apps365 admin-consent model. The one hard blocker is a **rotated app secret**
-that only Tammy can refresh from a keyboard; it blocks agent-side Graph testing
-but NOT the deployed app.
+KreweConnect is live and being onboarded to real clients. A **critical
+client-isolation bug was fixed and deployed** (MSAL authority was the NOIT single
+tenant → every user looked like an MSP admin; now `/organizations` +
+`MspAdminRoute` guards). The directory gained **per-employee `companyName`
+filtering, click-to-contact links (email/Teams/office/mobile), and work
+anniversary + birthday (MM/DD)** sourced from a configurable custom extension
+attribute (12/31 = opt-out). Org-chart crash + app-blanking fixed (cycle guard +
+error boundaries). **Onboarding is in progress**; tenant-ID/domain resolution by
+guessing proved unreliable, so **wiring CIPP `ListTenants` is the key unblock**
+(still pending env config + a fresh session). All frontend/api work is on `main`
+and auto-deploys via SWA.
 
+## 0a. 2026-06-16 — deployed this session
+
+- **SECURITY (deployed):** client users no longer see the MSP dashboard /
+  cross-client switcher / other tenants' data. Root cause + fix in
+  LESSONS-LEARNED (single-tenant MSAL authority).
+- **Directory UX (deployed):** filters open by default; **Company filter uses
+  Graph `companyName`** (per-employee location, not org name); contact links
+  (mailto / Teams deep link / `tel:` office+mobile); **work anniversary +
+  birthday MM/DD** rendered only when populated; tenant-GUID label removed.
+- **Birthday/anniversary source:** app settings **`BIRTHDAY_ATTRIBUTE`** /
+  **`ANNIVERSARY_ATTRIBUTE`** name the Graph attribute (directory extension or
+  `extensionAttributeN`); empty → standard `birthday`/`employeeHireDate`.
+  **OPEN:** Tammy to provide the exact attribute name + set the app setting.
+- **Resilience:** `/users` falls back to base `$select` on 400/404; Graph errors
+  now surface code+message+request-id. Org-chart cycle guard + top-level &
+  per-route ErrorBoundary.
+
+## 0b. OPEN / next (2026-06-16)
+
+1. **CIPP access** — still not connected (no AWS creds in-session; env changes
+   need a new session). Runbook `docs/cipp-access-setup.md` + `scripts/
+   verify_cipp.py` ready. Unblocks authoritative domain↔tenant lookups.
+2. **Level BR / Engquist directory 404** — freshly consented tenant returns
+   "Graph 404"; redeployed with detailed error surfacing — get the real error
+   line; likely consent-propagation (retry after ~15 min).
+3. **Set `BIRTHDAY_ATTRIBUTE`** once Tammy supplies the attribute name.
+4. **Finish onboarding** the remaining consented clients (consent + add to the
+   `CLIENT_TENANTS` SWA app setting). Tenant roster kept OUT of the public repo —
+   it's in Linear (NOC-52) + the SharePoint handoff doc.
+5. Cosmetic: friendly "consent complete" landing for the `?admin_consent=True`
+   redirect (currently blank).
+
+---
 ## 1. Key identifiers
 
 | Thing | Value |
