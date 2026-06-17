@@ -23,6 +23,8 @@ const USER_SELECT_BASE = [
   "userPrincipalName",
   "accountEnabled",
   "companyName",
+  "userType",
+  "assignedLicenses",
 ];
 
 // Optional fields may be unreadable/unselectable depending on tenant + the
@@ -121,6 +123,10 @@ export interface GraphUser {
   mobilePhone: string | null;
   userPrincipalName: string;
   accountEnabled: boolean;
+  /** "Member" or "Guest" — guests are excluded from the directory. */
+  userType?: string | null;
+  /** Assigned M365 licenses; a non-empty list marks an actual licensed user. */
+  assignedLicenses?: Array<{ skuId: string }>;
   /** Per-employee company (e.g. physical location); distinct from the tenant */
   companyName?: string | null;
   /** Work anniversary source; may be null/unset or a 1604 sentinel in Graph */
@@ -168,7 +174,14 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
     }
     resolveCustomAttributes(user);
   }
-  return allUsers;
+
+  // Directory shows actual licensed members only: drop guests and any account
+  // without an assigned license (shared mailboxes, resource/service accounts).
+  return allUsers.filter(
+    (u) =>
+      (u.userType ?? "Member").toLowerCase() !== "guest" &&
+      (u.assignedLicenses?.length ?? 0) > 0
+  );
 }
 
 /**
