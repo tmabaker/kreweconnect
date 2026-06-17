@@ -89,13 +89,20 @@ async function graphFetch<T>(tenantId: string, url: string): Promise<T> {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      error?: { code?: string; message?: string };
-    };
+    const rawBody = await response.text().catch(() => "");
+    let parsed: { error?: { code?: string; message?: string } } = {};
+    try {
+      parsed = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      /* non-JSON body */
+    }
+    const gcode = parsed.error?.code || "graph_error";
+    const gmsg = parsed.error?.message || rawBody.slice(0, 300) || "(no error body)";
+    const reqId = response.headers.get("request-id") || response.headers.get("client-request-id") || "";
     throw new GraphRequestError(
       response.status,
-      body.error?.code || "graph_error",
-      body.error?.message || `Graph API error: ${response.status}`
+      gcode,
+      `Graph ${response.status} ${gcode}: ${gmsg}${reqId ? ` [request-id ${reqId}]` : ""}`
     );
   }
   return response.json() as Promise<T>;
@@ -145,7 +152,7 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
     // An optional $select field (e.g. birthday) may be unsupported for this
     // app/tenant — retry with only the always-safe base fields rather than
     // letting one optional column take down the whole directory.
-    if (err instanceof GraphRequestError && err.status === 400) {
+    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
       allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS_BASE);
     } else {
       throw err;
@@ -199,7 +206,7 @@ export async function fetchUserById(tenantId: string, userId: string): Promise<G
   try {
     user = await graphFetch<GraphUser>(tenantId, path(buildExtendedSelect()));
   } catch (err) {
-    if (err instanceof GraphRequestError && err.status === 400) {
+    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
       user = await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
     } else {
       throw err;
