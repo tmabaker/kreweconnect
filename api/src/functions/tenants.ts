@@ -73,6 +73,22 @@ function withAuth(handler: Handler) {
   };
 }
 
+// MSP-admin tenant list. Sourced from the CLIENT_TENANTS app setting (REAL
+// tenant IDs, configured at runtime — never hardcoded in the repo). The
+// frontend switcher uses this instead of static config so it can never offer a
+// placeholder/fake tenant ID (which would generate a broken consent URL).
+app.http("tenantList", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "tenants",
+  handler: withAuth(async (_request, caller) => {
+    if (!caller.isMspAdmin) {
+      return { status: 403, jsonBody: { code: "forbidden", message: "MSP admin only." } };
+    }
+    return { status: 200, jsonBody: { value: config.clientTenants } };
+  }),
+});
+
 app.http("tenantStatus", {
   methods: ["GET"],
   authLevel: "anonymous",
