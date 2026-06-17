@@ -13,6 +13,35 @@ is scoped to that prefix (or to secrets tagged `claude-access: true`).
 The index secret (`<prefix>_index`, e.g. `noit/_index`) makes the whole
 estate self-describing — never ask Tammy to re-explain connections.
 
+## Delegated auth as Taila (no device code needed — set up 2026-06-17)
+
+For **user-level / delegated** access (SharePoint write, reading/writing app
+registrations via `Application.Read/ReadWrite.All`, Conditional Access),
+authenticate as the **`taila@noitgroup.com`** service account WITHOUT
+re-prompting Tammy. A long-lived refresh token is stored at:
+
+> SharePoint `sites/tabcc` → `Shared Documents/Agent Workspace/Taila/kc-claude-auth.json`
+
+Bootstrap (instead of a device-code flow):
+
+1. Read that file via the **M365 connector** (`read_resource` on its
+   `file:///{driveId}/{itemId}` URI) — the connector needs no token, breaking
+   the chicken-and-egg.
+2. POST `grant_type=refresh_token` to
+   `https://login.microsoftonline.com/7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e/oauth2/v2.0/token`
+   with the **public client** `client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e`
+   (Microsoft Graph Command Line Tools — no secret). You get a delegated Graph
+   token as Taila.
+3. **Refresh tokens rotate on use** — immediately OVERWRITE the SharePoint file
+   with the newly returned `refresh_token` (`Files.ReadWrite.All`).
+
+Rules: never print the refresh/access token into chat (reading the file via the
+connector echoes it — if that happens, rotate once and re-store). Device-code
+fallback only if the stored token is revoked: the KreweConnect app `eaeafccb`
+is a **confidential** client (its secret lives only in the SWA) so it can't
+redeem a device code headlessly — use the public client `14d82eec…` for device
+code instead. Tammy can revoke Taila's sessions in Entra anytime.
+
 ## Phase 0 — Environment check
 
 ```bash
