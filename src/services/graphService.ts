@@ -197,6 +197,22 @@ async function apiFetch<T>(path: string): Promise<T> {
   return response.json();
 }
 
+/**
+ * List the MSP's configured client tenants (REAL ids) from the backend, which
+ * reads them from the CLIENT_TENANTS app setting. Returns [] in direct-Graph
+ * mode (no backend) so callers fall back gracefully. This is the only source of
+ * client tenant ids for the switcher — never the static placeholder config.
+ */
+export async function fetchConfiguredTenants(): Promise<Array<{ id: string; name: string }>> {
+  if (!useBackendApi) return [];
+  try {
+    const data = await apiFetch<{ value: Array<{ id: string; name: string }> }>("/tenants");
+    return data.value ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Check whether a client tenant has granted admin consent to the app. */
 export async function fetchTenantAuthStatus(
   tenantId: string
