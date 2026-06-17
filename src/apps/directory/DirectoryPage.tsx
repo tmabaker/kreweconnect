@@ -154,8 +154,6 @@ export function DirectoryPage() {
     setSearchQuery,
     departmentFilter,
     setDepartmentFilter,
-    officeFilter,
-    setOfficeFilter,
     titleFilter,
     setTitleFilter,
     companyFilter,
@@ -167,7 +165,7 @@ export function DirectoryPage() {
     refresh,
   } = useGraphEmployees(selectedTenant.tenantId);
 
-  const activeFilterCount = [departmentFilter, officeFilter, titleFilter, companyFilter].filter(Boolean).length;
+  const activeFilterCount = [departmentFilter, titleFilter, companyFilter].filter(Boolean).length;
 
   return (
     <div className={styles.page}>
@@ -235,13 +233,13 @@ export function DirectoryPage() {
           {facets.companies.length > 0 && (
             <Dropdown
               className={styles.filterDropdown}
-              placeholder="Company"
+              placeholder="Location"
               value={companyFilter ?? ""}
               onOptionSelect={(_, data) =>
                 setCompanyFilter(data.optionValue === "" ? null : (data.optionValue ?? null))
               }
             >
-              <Option value="">All Companies</Option>
+              <Option value="">All Locations</Option>
               {facets.companies.map((c) => (
                 <Option key={c} value={c}>
                   {c}
@@ -261,21 +259,6 @@ export function DirectoryPage() {
             {facets.departments.map((d) => (
               <Option key={d} value={d}>
                 {d}
-              </Option>
-            ))}
-          </Dropdown>
-          <Dropdown
-            className={styles.filterDropdown}
-            placeholder="Location"
-            value={officeFilter ?? ""}
-            onOptionSelect={(_, data) =>
-              setOfficeFilter(data.optionValue === "" ? null : (data.optionValue ?? null))
-            }
-          >
-            <Option value="">All Locations</Option>
-            {facets.offices.map((o) => (
-              <Option key={o} value={o}>
-                {o}
               </Option>
             ))}
           </Dropdown>
@@ -301,7 +284,6 @@ export function DirectoryPage() {
               size="small"
               onClick={() => {
                 setDepartmentFilter(null);
-                setOfficeFilter(null);
                 setTitleFilter(null);
                 setCompanyFilter(null);
               }}
