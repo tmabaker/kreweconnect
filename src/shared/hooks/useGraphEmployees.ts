@@ -117,24 +117,24 @@ export function useGraphEmployees(tenantId: string) {
 
         setGraphUsers(users);
 
-        // Photos are a per-tenant Graph call, so skip the batch fetch in the
-        // aggregate view (cards fall back to initials).
-        if (!isAll) {
-          // Fetch photos for ALL users (not just the first 50) so cards show
-          // real photos instead of initials. They stream in progressively via
-          // the onPhoto callback, so a large tenant fills in as it loads
-          // rather than waiting for the whole batch.
-          const userIds = users.map((u) => u.id);
-          fetchUserPhotos(userIds, targetTenant, (id, url) => {
-            if (!cancelled && url) {
-              setPhotoMap((prev) => {
-                const next = new Map(prev);
-                next.set(id, url);
-                return next;
-              });
-            }
-          });
-        }
+        // Fetch photos for ALL users (not just the first 50) so cards show real
+        // photos instead of initials. In the aggregate ("All Tenants") view each
+        // user carries its own source tenant, so fetch each photo against that
+        // tenant; in a single-tenant view they all use the selected tenant.
+        // Photos stream in via onPhoto so large lists fill in progressively.
+        const photoTargets = users.map((u) => ({
+          id: u.id,
+          tenantId: isAll ? u.tenantId : targetTenant,
+        }));
+        fetchUserPhotos(photoTargets, (id, url) => {
+          if (!cancelled && url) {
+            setPhotoMap((prev) => {
+              const next = new Map(prev);
+              next.set(id, url);
+              return next;
+            });
+          }
+        });
       } catch (err) {
         if (cancelled) return;
 
