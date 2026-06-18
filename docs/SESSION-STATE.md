@@ -1,12 +1,65 @@
 # Session Handoff / State — pick up exactly where we left off
 
-**Last updated:** 2026-06-16. Read this first in any new session, then the
-files it points to. Everything below is committed to git (branch `main` and
-`claude/brave-feynman-g2j9v5`) unless explicitly marked "not in git".
-Note: the repo's **default branch is `claude/brave-feynman-g2j9v5`**, but `main`
-holds the latest deployed work — `git fetch && git checkout main`.
+**Last updated:** 2026-06-18. Read this first in any new session, then the
+files it points to. `main` holds the latest deployed work — `git fetch && git
+checkout main`.
+
+> ⚠️ **This repo is PUBLIC.** No secret values or the client-tenant roster live
+> here. Full **credential notes + access paths** are in the private
+> **SharePoint handoff**: `sites/tabcc → Shared Documents → KreweConnect → docs
+> → SESSION-HANDOFF-2026-06-18.md` (and Linear). Make the repo private — NOC-51.
 
 ---
+
+## 0Z. ACCESS PATHS (2026-06-18) — identities only; secrets/roster in SharePoint
+
+- **Taila delegated** (`taila@noitgroup.com`) — primary agent identity, headless.
+  Refresh token in SharePoint `Agent Workspace/Taila/kc-claude-auth.json`;
+  bootstrap = read it via the M365 connector → refresh against public client
+  `14d82eec-204b-4c2f-b7e8-296a70dab67e` → re-store rotated token. Scopes incl.
+  `Sites/Files.ReadWrite.All`, `Application.Read/ReadWrite.All`,
+  `Policy.ReadWrite.ConditionalAccess`. (Steps in the `noit-ops` skill.) No ARM.
+- **MS Claude Agent / "Taila Agent"** app `90f52d62-…` (secret `noit/0626_MSClaudeAgent`)
+  — app-only Graph (NOIT) **and Azure ARM Contributor** on subs
+  `e9251b04…` + `567260a7…` (RGs: CIPP, cipp-swa-orq6j, noit-techportal,
+  **krewesuite**). Use for SWA app settings (read/set `CLIENT_TENANTS`, read the
+  live `AZURE_CLIENT_SECRET`).
+- **eaeafccb** (KreweConnect app): `User.Read.All` **[App, READ-ONLY]** — cannot
+  PATCH users. Live secret only in the **`krewesuite` SWA** app settings (read via
+  ARM). AWS `noit/azure-taila-agent` copy is dead.
+- **KreweConnect SWA** = `krewesuite` · RG `krewesuite_group` · sub `567260a7…` ·
+  host `red-dune-0b9e42210`. `witty-coast-02d8d4d0f` = the unrelated `noit-techportal`
+  SWA. **CIPP** `cipporq6j` (RG `cipp`, sub `e9251b04…`) — API 503s from the agent
+  egress; healthy via browser. AWS: `GetSecretValue` only, prefix `noit/`.
+- **Client tenant IDs** (real, 12 clients): in SharePoint handoff + Linear NOC-52.
+  `CLIENT_TENANTS` (SWA app setting) currently has 6 consented tenants.
+
+## 0Y. SHIPPED THIS SESSION (2026-06-18) — PRs #3–#8, all live on `main`
+
+1. MSAL v4 `initialize()` white-screen fix (awaited before render).
+2. Multi-tenant authority `/organizations` (client users keep their own `tid`).
+3. Consent `/status` now does a real `/users` read (no false "authorized").
+4. Post-login **redirect loop** fix (`handleRedirectPromise` before render +
+   `navigateToLoginRequestUrl:false`); login copy → "Enter your Microsoft username…".
+5. **Real tenant list:** `GET /api/tenants` from `CLIENT_TENANTS`; removed fake
+   placeholder GUIDs from `tenantConfig.ts` (they made broken consent URLs + leaked
+   the roster). Set `CLIENT_TENANTS` on the SWA (6 tenants).
+6. **Photos:** all users, progressive, and in the All-Tenants view (per-user tenant).
+   Reality: few users have photos (~6/199 at Geaux).
+7. **Filters:** dropped phone-number "Location" (officeLocation); "Company" → "Location"
+   (`companyName`); **licensed non-guest users only** (server-side).
+8. Entra: added Web redirect URI to `eaeafccb` for `/adminconsent`.
+
+**In progress:** Geaux directory remediation (normalize company/dept/title/phone/
+address from an admin spreadsheet). Dry-run files in SharePoint. **Write blocked**
+— eaeafccb is read-only in Geaux; needs `User.ReadWrite.All` via GDAP/remediation
+identity. Open: GDAP expansion (CIPP + partner.microsoft.com), make repo private,
+rotate `noit/0626_MSClaudeAgent`, CIPP egress.
+
+---
+
+## (historical below — 2026-06-16)
+
 
 ## 0. One-paragraph status (2026-06-16)
 
