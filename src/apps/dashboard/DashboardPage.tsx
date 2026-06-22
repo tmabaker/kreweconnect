@@ -6,14 +6,6 @@ import {
   Card,
   Body1,
 } from "@fluentui/react-components";
-import {
-  People24Regular,
-  DocumentText24Regular,
-  Building24Regular,
-  ShieldKeyhole24Regular,
-  ArrowTrending24Regular,
-  Warning24Regular,
-} from "@fluentui/react-icons";
 
 const useStyles = makeStyles({
   page: {
@@ -64,27 +56,10 @@ const useStyles = makeStyles({
   },
 });
 
-// Mock dashboard data — will be replaced with real API calls
-const dashboardData = {
-  tenants: 8,
-  employees: 342,
-  activeContracts: 72,
-  expiringContracts: 5,
-  totalContractValue: 485000,
-  monthlyRecurring: 12500,
-};
+// Dashboard data will be populated from live API calls once tenants are connected.
 
 export function DashboardPage() {
   const styles = useStyles();
-
-  const cards = [
-    { icon: <Building24Regular />, value: dashboardData.tenants, label: "Client Tenants", color: "#0078d4" },
-    { icon: <People24Regular />, value: dashboardData.employees, label: "Employees", color: "#107c10" },
-    { icon: <DocumentText24Regular />, value: dashboardData.activeContracts, label: "Active Contracts", color: "#5c2d91" },
-    { icon: <Warning24Regular />, value: dashboardData.expiringContracts, label: "Expiring (30 days)", color: "#d83b01" },
-    { icon: <ArrowTrending24Regular />, value: `$${(dashboardData.totalContractValue / 1000).toFixed(0)}K`, label: "Total Contract Value", color: "#008272" },
-    { icon: <ShieldKeyhole24Regular />, value: `$${(dashboardData.monthlyRecurring).toLocaleString()}`, label: "Monthly Recurring", color: "#0078d4" },
-  ];
 
   return (
     <div className={styles.page}>
@@ -100,21 +75,13 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className={styles.grid}>
-        {cards.map((card, i) => (
-          <Card key={i} className={styles.card}>
-            <div className={styles.cardContent}>
-              <div className={styles.iconContainer}>{card.icon}</div>
-              <div>
-                <div className={styles.metricValue}>{card.value}</div>
-                <Text size={200} className={styles.metricLabel}>
-                  {card.label}
-                </Text>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+      <Card className={styles.card}>
+        <Body1>
+          Metrics will appear here once your Microsoft 365 tenants are connected. This dashboard will
+          show client tenant count, total employees, active contracts, upcoming renewals, and contract
+          value at a glance.
+        </Body1>
+      </Card>
 
       <div className={styles.section}>
         <Title2>Recent Activity</Title2>
