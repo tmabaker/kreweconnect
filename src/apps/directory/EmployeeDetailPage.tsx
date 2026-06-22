@@ -147,6 +147,7 @@ export function EmployeeDetailPage() {
           name={employee.displayName}
           initials={getInitials(employee.displayName)}
           color={getAvatarColor(employee.displayName)}
+          image={employee.photo ? { src: employee.photo } : undefined}
           size={96}
         />
         <div className={styles.profileInfo}>
@@ -228,6 +229,7 @@ export function EmployeeDetailPage() {
               name={employee.manager.displayName}
               initials={getInitials(employee.manager.displayName)}
               color={getAvatarColor(employee.manager.displayName)}
+              image={employee.manager.photo ? { src: employee.manager.photo } : undefined}
               size={40}
             />
             <div>
@@ -261,6 +263,7 @@ export function EmployeeDetailPage() {
                   name={dr.displayName}
                   initials={getInitials(dr.displayName)}
                   color={getAvatarColor(dr.displayName)}
+                  image={dr.photo ? { src: dr.photo } : undefined}
                   size={36}
                 />
                 <div>

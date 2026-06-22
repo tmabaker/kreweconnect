@@ -329,6 +329,7 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
           name={employee.displayName}
           initials={getInitials(employee.displayName)}
           color={getAvatarColor(employee.displayName)}
+          image={employee.photo ? { src: employee.photo } : undefined}
           size={48}
         />
         <div className={styles.cardInfo}>
