@@ -345,6 +345,7 @@ function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onCli
         <Avatar
           name={employee.displayName}
           initials={getInitials(employee.displayName)}
+          image={{ src: employee.photo ?? undefined }}
           color={getAvatarColor(employee.displayName)}
           size={48}
         />

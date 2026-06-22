@@ -149,6 +149,7 @@ export function EmployeeDetailPage() {
         <Avatar
           name={employee.displayName}
           initials={getInitials(employee.displayName)}
+          image={{ src: employee.photo ?? undefined }}
           color={getAvatarColor(employee.displayName)}
           size={96}
         />
@@ -265,6 +266,7 @@ export function EmployeeDetailPage() {
             <Avatar
               name={employee.manager.displayName}
               initials={getInitials(employee.manager.displayName)}
+              image={{ src: employee.manager.photo ?? undefined }}
               color={getAvatarColor(employee.manager.displayName)}
               size={40}
             />
@@ -298,6 +300,7 @@ export function EmployeeDetailPage() {
                 <Avatar
                   name={dr.displayName}
                   initials={getInitials(dr.displayName)}
+                  image={{ src: dr.photo ?? undefined }}
                   color={getAvatarColor(dr.displayName)}
                   size={36}
                 />
