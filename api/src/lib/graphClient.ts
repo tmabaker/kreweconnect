@@ -40,6 +40,41 @@ interface GraphPagedResponse<T> {
   "@odata.nextLink"?: string;
 }
 
+/**
+ * Generic Graph request for write operations (and reads that need a
+ * non-GET verb). `path` is relative to the v1.0 base, e.g. "/users".
+ * Returns the parsed JSON body, or null on 204 No Content.
+ */
+export async function graphRequest<T = unknown>(
+  tenantId: string,
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown
+): Promise<T | null> {
+  const token = await getAppToken(tenantId);
+  const response = await fetch(`${GRAPH_BASE}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errBody = (await response.json().catch(() => ({}))) as {
+      error?: { code?: string; message?: string };
+    };
+    throw new GraphRequestError(
+      response.status,
+      errBody.error?.code || "graph_error",
+      errBody.error?.message || `Graph API error: ${response.status}`
+    );
+  }
+  if (response.status === 204) return null;
+  return (await response.json()) as T;
+}
+
 async function graphFetch<T>(tenantId: string, url: string): Promise<T> {
   const token = await getAppToken(tenantId);
   const response = await fetch(url, {
