@@ -4,10 +4,12 @@
  */
 
 import { getAppToken } from "./tokenService";
+import { config, selectFieldForAttribute, readAttribute } from "./config";
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
-export const USER_SELECT_FIELDS = [
+// Base fields are always selectable with User.Read.All.
+const USER_SELECT_BASE = [
   "id",
   "displayName",
   "givenName",
@@ -20,7 +22,45 @@ export const USER_SELECT_FIELDS = [
   "mobilePhone",
   "userPrincipalName",
   "accountEnabled",
-].join(",");
+  "companyName",
+  "userType",
+  "assignedLicenses",
+];
+
+// Optional fields may be unreadable/unselectable depending on tenant + the
+// app's permissions (e.g. birthday). If selecting them 400s, we fall back to
+// the base list so the directory never breaks because of an optional field.
+const USER_SELECT_OPTIONAL = ["employeeHireDate", "birthday"];
+
+const USER_SELECT_FIELDS_BASE = USER_SELECT_BASE.join(",");
+
+/**
+ * Extended $select: base + standard optional fields + any configured custom
+ * birthday/anniversary attributes (directory extension or extensionAttributeN).
+ * Built per-call so the BIRTHDAY_ATTRIBUTE / ANNIVERSARY_ATTRIBUTE app settings
+ * take effect without a code change.
+ */
+function buildExtendedSelect(): string {
+  const fields = [...USER_SELECT_BASE, ...USER_SELECT_OPTIONAL];
+  for (const attr of [config.birthdayAttribute, config.anniversaryAttribute]) {
+    const f = selectFieldForAttribute(attr);
+    if (f && !fields.includes(f)) fields.push(f);
+  }
+  return fields.join(",");
+}
+
+export const USER_SELECT_FIELDS = buildExtendedSelect();
+
+/** Overlay configured custom attributes onto the birthday/hireDate fields. */
+function resolveCustomAttributes(user: GraphUser): void {
+  const rec = user as unknown as Record<string, unknown>;
+  if (config.birthdayAttribute) {
+    user.birthday = readAttribute(rec, config.birthdayAttribute) ?? user.birthday ?? null;
+  }
+  if (config.anniversaryAttribute) {
+    user.employeeHireDate = readAttribute(rec, config.anniversaryAttribute) ?? user.employeeHireDate ?? null;
+  }
+}
 
 const MANAGER_EXPAND = "manager($select=id,displayName)";
 
@@ -86,13 +126,20 @@ async function graphFetch<T>(tenantId: string, url: string): Promise<T> {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      error?: { code?: string; message?: string };
-    };
+    const rawBody = await response.text().catch(() => "");
+    let parsed: { error?: { code?: string; message?: string } } = {};
+    try {
+      parsed = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      /* non-JSON body */
+    }
+    const gcode = parsed.error?.code || "graph_error";
+    const gmsg = parsed.error?.message || rawBody.slice(0, 300) || "(no error body)";
+    const reqId = response.headers.get("request-id") || response.headers.get("client-request-id") || "";
     throw new GraphRequestError(
       response.status,
-      body.error?.code || "graph_error",
-      body.error?.message || `Graph API error: ${response.status}`
+      gcode,
+      `Graph ${response.status} ${gcode}: ${gmsg}${reqId ? ` [request-id ${reqId}]` : ""}`
     );
   }
   return response.json() as Promise<T>;
@@ -111,20 +158,46 @@ export interface GraphUser {
   mobilePhone: string | null;
   userPrincipalName: string;
   accountEnabled: boolean;
+  /** "Member" or "Guest" — guests are excluded from the directory. */
+  userType?: string | null;
+  /** Assigned M365 licenses; a non-empty list marks an actual licensed user. */
+  assignedLicenses?: Array<{ skuId: string }>;
+  /** Per-employee company (e.g. physical location); distinct from the tenant */
+  companyName?: string | null;
+  /** Work anniversary source; may be null/unset or a 1604 sentinel in Graph */
+  employeeHireDate?: string | null;
+  /** Birthday; only the month/day is surfaced. May be null/unset in Graph */
+  birthday?: string | null;
   manager?: { id: string; displayName: string } | null;
   /** Set only in the aggregated "all clients" response — the source tenant */
   tenantId?: string;
   tenantDisplayName?: string;
 }
 
-export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
-  const allUsers: GraphUser[] = [];
-  let url = `${GRAPH_BASE}/users?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true&$count=true`;
-
+async function fetchUsersWithSelect(tenantId: string, select: string): Promise<GraphUser[]> {
+  const users: GraphUser[] = [];
+  let url = `${GRAPH_BASE}/users?$select=${select}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true&$count=true`;
   while (url) {
     const page = await graphFetch<GraphPagedResponse<GraphUser>>(tenantId, url);
-    allUsers.push(...page.value);
+    users.push(...page.value);
     url = page["@odata.nextLink"] || "";
+  }
+  return users;
+}
+
+export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
+  let allUsers: GraphUser[];
+  try {
+    allUsers = await fetchUsersWithSelect(tenantId, buildExtendedSelect());
+  } catch (err) {
+    // An optional $select field (e.g. birthday) may be unsupported for this
+    // app/tenant — retry with only the always-safe base fields rather than
+    // letting one optional column take down the whole directory.
+    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
+      allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS_BASE);
+    } else {
+      throw err;
+    }
   }
 
   for (const user of allUsers) {
@@ -134,8 +207,16 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
         displayName: user.manager.displayName || "",
       };
     }
+    resolveCustomAttributes(user);
   }
-  return allUsers;
+
+  // Directory shows actual licensed members only: drop guests and any account
+  // without an assigned license (shared mailboxes, resource/service accounts).
+  return allUsers.filter(
+    (u) =>
+      (u.userType ?? "Member").toLowerCase() !== "guest" &&
+      (u.assignedLicenses?.length ?? 0) > 0
+  );
 }
 
 /**
@@ -167,10 +248,20 @@ export async function fetchUsersAllTenants(
 }
 
 export async function fetchUserById(tenantId: string, userId: string): Promise<GraphUser> {
-  return graphFetch<GraphUser>(
-    tenantId,
-    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}?$select=${USER_SELECT_FIELDS}&$expand=${MANAGER_EXPAND}`
-  );
+  const path = (select: string) =>
+    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}?$select=${select}&$expand=${MANAGER_EXPAND}`;
+  let user: GraphUser;
+  try {
+    user = await graphFetch<GraphUser>(tenantId, path(buildExtendedSelect()));
+  } catch (err) {
+    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
+      user = await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
+    } else {
+      throw err;
+    }
+  }
+  resolveCustomAttributes(user);
+  return user;
 }
 
 export async function fetchDirectReports(

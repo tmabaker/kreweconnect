@@ -29,6 +29,7 @@ import {
   CalendarClock24Regular,
 } from "@fluentui/react-icons";
 import { TenantSwitcher } from "../../components/TenantSwitcher";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { useTenantContext } from "../hooks/useTenantContext";
 import { detectUserTenantContext } from "../../services/tenantService";
 
@@ -116,14 +117,17 @@ const useStyles = makeStyles({
   },
 });
 
+// `mspOnly` items are hidden from client-tenant users — clients only ever see
+// their own Directory + Org Chart (KreweConnect). The route guards enforce the
+// same rule for direct URL access.
 const navItems = [
-  { path: "/", label: "Dashboard", icon: <Home24Regular />, section: null },
+  { path: "/", label: "Dashboard", icon: <Home24Regular />, section: null, mspOnly: true },
   { path: "/directory", label: "Directory", icon: <People24Regular />, section: "KreweConnect" },
   { path: "/org-chart", label: "Org Chart", icon: <Organization24Regular />, section: null, indent: true },
-  { path: "/contracts", label: "Dashboard", icon: <Gavel24Regular />, section: "KreweReview" },
-  { path: "/contracts/all", label: "All Contracts", icon: <DocumentText24Regular />, section: null, indent: true },
-  { path: "/contracts/renewals", label: "Renewals", icon: <CalendarClock24Regular />, section: null, indent: true },
-  { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null },
+  { path: "/contracts", label: "Dashboard", icon: <Gavel24Regular />, section: "KreweReview", mspOnly: true },
+  { path: "/contracts/all", label: "All Contracts", icon: <DocumentText24Regular />, section: null, indent: true, mspOnly: true },
+  { path: "/contracts/renewals", label: "Renewals", icon: <CalendarClock24Regular />, section: null, indent: true, mspOnly: true },
+  { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null, mspOnly: true },
 ];
 
 
@@ -169,7 +173,9 @@ export function AppShell() {
         </div>
 
         <nav className={styles.nav}>
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => userContext.isMspAdmin || !(item as any).mspOnly)
+            .map((item) => {
             const isActive =
               item.path === "/"
                 ? location.pathname === "/"
@@ -250,9 +256,11 @@ export function AppShell() {
               <MenuPopover>
                 <MenuList>
                   <MenuItem icon={<Person24Regular />}>Profile</MenuItem>
-                  <MenuItem icon={<Settings24Regular />} onClick={() => navigate("/settings")}>
-                    Settings
-                  </MenuItem>
+                  {userContext.isMspAdmin && (
+                    <MenuItem icon={<Settings24Regular />} onClick={() => navigate("/settings")}>
+                      Settings
+                    </MenuItem>
+                  )}
                   <Divider />
                   <MenuItem icon={<SignOut24Regular />} onClick={handleLogout}>
                     Sign out
@@ -264,9 +272,13 @@ export function AppShell() {
         </div>
 
         <div className={styles.content}>
-          <Suspense fallback={<Spinner label="Loading..." />}>
-            <Outlet />
-          </Suspense>
+          {/* Keyed by route so a crash on one page clears when navigating away,
+              instead of the old behavior where one error blanked the whole app. */}
+          <ErrorBoundary key={location.pathname}>
+            <Suspense fallback={<Spinner label="Loading..." />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
     </div>

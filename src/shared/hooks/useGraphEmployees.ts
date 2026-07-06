@@ -47,6 +47,9 @@ function graphUserToListItem(
     businessPhone: user.businessPhones?.[0] || null,
     photo: photoUrl || null,
     isActive: user.accountEnabled !== false,
+    companyName: user.companyName ?? null,
+    hireDate: user.employeeHireDate ?? null,
+    birthday: user.birthday ?? null,
     // In the aggregate view each user carries its own tenant; otherwise use
     // the single selected tenant's display name.
     tenantDisplayName: user.tenantDisplayName ?? tenantDisplayName,
@@ -63,7 +66,7 @@ function graphUserToDetail(
   return {
     ...graphUserToListItem(user, tenantDisplayName, photoUrl),
     employeeId: null,
-    hireDate: null,
+    hireDate: user.employeeHireDate ?? null,
     lastSyncedAt: new Date().toISOString(),
     manager: user.manager
       ? { id: user.manager.id, displayName: user.manager.displayName, jobTitle: null, photo: null }
@@ -87,6 +90,7 @@ export function useGraphEmployees(tenantId: string) {
   const [departmentFilter, setDepartmentFilter] = useState<string | null>(null);
   const [officeFilter, setOfficeFilter] = useState<string | null>(null);
   const [titleFilter, setTitleFilter] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "department" | "recent">("name");
 
   const currentTenantRef = useRef(tenantId);
@@ -113,20 +117,24 @@ export function useGraphEmployees(tenantId: string) {
 
         setGraphUsers(users);
 
-        // Photos are a per-tenant Graph call, so skip the batch fetch in the
-        // aggregate view (cards fall back to initials).
-        if (!isAll) {
-          const userIds = users.slice(0, 50).map((u) => u.id); // Limit initial photo fetch
-          fetchUserPhotos(userIds, targetTenant).then((photos) => {
-            if (!cancelled) {
-              setPhotoMap((prev) => {
-                const next = new Map(prev);
-                photos.forEach((url, id) => next.set(id, url));
-                return next;
-              });
-            }
-          });
-        }
+        // Fetch photos for ALL users (not just the first 50) so cards show real
+        // photos instead of initials. In the aggregate ("All Tenants") view each
+        // user carries its own source tenant, so fetch each photo against that
+        // tenant; in a single-tenant view they all use the selected tenant.
+        // Photos stream in via onPhoto so large lists fill in progressively.
+        const photoTargets = users.map((u) => ({
+          id: u.id,
+          tenantId: isAll ? u.tenantId : targetTenant,
+        }));
+        fetchUserPhotos(photoTargets, (id, url) => {
+          if (!cancelled && url) {
+            setPhotoMap((prev) => {
+              const next = new Map(prev);
+              next.set(id, url);
+              return next;
+            });
+          }
+        });
       } catch (err) {
         if (cancelled) return;
 
@@ -188,6 +196,7 @@ export function useGraphEmployees(tenantId: string) {
     if (departmentFilter) list = list.filter((e) => e.department === departmentFilter);
     if (officeFilter) list = list.filter((e) => e.officeLocation === officeFilter);
     if (titleFilter) list = list.filter((e) => e.jobTitle === titleFilter);
+    if (companyFilter) list = list.filter((e) => e.companyName === companyFilter);
 
     // Sort
     if (sortBy === "department") {
@@ -201,7 +210,7 @@ export function useGraphEmployees(tenantId: string) {
     }
 
     return list;
-  }, [isDemoMode, mockHook.employees, graphUsers, photoMap, tenantDisplayName, searchQuery, departmentFilter, officeFilter, titleFilter, sortBy]);
+  }, [isDemoMode, mockHook.employees, graphUsers, photoMap, tenantDisplayName, searchQuery, departmentFilter, officeFilter, titleFilter, companyFilter, sortBy]);
 
   // Compute facets
   const facets = useMemo<EmployeeFacets>(() => {
@@ -214,6 +223,7 @@ export function useGraphEmployees(tenantId: string) {
         ...new Set(list.map((e) => e.officeLocation).filter(Boolean) as string[]),
       ].sort(),
       titles: [...new Set(list.map((e) => e.jobTitle).filter(Boolean) as string[])].sort(),
+      companies: [...new Set(list.map((e) => e.companyName).filter(Boolean) as string[])].sort(),
     };
   }, [isDemoMode, mockHook.facets, graphUsers]);
 
@@ -291,24 +301,30 @@ export function useGraphEmployees(tenantId: string) {
         }
       }
 
-      const buildNode = (user: GraphUser): OrgChartNode => ({
-        id: user.id,
-        displayName: user.displayName,
-        jobTitle: user.jobTitle,
-        department: user.department,
-        photo: photoMap.get(user.id) || null,
-        directReports: (childrenMap.get(user.id) || [])
-          .sort((a, b) => a.displayName.localeCompare(b.displayName))
-          .map(buildNode),
-      });
+      const buildNode = (user: GraphUser, visited: Set<string>): OrgChartNode => {
+        visited.add(user.id);
+        return {
+          id: user.id,
+          displayName: user.displayName,
+          jobTitle: user.jobTitle,
+          department: user.department,
+          photo: photoMap.get(user.id) || null,
+          directReports: (childrenMap.get(user.id) || [])
+            // Guard against manager cycles / self-manager in the source data,
+            // which would otherwise recurse infinitely and crash the page.
+            .filter((child) => !visited.has(child.id))
+            .sort((a, b) => a.displayName.localeCompare(b.displayName))
+            .map((child) => buildNode(child, visited)),
+        };
+      };
 
       if (rootId) {
         const rootUser = userMap.get(rootId);
-        return rootUser ? buildNode(rootUser) : null;
+        return rootUser ? buildNode(rootUser, new Set()) : null;
       }
 
       // Find the best root: either no manager, or the person with most reports
-      if (roots.length === 1) return buildNode(roots[0]);
+      if (roots.length === 1) return buildNode(roots[0], new Set());
       if (roots.length > 1) {
         // Pick root with most descendant reports
         const rootWithMostReports = roots.reduce((best, r) => {
@@ -316,7 +332,7 @@ export function useGraphEmployees(tenantId: string) {
           const rCount = childrenMap.get(r.id)?.length || 0;
           return rCount > bestCount ? r : best;
         });
-        return buildNode(rootWithMostReports);
+        return buildNode(rootWithMostReports, new Set());
       }
 
       return null;
@@ -344,6 +360,8 @@ export function useGraphEmployees(tenantId: string) {
   if (isDemoMode) {
     return {
       ...mockHook,
+      companyFilter,
+      setCompanyFilter,
       loading: false,
       error: null,
       refresh: () => {},
@@ -362,6 +380,8 @@ export function useGraphEmployees(tenantId: string) {
     setOfficeFilter,
     titleFilter,
     setTitleFilter,
+    companyFilter,
+    setCompanyFilter,
     sortBy,
     setSortBy,
     getDetail,

@@ -49,116 +49,27 @@ const DEFAULT_FEATURES: TenantFeatures = {
 // ─── Tenant Configs ──────────────────────────────────────────────
 
 /**
- * Static config for known tenants. Keyed by tenant ID (lowercase).
- * Add new tenants here as they're onboarded.
+ * Static branding/feature config, keyed by REAL tenant ID (lowercase).
  *
- * NOTE: Geaux Automotive is the only entry with a real tenant ID so far.
- * The remaining GUIDs are placeholders (NOC-52) — replace each with the
- * client's actual tenant ID from Partner Center/CIPP before onboarding.
+ * This drives per-tenant colors/features/custom-fields ONLY — it is NOT the
+ * source of which tenants exist. The switcher's tenant list comes from the
+ * backend `/api/tenants` (the CLIENT_TENANTS app setting, real ids), so this
+ * file never needs to carry the client roster (kept out of the public repo).
+ * Unknown tenants render with DEFAULT_FEATURES and their name from the backend.
+ *
+ * Previously this held 8 placeholder/fake-GUID client entries; those leaked the
+ * client roster into a public repo AND — because the GUIDs were fake — fed the
+ * switcher tenant ids that no tenant owns, so selecting one produced a consent
+ * URL for a non-existent tenant and consent could never succeed. Removed.
+ * Add a real-ID entry here only to customize a tenant's branding.
  */
 export const TENANT_CONFIGS: Record<string, TenantConfig> = {
-  // Geaux Automotive — PILOT TENANT (real tenant ID)
+  // Geaux Automotive — PILOT TENANT (real tenant ID; already public elsewhere)
   "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa": {
     tenantId: "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa",
     displayName: "Geaux Automotive",
     primaryColor: "#461d7c",
     secondaryColor: "#fdd023",
-    features: {
-      ...DEFAULT_FEATURES,
-    },
-  },
-
-  // Bayou Automotive
-  "aaaaaaaa-1111-2222-3333-444444444444": {
-    tenantId: "aaaaaaaa-1111-2222-3333-444444444444",
-    displayName: "Bayou Automotive",
-    primaryColor: "#1a5276",
-    secondaryColor: "#2e86c1",
-    features: {
-      ...DEFAULT_FEATURES,
-      customFields: [
-        { key: "employeeNumber", label: "Employee Number", type: "text" },
-        { key: "hireDate", label: "Hire Date", type: "date" },
-      ],
-    },
-  },
-
-  // Fishman Haygood
-  "bbbbbbbb-1111-2222-3333-444444444444": {
-    tenantId: "bbbbbbbb-1111-2222-3333-444444444444",
-    displayName: "Fishman Haygood",
-    primaryColor: "#2c3e50",
-    secondaryColor: "#7f8c8d",
-    features: {
-      ...DEFAULT_FEATURES,
-      customFields: [
-        { key: "barNumber", label: "Bar Number", type: "text" },
-        { key: "practiceArea", label: "Practice Area", type: "text" },
-      ],
-    },
-  },
-
-  // Irby Investments
-  "cccccccc-1111-2222-3333-444444444444": {
-    tenantId: "cccccccc-1111-2222-3333-444444444444",
-    displayName: "Irby Investments",
-    primaryColor: "#1b4f72",
-    secondaryColor: "#2980b9",
-    features: {
-      ...DEFAULT_FEATURES,
-    },
-  },
-
-  // Pac-Gulf
-  "dddddddd-1111-2222-3333-444444444444": {
-    tenantId: "dddddddd-1111-2222-3333-444444444444",
-    displayName: "Pac-Gulf",
-    primaryColor: "#145a32",
-    secondaryColor: "#27ae60",
-    features: {
-      ...DEFAULT_FEATURES,
-    },
-  },
-
-  // Level BR
-  "eeeeeeee-1111-2222-3333-444444444444": {
-    tenantId: "eeeeeeee-1111-2222-3333-444444444444",
-    displayName: "Level BR",
-    primaryColor: "#4a235a",
-    secondaryColor: "#8e44ad",
-    features: {
-      ...DEFAULT_FEATURES,
-    },
-  },
-
-  // True Title
-  "ffffffff-1111-2222-3333-444444444444": {
-    tenantId: "ffffffff-1111-2222-3333-444444444444",
-    displayName: "True Title",
-    primaryColor: "#7b241c",
-    secondaryColor: "#c0392b",
-    features: {
-      ...DEFAULT_FEATURES,
-    },
-  },
-
-  // Corporate Realty
-  "11111111-aaaa-bbbb-cccc-dddddddddddd": {
-    tenantId: "11111111-aaaa-bbbb-cccc-dddddddddddd",
-    displayName: "Corporate Realty",
-    primaryColor: "#1a5276",
-    secondaryColor: "#2e86c1",
-    features: {
-      ...DEFAULT_FEATURES,
-    },
-  },
-
-  // Xtreme Automotive
-  "22222222-aaaa-bbbb-cccc-dddddddddddd": {
-    tenantId: "22222222-aaaa-bbbb-cccc-dddddddddddd",
-    displayName: "Xtreme Automotive",
-    primaryColor: "#922b21",
-    secondaryColor: "#e74c3c",
     features: {
       ...DEFAULT_FEATURES,
     },

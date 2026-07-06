@@ -4,8 +4,9 @@ import {
   FluentProvider,
   webDarkTheme,
 } from "@fluentui/react-components";
-import { AuthProvider, RequireAuth } from "./shared/auth";
+import { AuthProvider, RequireAuth, MspAdminRoute } from "./shared/auth";
 import { AppShell } from "./shared/components/AppShell";
+import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import { TenantProvider } from "./shared/hooks/useTenantContext";
 
 // Lazy-loaded page components
@@ -46,29 +47,34 @@ const theme = webDarkTheme;
 function App() {
   return (
     <FluentProvider theme={theme} style={{ height: "100vh" }}>
+      <ErrorBoundary>
       <AuthProvider>
         <RequireAuth>
           <TenantProvider>
           <BrowserRouter basename="/app/kreweconnect">
             <Routes>
               <Route element={<AppShell />}>
-                <Route index element={<DashboardPage />} />
+                {/* MSP-admin-only landing. Clients are redirected to /directory. */}
+                <Route index element={<MspAdminRoute><DashboardPage /></MspAdminRoute>} />
+                {/* KreweConnect — available to clients (their own tenant only). */}
                 <Route path="/directory" element={<DirectoryPage />} />
                 <Route path="/directory/:id" element={<EmployeeDetailPage />} />
                 <Route path="/org-chart" element={<OrgChartPage />} />
-                <Route path="/contracts" element={<ContractsPage />} />
-                <Route path="/contracts/all" element={<ContractListPage />} />
-                <Route path="/contracts/new" element={<ContractFormPage />} />
-                <Route path="/contracts/renewals" element={<RenewalsPage />} />
-                <Route path="/contracts/:id" element={<ContractDetailPage />} />
-                <Route path="/contracts/:id/edit" element={<ContractFormPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
+                {/* KreweReview / Contracts + Settings — MSP-admin only. */}
+                <Route path="/contracts" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
+                <Route path="/contracts/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
+                <Route path="/contracts/new" element={<MspAdminRoute><ContractFormPage /></MspAdminRoute>} />
+                <Route path="/contracts/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
+                <Route path="/contracts/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
+                <Route path="/contracts/:id/edit" element={<MspAdminRoute><ContractFormPage /></MspAdminRoute>} />
+                <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
               </Route>
             </Routes>
           </BrowserRouter>
           </TenantProvider>
         </RequireAuth>
       </AuthProvider>
+      </ErrorBoundary>
     </FluentProvider>
   );
 }

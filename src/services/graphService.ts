@@ -23,6 +23,12 @@ export interface GraphUser {
   mobilePhone: string | null;
   userPrincipalName: string;
   accountEnabled: boolean;
+  /** Per-employee company (e.g. physical location); distinct from the tenant */
+  companyName?: string | null;
+  /** Work anniversary source; may be null/unset or a 1604 sentinel in Graph */
+  employeeHireDate?: string | null;
+  /** Birthday; only month/day is surfaced. May be null/unset in Graph */
+  birthday?: string | null;
   manager?: {
     id: string;
     displayName: string;
@@ -191,6 +197,22 @@ async function apiFetch<T>(path: string): Promise<T> {
   return response.json();
 }
 
+/**
+ * List the MSP's configured client tenants (REAL ids) from the backend, which
+ * reads them from the CLIENT_TENANTS app setting. Returns [] in direct-Graph
+ * mode (no backend) so callers fall back gracefully. This is the only source of
+ * client tenant ids for the switcher — never the static placeholder config.
+ */
+export async function fetchConfiguredTenants(): Promise<Array<{ id: string; name: string }>> {
+  if (!useBackendApi) return [];
+  try {
+    const data = await apiFetch<{ value: Array<{ id: string; name: string }> }>("/tenants");
+    return data.value ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Check whether a client tenant has granted admin consent to the app. */
 export async function fetchTenantAuthStatus(
   tenantId: string
@@ -271,6 +293,9 @@ const USER_SELECT_FIELDS = [
   "mobilePhone",
   "userPrincipalName",
   "accountEnabled",
+  "companyName",
+  "employeeHireDate",
+  "birthday",
 ].join(",");
 
 const MANAGER_EXPAND = "manager($select=id,displayName)";
@@ -384,28 +409,33 @@ export async function fetchUserPhoto(
 }
 
 /**
- * Batch-fetch profile photos for multiple users.
- * Returns a map of userId -> blob URL (or null).
+ * Batch-fetch profile photos for multiple users, each against its own tenant
+ * (so the aggregate "All Tenants" view works — every user carries its source
+ * tenant). Returns a map of userId -> blob URL (or null). `onPhoto` (optional)
+ * fires as each photo resolves so callers can render photos progressively
+ * instead of waiting for the whole batch.
  */
 export async function fetchUserPhotos(
-  userIds: string[],
-  tenantId?: string
+  targets: Array<{ id: string; tenantId?: string }>,
+  onPhoto?: (id: string, url: string | null) => void
 ): Promise<Map<string, string | null>> {
   const results = new Map<string, string | null>();
 
-  // Fetch in parallel with concurrency limit
-  const CONCURRENCY = 5;
-  const queue = [...userIds];
+  // Fetch in parallel with a bounded concurrency so we don't flood the API.
+  const CONCURRENCY = 8;
+  const queue = [...targets];
 
   async function worker() {
     while (queue.length > 0) {
-      const id = queue.shift()!;
+      const t = queue.shift()!;
+      let photo: string | null = null;
       try {
-        const photo = await fetchUserPhoto(id, tenantId);
-        results.set(id, photo);
+        photo = await fetchUserPhoto(t.id, t.tenantId);
       } catch {
-        results.set(id, null);
+        photo = null;
       }
+      results.set(t.id, photo);
+      if (photo && onPhoto) onPhoto(t.id, photo); // stream hits as they land
     }
   }
 

@@ -7,7 +7,7 @@
 
 import { msalInstance } from "../shared/auth/AuthProvider";
 import { isDemoMode } from "../shared/auth/demoMode";
-import { fetchCustomerTenants } from "./graphService";
+import { fetchCustomerTenants, fetchConfiguredTenants } from "./graphService";
 import {
   NOIT_TENANT_ID,
   getTenantConfig,
@@ -85,8 +85,17 @@ export async function getAvailableTenants(): Promise<TenantInfo[]> {
     return getStaticTenantList();
   }
 
+  // PRIMARY: real client tenant ids from the backend (CLIENT_TENANTS app
+  // setting). This is authoritative and the only source that yields real ids —
+  // the static config holds branding only and must never feed the switcher a
+  // placeholder id (which would build a consent URL for a non-existent tenant).
+  const configured = await fetchConfiguredTenants();
+  if (configured.length > 0) {
+    return configured.map((t) => ({ tenantId: t.id, displayName: t.name }));
+  }
+
   try {
-    // Try to discover tenants via Graph contracts API
+    // Secondary: Graph contracts (GDAP partner discovery).
     const graphTenants = await fetchCustomerTenants();
 
     if (graphTenants.length > 0) {
@@ -97,10 +106,8 @@ export async function getAvailableTenants(): Promise<TenantInfo[]> {
       }));
     }
 
-    // Fallback: return tenants from static config
     return getStaticTenantList();
   } catch {
-    // On error, fall back to static config
     return getStaticTenantList();
   }
 }

@@ -96,20 +96,64 @@ export async function getAppToken(tenantId: string): Promise<string> {
   return token.access_token;
 }
 
-/** Check whether a tenant has granted consent, without throwing. */
+/**
+ * Check whether a tenant has *usable* consent, without throwing.
+ *
+ * Acquiring a client-credentials token is necessary but NOT sufficient: Entra
+ * issues a token even when the app holds no Graph application role, so a token
+ * alone does not prove the directory can be read. That is the exact "an admin
+ * clicked Accept but the directory still won't load" failure — the app was
+ * provisioned, but the `User.Read.All` *application* permission was never
+ * requested/consented. So we additionally probe a minimal `/users` read and
+ * only report `authorized: true` when that succeeds.
+ */
 export async function checkTenantAuthorization(
   tenantId: string
 ): Promise<{ authorized: boolean; consentUrl: string; detail?: string }> {
+  const consentUrl = buildConsentUrl(tenantId);
+  let token: string;
   try {
-    await getAppToken(tenantId);
-    return { authorized: true, consentUrl: buildConsentUrl(tenantId) };
+    token = await getAppToken(tenantId);
   } catch (err) {
     if (err instanceof TenantNotAuthorizedError) {
       return { authorized: false, consentUrl: err.consentUrl };
     }
     return {
       authorized: false,
-      consentUrl: buildConsentUrl(tenantId),
+      consentUrl,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  // Token acquired — now confirm the app can actually read the directory.
+  try {
+    const probe = await fetch(
+      "https://graph.microsoft.com/v1.0/users?$top=1&$select=id",
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (probe.ok) {
+      return { authorized: true, consentUrl };
+    }
+    if (probe.status === 401 || probe.status === 403) {
+      // Provisioned/consented for sign-in, but missing the application
+      // permission that lets it read users. Re-consent (the URL grants the
+      // app's currently-requested application permissions) fixes this.
+      return {
+        authorized: false,
+        consentUrl,
+        detail:
+          "App is consented for sign-in but lacks the User.Read.All application " +
+          "permission in this tenant (Graph returned " +
+          `${probe.status}). Re-grant admin consent to authorize directory read.`,
+      };
+    }
+    // Transient Graph issue — treat as authorized so a 5xx blip doesn't hide a
+    // tenant that is actually fine; the directory call will surface real errors.
+    return { authorized: true, consentUrl };
+  } catch (err) {
+    return {
+      authorized: false,
+      consentUrl,
       detail: err instanceof Error ? err.message : String(err),
     };
   }
