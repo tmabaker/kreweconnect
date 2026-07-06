@@ -45,6 +45,7 @@ builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContractApprovalService, ContractApprovalService>();
 builder.Services.AddScoped<IRenewalAlertService, RenewalAlertService>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient(); // IHttpClientFactory for GdapService per-tenant token + Graph calls
 
 // ----- Redis (optional) -----
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
@@ -129,6 +130,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "NOIT Client Tools API v1"));
 }
 
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

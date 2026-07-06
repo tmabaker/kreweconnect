@@ -10,68 +10,17 @@
  * {tenantId} may be "home" for the caller's own tenant.
  */
 
-import {
-  app,
-  type HttpRequest,
-  type HttpResponseInit,
-  type InvocationContext,
-} from "@azure/functions";
-import { authenticate, authorizeTenant, AuthError, type CallerContext } from "../lib/authMiddleware";
-import { TenantNotAuthorizedError, checkTenantAuthorization } from "../lib/tokenService";
+import { app } from "@azure/functions";
+import { withAuth } from "../lib/http";
+import { checkTenantAuthorization } from "../lib/tokenService";
 import {
   fetchUsers,
   fetchUsersAllTenants,
   fetchUserById,
   fetchDirectReports,
   fetchUserPhoto,
-  GraphRequestError,
 } from "../lib/graphClient";
 import { config } from "../lib/config";
-
-type Handler = (
-  request: HttpRequest,
-  caller: CallerContext,
-  tenantId: string
-) => Promise<HttpResponseInit>;
-
-/** Wraps a handler with authentication, tenant authorization, and error mapping. */
-function withAuth(handler: Handler) {
-  return async (
-    request: HttpRequest,
-    context: InvocationContext
-  ): Promise<HttpResponseInit> => {
-    try {
-      const caller = await authenticate(request);
-      const tenantId = authorizeTenant(caller, request.params.tenantId || "home");
-      return await handler(request, caller, tenantId);
-    } catch (err) {
-      if (err instanceof AuthError) {
-        return { status: err.status, jsonBody: { code: "auth_error", message: err.message } };
-      }
-      if (err instanceof TenantNotAuthorizedError) {
-        return {
-          status: 401,
-          jsonBody: {
-            code: "consent_required",
-            message: err.message,
-            consentUrl: err.consentUrl,
-          },
-        };
-      }
-      if (err instanceof GraphRequestError) {
-        return {
-          status: err.status,
-          jsonBody: { code: err.code, message: err.message },
-        };
-      }
-      context.error("Unhandled error", err);
-      return {
-        status: 500,
-        jsonBody: { code: "internal_error", message: "An unexpected error occurred." },
-      };
-    }
-  };
-}
 
 // MSP-admin tenant list. Sourced from the CLIENT_TENANTS app setting (REAL
 // tenant IDs, configured at runtime — never hardcoded in the repo). The

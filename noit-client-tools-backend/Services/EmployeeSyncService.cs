@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -14,18 +17,27 @@ public class EmployeeSyncService : IEmployeeSyncService
     private readonly IGdapService _gdapService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<EmployeeSyncService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly bool _useMockData;
+
+    private const string GraphBase = "https://graph.microsoft.com/v1.0";
+    private static readonly string UserSelectFields = string.Join(",",
+        "id", "displayName", "givenName", "surname", "jobTitle", "department",
+        "officeLocation", "mail", "businessPhones", "mobilePhone",
+        "userPrincipalName", "accountEnabled", "employeeId");
 
     public EmployeeSyncService(
         AppDbContext db,
         IGdapService gdapService,
         IConfiguration configuration,
-        ILogger<EmployeeSyncService> logger)
+        ILogger<EmployeeSyncService> logger,
+        IHttpClientFactory httpClientFactory)
     {
         _db = db;
         _gdapService = gdapService;
         _configuration = configuration;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
         _useMockData = configuration.GetValue<bool>("Gdap:UseMockData", true);
     }
 
@@ -44,10 +56,10 @@ public class EmployeeSyncService : IEmployeeSyncService
         }
         else
         {
-            // TODO: Real Graph API call
-            // var token = await _gdapService.AcquireTokenForTenantAsync(tenant.TenantId.ToString(), new[] { "https://graph.microsoft.com/.default" }, ct);
-            // graphUsers = await CallGraphApi(token, ct);
-            throw new NotImplementedException("Real Graph sync not yet implemented.");
+            var token = await _gdapService.AcquireTokenForTenantAsync(
+                tenant.TenantId.ToString(),
+                new[] { "https://graph.microsoft.com/.default" }, ct);
+            graphUsers = await FetchGraphUsersAsync(token, ct);
         }
 
         var existingEmployees = await _db.Employees
@@ -160,6 +172,80 @@ public class EmployeeSyncService : IEmployeeSyncService
         }
 
         await _db.SaveChangesAsync(ct);
+    }
+
+    // ─── Real Microsoft Graph fetch ──────────────────────────────────────────
+
+    private async Task<List<MockGraphUser>> FetchGraphUsersAsync(string accessToken, CancellationToken ct)
+    {
+        var http = _httpClientFactory.CreateClient();
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        // Advanced query (filter on accountEnabled + $count) requires eventual consistency.
+        http.DefaultRequestHeaders.Add("ConsistencyLevel", "eventual");
+
+        var users = new List<MockGraphUser>();
+        var url = $"{GraphBase}/users?$select={UserSelectFields}&$expand=manager($select=id)&$top=999&$filter=accountEnabled eq true&$count=true";
+
+        while (!string.IsNullOrEmpty(url))
+        {
+            using var resp = await http.GetAsync(url, ct);
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Graph /users failed: {(int)resp.StatusCode} {body}");
+
+            var page = JsonSerializer.Deserialize<GraphPage<GraphUser>>(body) ?? new GraphPage<GraphUser>();
+            foreach (var u in page.Value)
+            {
+                users.Add(new MockGraphUser(
+                    EntraObjectId: u.Id ?? string.Empty,
+                    DisplayName: u.DisplayName ?? u.UserPrincipalName ?? "(unknown)",
+                    GivenName: u.GivenName ?? string.Empty,
+                    Surname: u.Surname ?? string.Empty,
+                    Email: u.Mail ?? u.UserPrincipalName ?? string.Empty,
+                    JobTitle: u.JobTitle,
+                    Department: u.Department,
+                    OfficeLocation: u.OfficeLocation,
+                    MobilePhone: u.MobilePhone,
+                    BusinessPhone: u.BusinessPhones?.FirstOrDefault(),
+                    EmployeeId: u.EmployeeId,
+                    HireDate: null, // employeeHireDate needs extra perms; fetch in a later pass
+                    ManagerEntraObjectId: u.Manager?.Id,
+                    Photo: null));  // photos fetched per-user separately; out of scope here
+            }
+
+            url = page.NextLink;
+        }
+
+        _logger.LogInformation("Fetched {Count} users from Microsoft Graph", users.Count);
+        return users;
+    }
+
+    private sealed class GraphPage<T>
+    {
+        [JsonPropertyName("value")] public List<T> Value { get; set; } = new();
+        [JsonPropertyName("@odata.nextLink")] public string? NextLink { get; set; }
+    }
+
+    private sealed class GraphUser
+    {
+        [JsonPropertyName("id")] public string? Id { get; set; }
+        [JsonPropertyName("displayName")] public string? DisplayName { get; set; }
+        [JsonPropertyName("givenName")] public string? GivenName { get; set; }
+        [JsonPropertyName("surname")] public string? Surname { get; set; }
+        [JsonPropertyName("jobTitle")] public string? JobTitle { get; set; }
+        [JsonPropertyName("department")] public string? Department { get; set; }
+        [JsonPropertyName("officeLocation")] public string? OfficeLocation { get; set; }
+        [JsonPropertyName("mail")] public string? Mail { get; set; }
+        [JsonPropertyName("businessPhones")] public List<string>? BusinessPhones { get; set; }
+        [JsonPropertyName("mobilePhone")] public string? MobilePhone { get; set; }
+        [JsonPropertyName("userPrincipalName")] public string? UserPrincipalName { get; set; }
+        [JsonPropertyName("employeeId")] public string? EmployeeId { get; set; }
+        [JsonPropertyName("manager")] public GraphManager? Manager { get; set; }
+    }
+
+    private sealed class GraphManager
+    {
+        [JsonPropertyName("id")] public string? Id { get; set; }
     }
 
     // ─── Mock data ───────────────────────────────────────────────────────────

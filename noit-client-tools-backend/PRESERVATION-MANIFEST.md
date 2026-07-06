@@ -17,10 +17,17 @@ connector: read each with `read_resource` using the URI
 
 
 ## Build files (NOT in SharePoint search — export directly from the dev env)
-- [ ] `*.sln`, `*.csproj` (API / Core / Infrastructure projects)
-- [ ] `Migrations/` (EF Core), `appsettings.Development.json`
-- [ ] **`Enums/` second file** (TenantStatus, AppUserRole, AccessLevel) — referenced by models but NOT in SharePoint search results; locate & pull
-- [ ] `Middleware/TenantContextMiddleware.cs` (referenced by Program.cs; not in search results)
+- [~] `*.csproj` — **RECONSTRUCTED** as a single `NOIT.ClientTools.csproj`
+  (consolidates the likely Api/Core/Infrastructure split; unverified package
+  versions). `*.sln` not created (single project runs without one).
+- [ ] `Migrations/` (EF Core) — not needed for dev (in-memory DB via
+  `EnsureCreated`); needed only for SQL Server deploys. `appsettings.Development.json` still to export.
+- [x] **`Enums/` second file** (TenantStatus, AppUserRole, AccessLevel) —
+  **RECONSTRUCTED** as `Enums/AppEnums.cs` from usage (names matter — persisted
+  as strings; reconcile if the original surfaces).
+- [x] `Middleware/TenantContextMiddleware.cs` — **RECONSTRUCTED** from
+  `ITenantContext` + the `X-Tenant-Id` convention. (Also added
+  `Middleware/ExceptionHandlingMiddleware.cs` for consent-error → SPA.)
 
 ## Root
 - [x] `Program.cs` — `01GX36IQH4BZKD44AB65HJPE665TFRNBUV`
