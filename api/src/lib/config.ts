@@ -48,7 +48,10 @@ export const config = {
         // malformed setting — fall through to default
       }
     }
-    return [{ id: "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa", name: "Geaux Automotive" }];
+    return [
+      { id: "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa", name: "Geaux Automotive" },
+      { id: "6444fec1-ccb7-43e6-a075-ba259750173f", name: "Level Homes" },
+    ];
   },
 
   /**

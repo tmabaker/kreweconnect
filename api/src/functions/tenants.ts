@@ -27,7 +27,7 @@ import { config } from "../lib/config";
 // frontend switcher uses this instead of static config so it can never offer a
 // placeholder/fake tenant ID (which would generate a broken consent URL).
 app.http("tenantList", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants",
   handler: withAuth(async (_request, caller) => {
@@ -39,7 +39,7 @@ app.http("tenantList", {
 });
 
 app.http("tenantStatus", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/status",
   handler: withAuth(async (_request, _caller, tenantId) => {
@@ -49,7 +49,7 @@ app.http("tenantStatus", {
 });
 
 app.http("tenantUsers", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users",
   handler: withAuth(async (_request, _caller, tenantId) => {
@@ -62,7 +62,7 @@ app.http("tenantUsers", {
 });
 
 app.http("tenantUserById", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}",
   handler: withAuth(async (request, _caller, tenantId) => {
@@ -72,7 +72,7 @@ app.http("tenantUserById", {
 });
 
 app.http("tenantUserDirectReports", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/directReports",
   handler: withAuth(async (request, _caller, tenantId) => {
@@ -82,7 +82,7 @@ app.http("tenantUserDirectReports", {
 });
 
 app.http("tenantUserPhoto", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/photo",
   handler: withAuth(async (request, _caller, tenantId) => {

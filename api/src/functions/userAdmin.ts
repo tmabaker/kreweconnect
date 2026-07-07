@@ -38,7 +38,7 @@ function requireParam(request: HttpRequest, name: string): string {
 }
 
 app.http("userCreate", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
@@ -49,7 +49,7 @@ app.http("userCreate", {
 });
 
 app.http("userUpdate", {
-  methods: ["PATCH"],
+  methods: ["PATCH", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
@@ -60,7 +60,7 @@ app.http("userUpdate", {
 });
 
 app.http("userResetPassword", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/password",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
@@ -71,7 +71,7 @@ app.http("userResetPassword", {
 });
 
 app.http("userRevokeSessions", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/revokeSessions",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
@@ -81,7 +81,7 @@ app.http("userRevokeSessions", {
 });
 
 app.http("userSetLicenses", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/licenses",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
@@ -101,7 +101,7 @@ app.http("userSetLicenses", {
 });
 
 app.http("userMailboxSettings", {
-  methods: ["GET", "PATCH"],
+  methods: ["GET", "PATCH", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/mailboxSettings",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
@@ -120,7 +120,7 @@ app.http("userMailboxSettings", {
 });
 
 app.http("tenantLicenses", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/licenses",
   handler: withAuth(async (_request, _caller, tenantId) => {
@@ -133,7 +133,7 @@ app.http("tenantLicenses", {
 });
 
 app.http("tenantCaPolicies", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/caPolicies",
   handler: withMspWriteAuth(async (_request, _caller, tenantId) => {
@@ -143,7 +143,7 @@ app.http("tenantCaPolicies", {
 });
 
 app.http("caPolicyExclusions", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/caPolicies/{policyId}/exclusions",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
