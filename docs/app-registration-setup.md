@@ -55,6 +55,11 @@ tenant `7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e`).
 
 This is the Apps365-style "sign in once to authorize" step.
 
+> **Shortcut:** `scripts/onboard-client.mjs` does steps 1–2 (and the optional
+> consent check) in one command — it resolves the domain to a tenant ID, prints
+> the consent URL, and prints the merged `CLIENT_TENANTS` JSON to paste into the
+> SWA setting. See `scripts/README.md`. The manual steps below are the same flow.
+
 1. Get the client's **tenant ID** (Partner Center → customer → Microsoft
    ID; or CIPP; or look up their domain at
    `https://login.microsoftonline.com/<domain>/v2.0/.well-known/openid-configuration`).
@@ -67,6 +72,10 @@ This is the Apps365-style "sign in once to authorize" step.
      ?client_id=eaeafccb-5190-48b6-863d-9e13f449acbb
      &redirect_uri=https://krewesuite.noitgroup.com/app/kreweconnect/
    ```
+
+   After consent, add `{"id":"<CLIENT_TENANT_ID>","name":"<Company>"}` to the
+   SWA app setting **`CLIENT_TENANTS`** so the client appears in the NOIT
+   "All Tenants" aggregated view.
 
 3. Have someone with sufficient privilege in the **client** tenant open the
    URL, sign in, review the permissions (`User.Read.All` — read all users'

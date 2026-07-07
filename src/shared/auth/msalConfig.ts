@@ -3,17 +3,23 @@ import { LogLevel } from "@azure/msal-browser";
 
 // App registration values
 const clientId = import.meta.env.VITE_AZURE_CLIENT_ID || "eaeafccb-5190-48b6-863d-9e13f449acbb";
-const tenantId = import.meta.env.VITE_AZURE_TENANT_ID || "7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e";
+const homeTenantId = import.meta.env.VITE_AZURE_TENANT_ID || "7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e";
 const redirectUri = import.meta.env.VITE_REDIRECT_URI || window.location.origin;
 
 export const msalConfig: Configuration = {
   auth: {
     clientId,
-    // Use "common" authority for multi-tenant support (MSP admins + client users)
-    authority: `https://login.microsoftonline.com/${tenantId}`,
+    // MULTI-TENANT: each user must authenticate against THEIR OWN home tenant
+    // so the token's `tid` claim is their real tenant. Pinning the authority to
+    // a single tenant (e.g. NOIT) makes every signed-in user — including client
+    // users who are guests in that tenant — receive a token with that tenant's
+    // `tid`, which makes the whole app treat them as an MSP admin (sees the
+    // cross-client dashboard/switcher) AND defeats the API's tid-based tenant
+    // isolation. "organizations" = any work/school tenant, no single-tenant pin.
+    authority: "https://login.microsoftonline.com/organizations",
     knownAuthorities: [
-      `https://login.microsoftonline.com/${tenantId}`,
-      "https://login.microsoftonline.com/common",
+      "https://login.microsoftonline.com/organizations",
+      `https://login.microsoftonline.com/${homeTenantId}`,
     ],
     redirectUri,
     postLogoutRedirectUri: redirectUri,

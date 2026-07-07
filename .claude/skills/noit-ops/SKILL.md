@@ -67,6 +67,12 @@ Tammy to save.
 ### Per-secret payload shapes
 
 - `oauth2_client_credentials`: `{"client_id","client_secret","tenant_id"}`
+- `cipp`: `{"base_url","client_id","client_secret","tenant_id","scope"}` —
+  client-credentials token against `tenant_id` with `scope`, then call
+  `GET {base_url}/api/ListTenants` (authoritative client tenant-ID source:
+  `customerId`/`displayName`/`defaultDomainName`). Role is read-write/admin →
+  treat destructive client-tenant writes as needing explicit per-action OK.
+  Full setup: `docs/cipp-access-setup.md`.
 - `api_key`: `{"key","header"}` (e.g. header `"X-API-Key"`)
 - `basic`: `{"username","password"}`
 - `bearer`: `{"token"}`
@@ -89,6 +95,11 @@ Expected systems (confirm against the live index, which wins):
   `APIConnectors.Read.All`, `MultiTenantOrganization.Read.All`. **No directory
   read** and **single-tenant** (NOIT only). `graph.microsoft.com` must be in the
   network allowlist before any Graph call works (tokens alone are reachable).
+- **Intended scope (DECIDED 2026-06-15):** directory/users read + MSP
+  device/Intune ops, cross-tenant. Perms still to add/consent + multi-tenant
+  conversion + network/secret steps are in `docs/agent-identity-runbook.md`.
+  Note: Intune *managed-device* inventory needs
+  `DeviceManagementManagedDevices.Read.All` (distinct from `Device.Read.All`).
 
 ## Phase 2 — Connection test matrix
 

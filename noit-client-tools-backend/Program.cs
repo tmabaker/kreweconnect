@@ -31,7 +31,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     }
     else
     {
-        options.UseSqlServer(connectionString, sql => sql.MigrationsAssembly("NOIT.ClientTools.Infrastructure"));
+        // Single-project build: migrations live in this assembly (NOIT.ClientTools),
+        // the same one as AppDbContext, so don't override MigrationsAssembly. (If the
+        // original Api/Core/Infrastructure project split is ever restored, set it back
+        // to the assembly that will own the EF Migrations/ folder.)
+        options.UseSqlServer(connectionString);
     }
 });
 
