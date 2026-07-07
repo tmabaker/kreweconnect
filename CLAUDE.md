@@ -28,6 +28,11 @@ token (`tid`) and enforced server-side.
   `krewesuite.noitgroup.com/app/kreweconnect/` via the SWA workflow.
 - `api/` — Azure Functions backend: the working per-tenant client-credentials
   token logic + tenant isolation.
+- `apps/governance/` — **KREWE Governance** .NET 8 API (policy template engine,
+  variable wizard, assembly, acknowledgment), reconstructed from the live
+  `krewe-governance-db` Azure SQL database (database-first — never migrate it).
+  Build verified 2026-07-07; not deployed yet (milestone R5). See its `README.md`
+  and `SCHEMA.md`.
 - `noit-client-tools-backend/` — the preserved .NET backend (techtools portal):
   EF Core persistence + full CLM + the GDAP/token logic ported from `api/`.
   Chosen as the consolidation home. Not yet buildable here (missing build
