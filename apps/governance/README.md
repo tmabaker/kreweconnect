@@ -49,6 +49,26 @@ now the historical/recovery record; develop here.
 > touching this folder triggers an SWA run — harmless (it doesn't build this folder),
 > but worth adding to `paths-ignore` when R5 decides the real deploy target.
 
+## Auth & tenant scoping (NOC-55)
+
+Entra JWT bearer on the shared app registration `eaeafccb…` (audience
+`api://eaeafccb…`, `/organizations` multi-tenant authority — config in
+`appsettings.json`, no secrets needed server-side). Scoping is schema-faithful
+(`ClientCompanies` has no tenant column):
+
+- **NOIT staff** — token `tid` == NOIT tenant (`7fb15bf6…`): full access + all writes.
+- **Client user** — `Users` row matched on token `oid` (`EntraObjectId`), scoped to
+  its `ClientCompanyId`; no active row → 403 `not_provisioned`. Clients can use the
+  wizard, save answers, view/acknowledge their assembled policies — not the raw
+  template library or any write endpoint.
+- `KREWE_AUTH_DISABLED=true` bypasses auth and runs every request as staff —
+  **local dev + `tools/smoke` only**, never on a deployed instance.
+
+Library writes (staff-only): `POST/PUT /api/categories`, `POST/PUT /api/policies`
+(content change ⇒ `PolicyVersions` snapshot + `CurrentVersion` bump),
+`PUT /api/policies/{id}/variables` (replace wizard definitions),
+`GET /api/policies/{id}/versions`.
+
 ## Connect to the live DB
 Credentials are in AWS Secrets Manager `noit/krewe-governance-sql`
 (server `noit-krwgov-0628.database.windows.net`, db `krewe-governance-db`).
