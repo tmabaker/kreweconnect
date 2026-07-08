@@ -15,6 +15,10 @@ A new session should read, in order:
 3. **`docs/architecture-reset.md`** — the target architecture and the confirmed
    decisions (one .NET backend, Apps365-style per-tenant admin consent, GDAP for
    discovery only).
+4. **For KREWE Governance work:** `docs/SESSION-2026-07-08-governance.md` —
+   R2/NOC-55 shipped state, the live-DB verification harness (ephemeral Azure
+   VM — the container CANNOT reach SQL on 1433), where AWS creds actually live
+   (agent process env, not the shell), and the open items (next: NOC-56).
 
 ## Core requirement (the north star)
 
@@ -29,10 +33,12 @@ token (`tid`) and enforced server-side.
 - `api/` — Azure Functions backend: the working per-tenant client-credentials
   token logic + tenant isolation.
 - `apps/governance/` — **KREWE Governance** .NET 8 API (policy template engine,
-  variable wizard, assembly, acknowledgment), reconstructed from the live
-  `krewe-governance-db` Azure SQL database (database-first — never migrate it).
-  Build verified 2026-07-07; not deployed yet (milestone R5). See its `README.md`
-  and `SCHEMA.md`.
+  variable wizard, assembly, acknowledgment, Entra auth + tenant scoping,
+  library write endpoints), reconstructed from the live `krewe-governance-db`
+  Azure SQL database (database-first — never migrate it). Live-verified 21/21
+  on 2026-07-08; DB seeded with the 3 NIST/CMMC policies; not deployed yet
+  (milestone R5). See its `README.md`, `SCHEMA.md`, and
+  `docs/SESSION-2026-07-08-governance.md`.
 - `noit-client-tools-backend/` — the preserved .NET backend (techtools portal):
   EF Core persistence + full CLM + the GDAP/token logic ported from `api/`.
   Chosen as the consolidation home. Not yet buildable here (missing build
