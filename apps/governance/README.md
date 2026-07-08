@@ -22,8 +22,17 @@ against the **existing** database with zero data loss.
   - `Program.cs` / `NOIT.KreweGovernance.csproj` — entry point (connection via `KREWE_GOVERNANCE_SQL`).
 
 > **Build status: VERIFIED** — `dotnet build` (SDK 8.0, 2026-07-07) succeeds with
-> 0 warnings / 0 errors, no changes required. Remaining: smoke-test
-> `GET /api/health` and the wizard round-trip against the live DB.
+> 0 warnings / 0 errors, no changes required.
+>
+> **Smoke test: PASSED 15/15 (2026-07-08, live DB)** — run from an ephemeral
+> Azure VM (`tools/smoke/`): DB connect → seed (3 NIST/CMMC policies) → health
+> → policy library → wizard round-trip → assemble (0 missing variables, full
+> {{token}} substitution) → acknowledge. Test rows live under the ZZ-TEST
+> client `d1000000-0000-4000-8000-000000000001` (safe to delete).
+> Note: the server is **Entra-only auth** (`azureADOnlyAuthentication: true`);
+> the SQL login in AWS `noit/krewe-governance-sql` only works while that flag
+> is off (it was toggled off for the test and restored). Decide at R5 deploy
+> time: managed-identity auth (keep Entra-only) vs. SQL auth (turn it off).
 
 ## Repo decision (2026-07-06, Tammy)
 The Krewe Suite consolidates into **one operational monorepo: `tmabaker/kreweconnect`**
