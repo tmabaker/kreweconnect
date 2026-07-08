@@ -72,6 +72,26 @@ export const config = {
   get anniversaryAttribute(): string {
     return process.env.ANNIVERSARY_ATTRIBUTE || "";
   },
+
+  /* ── IT Glue (optional password vaulting) ─────────────────────────── */
+  get itGlueApiKey(): string {
+    return process.env.ITGLUE_API_KEY || "";
+  },
+  get itGlueBaseUrl(): string {
+    return (process.env.ITGLUE_BASE_URL || "https://api.itglue.com").replace(/\/$/, "");
+  },
+  /** IT Glue organization id for a tenant, from the ITGLUE_ORG_MAP JSON setting. */
+  itGlueOrgFor(tenantId: string): string | null {
+    const raw = process.env.ITGLUE_ORG_MAP;
+    if (!raw) return null;
+    try {
+      const map = JSON.parse(raw);
+      const v = map && typeof map === "object" ? map[tenantId] : null;
+      return v ? String(v) : null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 /** Map an attribute name to the field that must be added to a Graph $select. */

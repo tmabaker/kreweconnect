@@ -169,6 +169,48 @@ export async function revokeSessions(tenantId: string, userId: string): Promise<
   await graphRequest(tenantId, "POST", `/users/${encodeURIComponent(userId)}/revokeSignInSessions`);
 }
 
+/* ── temporary access pass ──────────────────────────────────────────── */
+
+export interface TapInput {
+  /** 10–43200 minutes (Graph limits); defaults to 60. */
+  lifetimeInMinutes?: number;
+  /** One-time use (default) vs reusable within the lifetime. */
+  isUsableOnce?: boolean;
+  /** Optional ISO start time; omit to start now. */
+  startDateTime?: string;
+}
+
+export interface TapResult {
+  id: string;
+  temporaryAccessPass: string;
+  lifetimeInMinutes: number;
+  isUsableOnce: boolean;
+  startDateTime: string;
+  methodUsabilityReason?: string;
+}
+
+export async function createTemporaryAccessPass(
+  tenantId: string,
+  userId: string,
+  input: TapInput
+): Promise<TapResult> {
+  let lifetime = typeof input.lifetimeInMinutes === "number" ? input.lifetimeInMinutes : 60;
+  // Clamp to Graph's accepted range rather than letting a 400 bubble up opaquely.
+  lifetime = Math.max(10, Math.min(43200, Math.round(lifetime)));
+  const body: Record<string, unknown> = {
+    lifetimeInMinutes: lifetime,
+    isUsableOnce: input.isUsableOnce ?? true,
+  };
+  if (input.startDateTime) body.startDateTime = input.startDateTime;
+  const res = await graphRequest<TapResult>(
+    tenantId,
+    "POST",
+    `/users/${encodeURIComponent(userId)}/authentication/temporaryAccessPassMethods`,
+    body
+  );
+  return res!;
+}
+
 /* ── licenses ───────────────────────────────────────────────────────── */
 
 export interface SubscribedSku {
