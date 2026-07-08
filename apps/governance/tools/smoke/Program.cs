@@ -151,5 +151,47 @@ Check("api.assembledList", list.EnumerateArray().Any(a =>
         a.GetProperty("acknowledgedByClient").GetBoolean()),
     $"{list.GetArrayLength()} assembled record(s) for test client");
 
+// ---------- 3. Library writes (NOC-55; requires the API to run with KREWE_AUTH_DISABLED=true,
+//                which the smoke harness does — the bypass acts as NOIT staff) ----------
+var catResp = await http.PostAsJsonAsync("/api/categories",
+    new { name = "ZZ-TEST Category (safe to delete)", sortOrder = 999 });
+Check("api.write.category", catResp.StatusCode == System.Net.HttpStatusCode.Created, $"HTTP {(int)catResp.StatusCode}");
+var catId = (await catResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+var polResp = await http.PostAsJsonAsync("/api/policies", new
+{
+    title = "ZZ-TEST Policy (safe to delete)",
+    summary = "Smoke-test policy.",
+    content = "Hello {{Company.ShortName}} v1.",
+    categoryId = catId,
+});
+Check("api.write.policy", polResp.StatusCode == System.Net.HttpStatusCode.Created, $"HTTP {(int)polResp.StatusCode}");
+var newPolicyId = (await polResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+var updResp = await http.PutAsJsonAsync($"/api/policies/{newPolicyId}", new
+{
+    content = "Hello {{Company.ShortName}} v2.",
+    changeNotes = "Smoke: content bump.",
+});
+var upd = await updResp.Content.ReadFromJsonAsync<JsonElement>();
+Check("api.write.versionBump",
+    updResp.IsSuccessStatusCode && upd.GetProperty("currentVersion").GetInt32() == 2 && upd.GetProperty("versionBumped").GetBoolean(),
+    $"CurrentVersion={upd.GetProperty("currentVersion").GetInt32()}");
+
+var versions = await http.GetFromJsonAsync<JsonElement>($"/api/policies/{newPolicyId}/versions");
+Check("api.write.versionHistory", versions.GetArrayLength() == 2, $"{versions.GetArrayLength()} versions (expect 2)");
+
+var defsResp = await http.PutAsJsonAsync($"/api/policies/{newPolicyId}/variables", new[]
+{
+    new { key = "Company.ShortName", label = "Company short name",
+          question = "What short name should policies use in-text?",
+          inputType = "text", isUniversal = true, required = true },
+});
+Check("api.write.variables", defsResp.IsSuccessStatusCode,
+    $"HTTP {(int)defsResp.StatusCode}");
+
+var newDetail = await http.GetFromJsonAsync<JsonElement>($"/api/policies/{newPolicyId}");
+Check("api.write.variablesPersisted", newDetail.GetProperty("variables").GetArrayLength() == 1);
+
 Console.WriteLine($"RESULT: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
