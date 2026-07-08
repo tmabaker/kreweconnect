@@ -28,8 +28,12 @@ import {
   setAutoReply,
   listCaPolicies,
   setCaExclusion,
+  createTemporaryAccessPass,
   type AutoReplyInput,
+  type TapInput,
 } from "../lib/userAdmin";
+import { fetchUserById } from "../lib/graphClient";
+import { savePasswordToItGlue, itGlueConfigured, ItGlueError } from "../lib/itglue";
 
 function requireParam(request: HttpRequest, name: string): string {
   const value = request.params[name];
@@ -65,8 +69,46 @@ app.http("userResetPassword", {
   route: "tenants/{tenantId}/users/{userId}/password",
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
     const body = await readJsonBody(request).catch(() => ({}) as Record<string, unknown>);
-    const result = await resetPassword(tenantId, requireParam(request, "userId"), body);
-    return { status: 200, jsonBody: result };
+    const userId = requireParam(request, "userId");
+    const result = await resetPassword(tenantId, userId, body);
+
+    // Optionally vault the new password in IT Glue. A failure here must not
+    // fail the reset (the password is already changed) — report it instead.
+    let itGlue: { saved: boolean; id?: string; warning?: string } | undefined;
+    if (body.saveToItGlue === true) {
+      try {
+        const user = await fetchUserById(tenantId, userId);
+        const saved = await savePasswordToItGlue({
+          tenantId,
+          name: `M365 — ${user.displayName || user.userPrincipalName}`,
+          username: user.userPrincipalName,
+          password: result.password,
+          notes: typeof body.itGlueNotes === "string" ? body.itGlueNotes : "Reset via NOIT Tech Portal",
+        });
+        itGlue = { saved: true, id: saved.id };
+      } catch (err) {
+        itGlue = {
+          saved: false,
+          warning: err instanceof ItGlueError || err instanceof Error ? err.message : "IT Glue save failed.",
+        };
+      }
+    }
+    return { status: 200, jsonBody: { ...result, itGlueConfigured: itGlueConfigured(), itGlue } };
+  }),
+});
+
+app.http("userTemporaryAccessPass", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/users/{userId}/temporaryAccessPass",
+  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+    const body = await readJsonBody(request).catch(() => ({}) as Record<string, unknown>);
+    const tap = await createTemporaryAccessPass(
+      tenantId,
+      requireParam(request, "userId"),
+      body as unknown as TapInput
+    );
+    return { status: 201, jsonBody: tap };
   }),
 });
 
