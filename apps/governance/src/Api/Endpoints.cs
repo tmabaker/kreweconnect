@@ -34,6 +34,45 @@ public static class Endpoints
                 .Select(c => new { c.Id, c.Name, c.Industry, c.PrimaryContactName, c.PrimaryContactEmail, c.MitpClientId })
                 .ToListAsync());
 
+        // Client-profile writes (staff-only) — the R3 client profile editor.
+        api.MapPost("/clients", async (ClientUpsert input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            if (string.IsNullOrWhiteSpace(input.Name)) return Results.BadRequest(new { error = "name_required" });
+            var now = DateTime.UtcNow;
+            var client = new ClientCompany
+            {
+                Id = Guid.NewGuid(),
+                Name = input.Name.Trim(),
+                Industry = input.Industry,
+                PrimaryContactName = input.PrimaryContactName,
+                PrimaryContactEmail = input.PrimaryContactEmail,
+                MitpClientId = input.MitpClientId,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ClientCompanies.Add(client);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/clients/{client.Id}", new { client.Id });
+        });
+
+        api.MapPut("/clients/{id:guid}", async (Guid id, ClientUpsert input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            var client = await db.ClientCompanies.FindAsync(id);
+            if (client is null) return Results.NotFound();
+            if (!string.IsNullOrWhiteSpace(input.Name)) client.Name = input.Name.Trim();
+            if (input.Industry is not null) client.Industry = input.Industry;
+            if (input.PrimaryContactName is not null) client.PrimaryContactName = input.PrimaryContactName;
+            if (input.PrimaryContactEmail is not null) client.PrimaryContactEmail = input.PrimaryContactEmail;
+            if (input.MitpClientId is not null) client.MitpClientId = input.MitpClientId;
+            if (input.IsActive is not null) client.IsActive = input.IsActive.Value;
+            client.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { client.Id });
+        });
+
         // --- Policy library (reads) ---
         api.MapGet("/policies", async (KreweGovernanceDbContext db) =>
             await db.Policies.AsNoTracking()
@@ -350,6 +389,10 @@ public record VariableAnswer(string Key, string Value);
 public record AssembleRequest(Guid ClientCompanyId, string AssembledBy);
 
 public record CategoryUpsert(string? Name, string? Description, int? SortOrder);
+
+public record ClientUpsert(
+    string? Name, string? Industry, string? PrimaryContactName, string? PrimaryContactEmail,
+    string? MitpClientId, bool? IsActive);
 
 public record PolicyCreate(
     string Title, string? Summary, string? Content, Guid CategoryId, string? Status, DateTime? NextReviewDate);
