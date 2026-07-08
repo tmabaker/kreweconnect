@@ -20,3 +20,7 @@ api/local.settings.json
 logs
 *.log
 npm-debug.log*
+
+# .NET build output
+bin/
+obj/
