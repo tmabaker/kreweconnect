@@ -3,8 +3,8 @@ name: GitHub → SharePoint backup
 on:
   workflow_dispatch: {}
   schedule:
-    # Weekly, Sunday 08:00 UTC (02:00/03:00 US Central)
-    - cron: "0 8 * * 0"
+    # Daily 03:00 AM Central (08:00 UTC)
+    - cron: "0 8 * * *"
 
 permissions:
   contents: read
