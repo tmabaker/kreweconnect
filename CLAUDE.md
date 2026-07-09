@@ -38,6 +38,9 @@ token (`tid`) and enforced server-side.
   Chosen as the consolidation home. Not yet buildable here (missing build
   files); see its `README.md` / `PRESERVATION-MANIFEST.md`.
 - `docs/` — orientation + plan + app-registration setup.
+- `scripts/github-sharepoint-backup/` — estate backup (all 9 repos → git
+  bundles → SharePoint tabcc site). See its `README.md` for credentials and
+  the scheduled workflow.
 - `.claude/skills/` — `azure-ops` (KreweConnect Azure runbook), `noit-ops`
   (AWS Secrets bootstrap + connection verification), `long-horizon-coding`
   (spec-first autonomous run loop), `model-routing` (per-phase model
