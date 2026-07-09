@@ -40,6 +40,30 @@ const RenewalsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./apps/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }))
 );
+const GovernancePage = lazy(() =>
+  import("./apps/governance/GovernancePage").then((m) => ({ default: m.GovernancePage }))
+);
+const PolicyDetailPage = lazy(() =>
+  import("./apps/governance/PolicyDetailPage").then((m) => ({ default: m.PolicyDetailPage }))
+);
+const PolicyFormPage = lazy(() =>
+  import("./apps/governance/PolicyFormPage").then((m) => ({ default: m.PolicyFormPage }))
+);
+const PolicyVariablesPage = lazy(() =>
+  import("./apps/governance/PolicyVariablesPage").then((m) => ({ default: m.PolicyVariablesPage }))
+);
+const WizardPage = lazy(() =>
+  import("./apps/governance/WizardPage").then((m) => ({ default: m.WizardPage }))
+);
+const GovClientsPage = lazy(() =>
+  import("./apps/governance/ClientsPage").then((m) => ({ default: m.ClientsPage }))
+);
+const GovClientDetailPage = lazy(() =>
+  import("./apps/governance/ClientDetailPage").then((m) => ({ default: m.ClientDetailPage }))
+);
+const AssembledPolicyPage = lazy(() =>
+  import("./apps/governance/AssembledPolicyPage").then((m) => ({ default: m.AssembledPolicyPage }))
+);
 
 // Use dark theme by default (NOIT branding)
 const theme = webDarkTheme;
@@ -68,6 +92,18 @@ function App() {
                 <Route path="/contracts/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
                 <Route path="/contracts/:id/edit" element={<MspAdminRoute><ContractFormPage /></MspAdminRoute>} />
                 <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
+                {/* KREWE Governance — library management is MSP-only; the wizard,
+                    client profile, and assembled viewer are client-reachable
+                    (the API scopes them to the caller's own company). */}
+                <Route path="/governance" element={<MspAdminRoute><GovernancePage /></MspAdminRoute>} />
+                <Route path="/governance/policies/new" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
+                <Route path="/governance/policies/:id" element={<MspAdminRoute><PolicyDetailPage /></MspAdminRoute>} />
+                <Route path="/governance/policies/:id/edit" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
+                <Route path="/governance/policies/:id/variables" element={<MspAdminRoute><PolicyVariablesPage /></MspAdminRoute>} />
+                <Route path="/governance/policies/:id/wizard" element={<WizardPage />} />
+                <Route path="/governance/clients" element={<GovClientsPage />} />
+                <Route path="/governance/clients/:id" element={<GovClientDetailPage />} />
+                <Route path="/governance/assembled/:id" element={<AssembledPolicyPage />} />
               </Route>
             </Routes>
           </BrowserRouter>

@@ -63,6 +63,14 @@ Entra JWT bearer on the shared app registration `eaeafccb…` (audience
   template library or any write endpoint.
 - `KREWE_AUTH_DISABLED=true` bypasses auth and runs every request as staff —
   **local dev + `tools/smoke` only**, never on a deployed instance.
+- **Real-token verified (2026-07-08, NOC-56):** the JWT path was exercised with
+  a real Entra token (aud `api://eaeafccb…`, NOIT `tid`) against the live DB on
+  an ephemeral VM — signature/lifetime/audience/issuer validation, tid→staff
+  resolution, wizard prefill, and the client write endpoints all pass; no-token
+  and malformed-token requests get 401. Note for daemon callers: an **app-only**
+  token with no `scp`/`roles` is 401'd by Microsoft.Identity.Web's ACL guard
+  (`AzureAd:AllowWebApiToBeAuthorizedByACL` stays false in prod; the test set it
+  via env var only). SPA user tokens carry `scp=access_as_user` and are unaffected.
 
 Library writes (staff-only): `POST/PUT /api/categories`, `POST/PUT /api/policies`
 (content change ⇒ `PolicyVersions` snapshot + `CurrentVersion` bump),
