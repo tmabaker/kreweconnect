@@ -287,6 +287,195 @@ export async function setAutoReply(
   });
 }
 
+/* ── offboarding (the techtools Remove User page) ───────────────────── */
+
+export interface OffboardOptions {
+  disableUser?: boolean;
+  revokeSessions?: boolean;
+  removeLicenses?: boolean;
+  removeGroups?: boolean;
+  hideFromGal?: boolean;
+  setAutoReply?: boolean;
+  autoReplyMessage?: string;
+  /** Email address to redirect incoming mail to (inbox rule; original stays). */
+  forwardTo?: string;
+  deleteUser?: boolean;
+}
+
+export interface OffboardActionResult {
+  action: string;
+  ok: boolean;
+  detail: string;
+}
+
+interface MemberGroup {
+  id: string;
+  displayName: string;
+  groupTypes?: string[];
+  mailEnabled?: boolean;
+  securityEnabled?: boolean;
+  onPremisesSyncEnabled?: boolean | null;
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Remove the user from every group Graph can manage. Dynamic groups,
+ * on-prem-synced groups, and Exchange-managed groups (distribution lists,
+ * mail-enabled security) can't be edited through Graph — those are reported,
+ * not silently skipped.
+ */
+async function removeFromAllGroups(tenantId: string, userId: string): Promise<string> {
+  const response = await graphRequest<{ value: MemberGroup[] }>(
+    tenantId,
+    "GET",
+    `/users/${encodeURIComponent(userId)}/memberOf/microsoft.graph.group` +
+      "?$select=id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled&$top=999"
+  );
+  const groups = response?.value ?? [];
+  if (groups.length === 0) return "Not a member of any groups.";
+
+  const removed: string[] = [];
+  const skipped: string[] = [];
+  const failed: string[] = [];
+  for (const g of groups) {
+    const isDynamic = (g.groupTypes ?? []).includes("DynamicMembership");
+    const isUnified = (g.groupTypes ?? []).includes("Unified");
+    if (isDynamic) {
+      skipped.push(`${g.displayName} (dynamic membership)`);
+      continue;
+    }
+    if (g.onPremisesSyncEnabled) {
+      skipped.push(`${g.displayName} (synced from on-prem AD)`);
+      continue;
+    }
+    if (g.mailEnabled && !isUnified) {
+      skipped.push(`${g.displayName} (Exchange distribution/mail-enabled group — remove in Exchange admin or CIPP)`);
+      continue;
+    }
+    try {
+      await graphRequest(
+        tenantId,
+        "DELETE",
+        `/groups/${g.id}/members/${encodeURIComponent(userId)}/$ref`
+      );
+      removed.push(g.displayName);
+    } catch (err) {
+      failed.push(`${g.displayName}: ${errMessage(err)}`);
+    }
+  }
+
+  const parts = [`Removed from ${removed.length} of ${groups.length} groups.`];
+  if (skipped.length) parts.push(`Skipped: ${skipped.join("; ")}.`);
+  if (failed.length) parts.push(`Failed: ${failed.join("; ")}.`);
+  if (failed.length) throw new Error(parts.join(" "));
+  return parts.join(" ");
+}
+
+/** Redirect all incoming mail via an inbox rule (needs MailboxSettings.ReadWrite). */
+async function forwardMail(tenantId: string, userId: string, forwardTo: string): Promise<string> {
+  await graphRequest(
+    tenantId,
+    "POST",
+    `/users/${encodeURIComponent(userId)}/mailFolders/inbox/messageRules`,
+    {
+      displayName: "NOIT offboarding — forward mail",
+      sequence: 1,
+      isEnabled: true,
+      actions: {
+        redirectTo: [{ emailAddress: { address: forwardTo } }],
+        stopProcessingRules: false,
+      },
+    }
+  );
+  return `Inbox rule created: all mail redirects to ${forwardTo} (a copy stays in the mailbox).`;
+}
+
+async function removeAllLicenses(tenantId: string, userId: string): Promise<string> {
+  const user = await graphRequest<{ assignedLicenses?: Array<{ skuId: string }> }>(
+    tenantId,
+    "GET",
+    `/users/${encodeURIComponent(userId)}?$select=assignedLicenses`
+  );
+  const skuIds = (user?.assignedLicenses ?? []).map((l) => l.skuId);
+  if (skuIds.length === 0) return "No licenses assigned.";
+  await setUserLicenses(tenantId, userId, [], skuIds);
+  return `Removed ${skuIds.length} license(s). (Group-assigned licenses must be removed from the assigning group.)`;
+}
+
+/**
+ * Run the requested offboarding actions in a sensible order, collecting a
+ * per-action result instead of failing the whole call on the first error —
+ * by the time something fails, earlier actions have already happened.
+ */
+export async function offboardUser(
+  tenantId: string,
+  userId: string,
+  options: OffboardOptions
+): Promise<OffboardActionResult[]> {
+  const results: OffboardActionResult[] = [];
+  const run = async (action: string, fn: () => Promise<string>) => {
+    try {
+      results.push({ action, ok: true, detail: await fn() });
+    } catch (err) {
+      results.push({ action, ok: false, detail: errMessage(err) });
+    }
+  };
+
+  if (options.disableUser) {
+    await run("Block sign-in", async () => {
+      await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, {
+        accountEnabled: false,
+      });
+      return "Account disabled.";
+    });
+  }
+  if (options.revokeSessions) {
+    await run("Revoke sessions", async () => {
+      await revokeSessions(tenantId, userId);
+      return "All sign-in sessions revoked.";
+    });
+  }
+  if (options.hideFromGal) {
+    await run("Hide from GAL", async () => {
+      // Graph only honors showInAddressList for cloud-only accounts; when it
+      // refuses, the Exchange admin center / CIPP is the fallback.
+      await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, {
+        showInAddressList: false,
+      });
+      return "Hidden from the Global Address List.";
+    });
+  }
+  if (options.setAutoReply) {
+    await run("Set Out of Office", async () => {
+      await setAutoReply(tenantId, userId, {
+        status: "alwaysEnabled",
+        internalMessage: options.autoReplyMessage || "",
+        externalMessage: options.autoReplyMessage || "",
+      });
+      return "Auto-reply enabled.";
+    });
+  }
+  if (options.forwardTo) {
+    await run("Forward email", () => forwardMail(tenantId, userId, options.forwardTo!));
+  }
+  if (options.removeGroups) {
+    await run("Remove from groups", () => removeFromAllGroups(tenantId, userId));
+  }
+  if (options.removeLicenses) {
+    await run("Remove licenses", () => removeAllLicenses(tenantId, userId));
+  }
+  if (options.deleteUser) {
+    await run("Delete user", async () => {
+      await graphRequest(tenantId, "DELETE", `/users/${encodeURIComponent(userId)}`);
+      return "User deleted (recoverable from Entra deleted users for 30 days).";
+    });
+  }
+  return results;
+}
+
 /* ── conditional access exclusions (OOO / vacation flows) ───────────── */
 
 export interface CaPolicySummary {

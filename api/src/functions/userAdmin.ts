@@ -8,6 +8,7 @@
  *   POST  /api/tenants/{tenantId}/users/{userId}/password         — reset password
  *   POST  /api/tenants/{tenantId}/users/{userId}/revokeSessions   — sign out everywhere
  *   POST  /api/tenants/{tenantId}/users/{userId}/licenses         — add/remove licenses
+ *   POST  /api/tenants/{tenantId}/users/{userId}/offboard         — offboarding actions (Remove User page)
  *   GET   /api/tenants/{tenantId}/users/{userId}/mailboxSettings  — current OOO state
  *   PATCH /api/tenants/{tenantId}/users/{userId}/mailboxSettings  — set auto-reply (OOO)
  *   GET   /api/tenants/{tenantId}/licenses                        — subscribed SKUs
@@ -29,8 +30,10 @@ import {
   listCaPolicies,
   setCaExclusion,
   createTemporaryAccessPass,
+  offboardUser,
   type AutoReplyInput,
   type TapInput,
+  type OffboardOptions,
 } from "../lib/userAdmin";
 import { fetchUserById } from "../lib/graphClient";
 import { savePasswordToItGlue, itGlueConfigured, ItGlueError } from "../lib/itglue";
@@ -119,6 +122,48 @@ app.http("userRevokeSessions", {
   handler: withMspWriteAuth(async (request, _caller, tenantId) => {
     await revokeSessions(tenantId, requireParam(request, "userId"));
     return { status: 200, jsonBody: { revoked: true } };
+  }),
+});
+
+app.http("userOffboard", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/users/{userId}/offboard",
+  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+    const body = await readJsonBody(request);
+    const options: OffboardOptions = {
+      disableUser: body.disableUser === true,
+      revokeSessions: body.revokeSessions === true,
+      removeLicenses: body.removeLicenses === true,
+      removeGroups: body.removeGroups === true,
+      hideFromGal: body.hideFromGal === true,
+      setAutoReply: body.setAutoReply === true,
+      autoReplyMessage: typeof body.autoReplyMessage === "string" ? body.autoReplyMessage : "",
+      forwardTo: typeof body.forwardTo === "string" ? body.forwardTo.trim() : "",
+      deleteUser: body.deleteUser === true,
+    };
+    // convertToShared is Exchange-only — Graph has no API for it. Reject
+    // explicitly so the caller can fall back to CIPP instead of assuming it ran.
+    if (body.convertToShared === true) {
+      throw new BadRequestError(
+        "Convert to shared mailbox isn't available here (Exchange-only operation) — use CIPP or the Exchange admin center, then re-run the remaining actions."
+      );
+    }
+    const anySelected =
+      options.disableUser ||
+      options.revokeSessions ||
+      options.removeLicenses ||
+      options.removeGroups ||
+      options.hideFromGal ||
+      options.setAutoReply ||
+      Boolean(options.forwardTo) ||
+      options.deleteUser;
+    if (!anySelected) {
+      throw new BadRequestError("No offboarding actions selected.");
+    }
+    const results = await offboardUser(tenantId, requireParam(request, "userId"), options);
+    const ok = results.every((r) => r.ok);
+    return { status: 200, jsonBody: { ok, results } };
   }),
 });
 
