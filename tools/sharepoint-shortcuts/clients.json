@@ -1,0 +1,10 @@
+{
+  "comment": "Rollout roster for KreweConnect SharePoint shortcuts. tenantId values match the SWA CLIENT_TENANTS app setting (authoritative). 'site' (optional) overrides the target site as a server-relative path (e.g. /sites/intranet); default is the tenant root site. 'page' (optional) overrides the target page name; default is the site's Home.aspx.",
+  "clients": [
+    { "name": "Geaux Automotive", "tenantId": "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa" },
+    { "name": "Level BR", "tenantId": "6444fec1-ccb7-43e6-a075-ba259750173f" },
+    { "name": "Fishman Haygood", "tenantId": "1956762f-5c5f-41e7-a8dc-ea000d40d2ab" },
+    { "name": "Provident", "tenantId": "d420de70-a53d-447e-97e4-9361127a9588" },
+    { "name": "Xtreme Automotive", "tenantId": "31d6a326-7403-4bec-8e8b-5c016120b92c" }
+  ]
+}
