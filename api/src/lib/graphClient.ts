@@ -25,6 +25,7 @@ const USER_SELECT_BASE = [
   "companyName",
   "userType",
   "assignedLicenses",
+  "usageLocation",
 ];
 
 // Optional fields may be unreadable/unselectable depending on tenant + the
@@ -217,6 +218,30 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
       (u.userType ?? "Member").toLowerCase() !== "guest" &&
       (u.assignedLicenses?.length ?? 0) > 0
   );
+}
+
+/**
+ * Unfiltered user list for the MSP admin pages (modify/remove/passwords/OOO):
+ * includes disabled, unlicensed, and guest accounts — an offboarding target is
+ * often exactly the account the directory view hides.
+ */
+export async function fetchUsersAdmin(tenantId: string): Promise<GraphUser[]> {
+  const users: GraphUser[] = [];
+  let url = `${GRAPH_BASE}/users?$select=${USER_SELECT_FIELDS_BASE}&$expand=${MANAGER_EXPAND}&$top=999`;
+  while (url) {
+    const page = await graphFetch<GraphPagedResponse<GraphUser>>(tenantId, url);
+    users.push(...page.value);
+    url = page["@odata.nextLink"] || "";
+  }
+  for (const user of users) {
+    if (user.manager && typeof user.manager === "object") {
+      user.manager = {
+        id: user.manager.id || "",
+        displayName: user.manager.displayName || "",
+      };
+    }
+  }
+  return users;
 }
 
 /**

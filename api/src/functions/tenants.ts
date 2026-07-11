@@ -15,6 +15,7 @@ import { withAuth } from "../lib/http";
 import { checkTenantAuthorization } from "../lib/tokenService";
 import {
   fetchUsers,
+  fetchUsersAdmin,
   fetchUsersAllTenants,
   fetchUserById,
   fetchDirectReports,
@@ -52,7 +53,22 @@ app.http("tenantUsers", {
   methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users",
-  handler: withAuth(async (_request, _caller, tenantId) => {
+  handler: withAuth(async (request, caller, tenantId) => {
+    // ?view=admin — unfiltered list (disabled/unlicensed/guest accounts too)
+    // for the techtools admin pages. MSP staff only; not for the directory.
+    if (request.query.get("view") === "admin") {
+      if (!caller.isMspAdmin) {
+        return { status: 403, jsonBody: { code: "forbidden", message: "MSP admin only." } };
+      }
+      if (tenantId === "all") {
+        return {
+          status: 400,
+          jsonBody: { code: "bad_request", message: "Admin view requires a specific tenant." },
+        };
+      }
+      const users = await fetchUsersAdmin(tenantId);
+      return { status: 200, jsonBody: { value: users } };
+    }
     const users =
       tenantId === "all"
         ? await fetchUsersAllTenants(config.clientTenants)
