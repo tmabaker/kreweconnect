@@ -55,6 +55,33 @@ export const config = {
   },
 
   /**
+   * Accounts to hide from the directory that no automatic rule can catch —
+   * named utility accounts that hold a license and person-like attributes but
+   * aren't people (integration accounts, licensed shared mailboxes, vendor
+   * logins). DIRECTORY_EXCLUDE app setting: JSON array of strings, matched
+   * case-insensitively against userPrincipalName and object id. Kept in app
+   * settings, not code, so the client roster never lands in the repo.
+   */
+  get directoryExclusions(): Set<string> {
+    const raw = process.env.DIRECTORY_EXCLUDE;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return new Set(
+            parsed
+              .filter((v): v is string => typeof v === "string")
+              .map((v) => v.toLowerCase())
+          );
+        }
+      } catch {
+        // malformed setting — treat as empty
+      }
+    }
+    return new Set();
+  },
+
+  /**
    * Optional Graph attribute holding an employee's birthday as MM/DD (year
    * omitted for privacy). Either a directory-extension property name
    * (`extension_<appId>_birthday`) or one of `extensionAttribute1`..`15`

@@ -64,6 +64,43 @@ function resolveCustomAttributes(user: GraphUser): void {
 
 const MANAGER_EXPAND = "manager($select=id,displayName)";
 
+/**
+ * License SKUs that mark a sign-in account for shared hardware, not a person:
+ * Teams Shared Devices (common-area phones — breakrooms, kitchens) and Teams
+ * Rooms (conference-room devices). These accounts are licensed and enabled by
+ * design, so the licensed-members filter alone can't catch them.
+ */
+const DEVICE_LICENSE_SKUS = new Set([
+  "295a8eb0-f78d-45c7-8b5b-1eed5ed02dff", // Microsoft Teams Shared Devices (MCOCAP)
+  "6af4b3d6-14bb-4a2a-960c-6c902aad34f3", // Microsoft Teams Rooms Basic
+  "4cde982a-ede4-4409-9ae6-b003453c8ea6", // Microsoft Teams Rooms Pro
+  "6070a4c8-34c6-4937-8dfb-39bbc6397a60", // Meeting Room (legacy Teams Rooms Standard)
+]);
+
+/**
+ * Directory/org-chart inclusion rule: enabled licensed members only, minus
+ * guests, shared-device sign-ins (Teams phones/rooms), nameless utility
+ * accounts, and anything listed in the DIRECTORY_EXCLUDE app setting.
+ */
+function isDirectoryPerson(u: GraphUser): boolean {
+  if ((u.userType ?? "Member").toLowerCase() === "guest") return false;
+  const licenses = u.assignedLicenses ?? [];
+  if (licenses.length === 0) return false;
+  if (licenses.some((l) => DEVICE_LICENSE_SKUS.has((l.skuId || "").toLowerCase()))) return false;
+  // Utility/service accounts (scanners, integrations, shared calendars) are
+  // often licensed but nameless; a person has at least a surname or a title.
+  if (!u.surname && !u.jobTitle) return false;
+  const excluded = config.directoryExclusions;
+  if (
+    excluded.size > 0 &&
+    (excluded.has((u.userPrincipalName || "").toLowerCase()) ||
+      excluded.has((u.id || "").toLowerCase()))
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export class GraphRequestError extends Error {
   readonly status: number;
   readonly code: string;
@@ -210,13 +247,7 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
     resolveCustomAttributes(user);
   }
 
-  // Directory shows actual licensed members only: drop guests and any account
-  // without an assigned license (shared mailboxes, resource/service accounts).
-  return allUsers.filter(
-    (u) =>
-      (u.userType ?? "Member").toLowerCase() !== "guest" &&
-      (u.assignedLicenses?.length ?? 0) > 0
-  );
+  return allUsers.filter(isDirectoryPerson);
 }
 
 /**
