@@ -24,3 +24,4 @@ npm-debug.log*
 # .NET build output
 bin/
 obj/
+__pycache__/
