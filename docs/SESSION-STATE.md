@@ -11,6 +11,30 @@ checkout main`.
 
 ---
 
+## 0ZA. 2026-07-11 — SharePoint shortcuts on client portals (PR #23 + follow-up)
+
+- **`tools/sharepoint-shortcuts/`** puts an "Employee Directory & Org Chart"
+  Quick Links web part on each client's SharePoint portal home page, linking to
+  the KreweConnect directory/org-chart URLs. Graph v1.0 sitePage APIs;
+  idempotent; appends a section (never edits existing content); revertible via
+  page version history. Verified end-to-end in NOIT:
+  `/sites/tabcc/SitePages/kreweconnect-shortcuts-test.aspx` (delete anytime).
+- **Actor = new single-purpose multi-tenant app "NOIT KreweConnect Shortcuts"**
+  (`cf03866e-22d1-433f-84cb-bb08aee083c6`), manifest = Graph
+  `Sites.ReadWrite.All` (application) ONLY. No stored secret — the tool mints
+  an ephemeral secret per run via the Taila Agent app and removes it after.
+- **BLOCKED per client tenant on one-time admin consent** (`--consent-urls`
+  prints the links; grant via GDAP or client GA, then `--apply`). All target
+  tenants returned AADSTS7000229 as of 2026-07-11.
+- Roster is NOT in the repo: the tool reads `CLIENT_TENANTS` from the SWA at
+  runtime (`clients.local.json` override, gitignored). ⚠️ PR #23 briefly
+  committed a `clients.json` roster (names + tenant IDs) — removed at HEAD by
+  the follow-up PR, but it remains in **git history** of this PUBLIC repo:
+  one more reason to finish NOC-51 (make repo private) or rewrite history.
+- Security observation: in one client tenant the product app `eaeafccb` is
+  consented far beyond `User.Read.All` (password-profile/license/CA-policy
+  writes — details in the 2026-07-11 session chat / consent matrix). Trim it.
+
 ## 0Z. ACCESS PATHS (2026-06-18) — identities only; secrets/roster in SharePoint
 
 - **Taila delegated** (`taila@noitgroup.com`) — primary agent identity, headless.

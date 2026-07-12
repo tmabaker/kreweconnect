@@ -21,6 +21,15 @@ Auth (in order of preference):
      EPHEMERAL secret on the shortcuts app via addPassword, use it for the
      run, then removePassword. No long-lived secret exists anywhere.
 
+Roster:
+  This repo is PUBLIC, so the client roster does NOT live here. The tenant
+  list is read at runtime from the krewesuite SWA's CLIENT_TENANTS app
+  setting (via ARM as the Taila agent — the same authoritative source the
+  app itself uses). To override (subset, site/page targeting), drop a
+  clients.local.json next to this script (gitignored):
+    {"clients": [{"name": "...", "tenantId": "...",
+                  "site": "/sites/intranet", "page": "Portal.aspx"}]}
+
 Safety:
   - Idempotent: an existing web part with our title (or our link URLs) is
     updated in place, never duplicated.
@@ -63,7 +72,15 @@ WEBPART_TITLE = "Employee Directory & Org Chart"
 QUICKLINKS_TYPE = "c70391ea-0b10-4ee9-b2b4-006d3fcad0cd"
 GRAPH = "https://graph.microsoft.com/v1.0"
 
-CLIENTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clients.json")
+# krewesuite SWA (holds CLIENT_TENANTS); subscription/RG are infrastructure
+# identifiers, not secrets. Override if the SWA ever moves.
+KREWESUITE_RESOURCE_ID = os.environ.get(
+    "KREWESUITE_RESOURCE_ID",
+    "/subscriptions/567260a7-531c-4353-a469-e2b1086d485b/resourceGroups/krewesuite_group"
+    "/providers/Microsoft.Web/staticSites/krewesuite",
+)
+
+LOCAL_CLIENTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clients.local.json")
 
 
 # ---------------------------------------------------------------- HTTP / auth
@@ -100,15 +117,15 @@ def _http(url, method="GET", body=None, headers=None, form=None):
             time.sleep(2 ** attempt)
 
 
-def get_token(tenant, client_id, client_secret):
-    """Client-credentials Graph token. Returns (token, error-string)."""
+def get_token(tenant, client_id, client_secret, scope="https://graph.microsoft.com/.default"):
+    """Client-credentials token. Returns (token, error-string)."""
     st, res = _http(
         f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
         method="POST",
         form={
             "client_id": client_id,
             "client_secret": client_secret,
-            "scope": "https://graph.microsoft.com/.default",
+            "scope": scope,
             "grant_type": "client_credentials",
         },
     )
@@ -199,7 +216,16 @@ class ShortcutsAppAuth:
 
     def token_for(self, tenant):
         self.ensure_secret()
-        return get_token(tenant, SHORTCUTS_APP_ID, self.secret)
+        tok, err = get_token(tenant, SHORTCUTS_APP_ID, self.secret)
+        # A freshly minted ephemeral secret can take longer to replicate to
+        # some tenants' token endpoints than to NOIT's; AADSTS7000215 there
+        # is transient, not a real credential problem.
+        attempts = 0
+        while not tok and self._ephemeral_key_id and "7000215" in (err or "") and attempts < 4:
+            time.sleep(15)
+            tok, err = get_token(tenant, SHORTCUTS_APP_ID, self.secret)
+            attempts += 1
+        return tok, err
 
     def close(self):
         if self._ephemeral_key_id and self._taila_token:
@@ -395,8 +421,25 @@ def create_shortcut_page(token, site_id, webpart, name="KreweConnect.aspx", titl
 # ------------------------------------------------------------------ commands
 
 def load_clients():
-    with open(CLIENTS_FILE) as f:
-        return json.load(f)["clients"]
+    if os.path.exists(LOCAL_CLIENTS_FILE):
+        with open(LOCAL_CLIENTS_FILE) as f:
+            return json.load(f)["clients"]
+    # Roster is kept OUT of this public repo: read CLIENT_TENANTS from the
+    # krewesuite SWA at runtime (same source the deployed app uses).
+    tok, err = get_token(
+        NOIT_TENANT, TAILA_APP_ID, taila_secret(), scope="https://management.azure.com/.default"
+    )
+    if err:
+        raise RuntimeError(f"ARM token for roster lookup failed: {err}")
+    st, res = _http(
+        f"https://management.azure.com{KREWESUITE_RESOURCE_ID}/listAppSettings?api-version=2023-01-01",
+        method="POST",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    if st != 200:
+        raise RuntimeError(f"listAppSettings failed: {st} {str(res)[:200]}")
+    entries = json.loads(res["properties"]["CLIENT_TENANTS"])
+    return [{"name": e["name"], "tenantId": e["id"]} for e in entries]
 
 
 def consent_url(tenant_id):

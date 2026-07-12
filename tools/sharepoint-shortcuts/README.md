@@ -12,12 +12,14 @@ Client users land on KreweConnect, sign in with their own M365 account, and see
 only their own tenant's directory (tenant isolation is enforced server-side by
 the caller's `tid` — see `docs/architecture-reset.md`).
 
-Rollout roster: `clients.json` (Geaux Automotive, Level BR, Fishman Haygood,
-Provident, Xtreme Automotive — tenant IDs match the SWA `CLIENT_TENANTS`
-setting). All five tenants already have the KreweConnect product app
-(`eaeafccb…`) admin-consented, so the destination app works for every one of
-them. To add another client (e.g. True Title,
-`5e17b006-ba85-4bc8-8638-441a4d4264e6`), append it to `clients.json`.
+**Rollout roster:** this repo is PUBLIC, so the client roster does not live
+here (see `docs/SESSION-STATE.md`). The tool reads the tenant list at runtime
+from the krewesuite SWA's **`CLIENT_TENANTS`** app setting (via ARM as the
+Taila agent) — the same authoritative source the deployed app uses, and every
+tenant in it already has the KreweConnect product app admin-consented. To run
+against a subset or set per-client site/page targeting, create a
+`clients.local.json` next to the script (gitignored, same schema:
+`{"clients": [{"name", "tenantId", "site"?, "page"?}]}`).
 
 ## How it works
 
@@ -68,7 +70,7 @@ python3 add_shortcuts.py --apply
 ```
 
 Targets the tenant **root site**'s `Home.aspx` by default. Override per client
-in `clients.json` with `"site": "/sites/intranet"` and/or
+in `clients.local.json` with `"site": "/sites/intranet"` and/or
 `"page": "Portal.aspx"` if a client's portal lives elsewhere. Use
 `--new-page` to create a standalone `KreweConnect.aspx` page instead of
 touching the home page.
