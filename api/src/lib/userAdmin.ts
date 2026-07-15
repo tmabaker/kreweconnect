@@ -315,6 +315,7 @@ interface MemberGroup {
   mailEnabled?: boolean;
   securityEnabled?: boolean;
   onPremisesSyncEnabled?: boolean | null;
+  isAssignableToRole?: boolean | null;
 }
 
 function errMessage(err: unknown): string {
@@ -332,7 +333,7 @@ async function removeFromAllGroups(tenantId: string, userId: string): Promise<st
     tenantId,
     "GET",
     `/users/${encodeURIComponent(userId)}/memberOf/microsoft.graph.group` +
-      "?$select=id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled&$top=999"
+      "?$select=id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole&$top=999"
   );
   const groups = response?.value ?? [];
   if (groups.length === 0) return "Not a member of any groups.";
@@ -349,6 +350,15 @@ async function removeFromAllGroups(tenantId: string, userId: string): Promise<st
     }
     if (g.onPremisesSyncEnabled) {
       skipped.push(`${g.displayName} (synced from on-prem AD)`);
+      continue;
+    }
+    if (g.isAssignableToRole) {
+      // Membership of role-assignable groups can only be changed by callers
+      // holding RoleManagement.ReadWrite.Directory — Group.ReadWrite.All is
+      // rejected by design (the group can carry admin roles).
+      skipped.push(
+        `${g.displayName} (role-assignable group — remove the member in the Entra portal)`
+      );
       continue;
     }
     if (g.mailEnabled && !isUnified) {
@@ -426,9 +436,24 @@ export async function offboardUser(
 
   if (options.disableUser) {
     await run("Block sign-in", async () => {
-      await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, {
-        accountEnabled: false,
-      });
+      try {
+        await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, {
+          accountEnabled: false,
+        });
+      } catch (err) {
+        // Disabling accounts needs the User.EnableDisableAccount.All app role
+        // (User.ReadWrite.All alone is not enough), and privileged users
+        // (admins / members of role-assignable groups) can't be disabled
+        // app-only at all. Make the raw "Insufficient privileges" actionable.
+        if (errMessage(err).includes("Insufficient privileges")) {
+          throw new Error(
+            "Insufficient privileges — the tenant needs to re-consent the app (adds the " +
+              "User.EnableDisableAccount.All permission), and admins/members of " +
+              "role-assignable groups must be disabled in the Entra portal."
+          );
+        }
+        throw err;
+      }
       return "Account disabled.";
     });
   }
