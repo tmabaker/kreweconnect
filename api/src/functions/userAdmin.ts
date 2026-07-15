@@ -19,8 +19,6 @@
 import { app, type HttpRequest } from "@azure/functions";
 import { withAuth, withMspWriteAuth, readJsonBody, BadRequestError } from "../lib/http";
 import {
-  createUser,
-  updateUser,
   resetPassword,
   revokeSessions,
   listLicenses,
@@ -44,27 +42,11 @@ function requireParam(request: HttpRequest, name: string): string {
   return value;
 }
 
-app.http("userCreate", {
-  methods: ["POST", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "tenants/{tenantId}/users",
-  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
-    const body = await readJsonBody(request);
-    const result = await createUser(tenantId, body);
-    return { status: 201, jsonBody: result };
-  }),
-});
-
-app.http("userUpdate", {
-  methods: ["PATCH", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "tenants/{tenantId}/users/{userId}",
-  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
-    const body = await readJsonBody(request);
-    const user = await updateUser(tenantId, requireParam(request, "userId"), body);
-    return { status: 200, jsonBody: user };
-  }),
-});
+// Create user (POST tenants/{tenantId}/users) and update user
+// (PATCH tenants/{tenantId}/users/{userId}) are registered in tenants.ts:
+// those route templates already exist there for GET, and behind Static Web
+// Apps a route template registered twice resolves only to the first
+// registration — the second one's methods 404. See tenants.ts.
 
 app.http("userResetPassword", {
   methods: ["POST", "OPTIONS"],
