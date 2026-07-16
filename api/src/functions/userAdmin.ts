@@ -59,18 +59,20 @@ app.http("userResetPassword", {
 
     // Optionally vault the new password in IT Glue. A failure here must not
     // fail the reset (the password is already changed) — report it instead.
-    let itGlue: { saved: boolean; id?: string; warning?: string } | undefined;
+    let itGlue: { saved: boolean; id?: string; action?: string; folder?: string; warning?: string } | undefined;
     if (body.saveToItGlue === true) {
       try {
         const user = await fetchUserById(tenantId, userId);
         const saved = await savePasswordToItGlue({
           tenantId,
-          name: `M365 — ${user.displayName || user.userPrincipalName}`,
-          username: user.userPrincipalName,
+          email: user.userPrincipalName,
+          firstName: user.givenName,
+          lastName: user.surname,
+          displayName: user.displayName,
           password: result.password,
           notes: typeof body.itGlueNotes === "string" ? body.itGlueNotes : "Reset via NOIT Tech Portal",
         });
-        itGlue = { saved: true, id: saved.id };
+        itGlue = { saved: true, id: saved.id, action: saved.action, folder: saved.folder };
       } catch (err) {
         itGlue = {
           saved: false,
