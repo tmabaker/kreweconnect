@@ -1,0 +1,26 @@
+# CAP Config daily sweep — activates travel CA plans on their start date and
+# removes them (policy, named location, exclusions) after their end date.
+#
+# One-time setup: add the KreweConnect app's client secret as the repository
+# Actions secret KREWECONNECT_CLIENT_SECRET (Settings → Secrets and variables
+# → Actions → New repository secret).
+
+name: CA travel sweep
+
+on:
+  schedule:
+    - cron: "0 11 * * *" # daily ~06:00 US Central
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run sweep
+        env:
+          KC_CLIENT_SECRET: ${{ secrets.KREWECONNECT_CLIENT_SECRET }}
+        run: node scripts/ca-travel-sweep.mjs
