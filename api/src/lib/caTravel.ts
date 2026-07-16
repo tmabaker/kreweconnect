@@ -225,22 +225,33 @@ export async function createTravelPlan(
 
   let policy: { id: string } | null = null;
   try {
-    policy = await graphRequest<{ id: string }>(
-      tenantId,
-      "POST",
-      "/identity/conditionalAccess/policies",
-      {
-        displayName: policyName,
-        state: "disabled",
-        conditions: {
-          users: { includeUsers: [userId] },
-          applications: { includeApplications: ["All"] },
-          locations: { includeLocations: ["All"], excludeLocations: [location.id] },
-          clientAppTypes: ["all"],
-        },
-        grantControls: { operator: "OR", builtInControls: ["block"] },
+    // A freshly created named location can take a few seconds to replicate
+    // before CA policies may reference it (Graph error 1040) — retry briefly.
+    for (let attempt = 0; attempt < 7; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
+      try {
+        policy = await graphRequest<{ id: string }>(
+          tenantId,
+          "POST",
+          "/identity/conditionalAccess/policies",
+          {
+            displayName: policyName,
+            state: "disabled",
+            conditions: {
+              users: { includeUsers: [userId] },
+              applications: { includeApplications: ["All"] },
+              locations: { includeLocations: ["All"], excludeLocations: [location.id] },
+              clientAppTypes: ["all"],
+            },
+            grantControls: { operator: "OR", builtInControls: ["block"] },
+          }
+        );
+        break;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/NamedLocation with id .* does not exist/i.test(msg) || attempt === 6) throw err;
       }
-    );
+    }
   } finally {
     if (!policy?.id) {
       // Roll the location back so a failed create leaves nothing behind.
