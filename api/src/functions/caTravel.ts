@@ -50,8 +50,8 @@ const createPlanHandler = withMspWriteAuth(async (request, _caller, tenantId) =>
 });
 
 const cancelPlanHandler = withMspWriteAuth(async (request, _caller, tenantId) => {
-  const plan = await cancelTravelPlan(tenantId, requireParam(request, "userId"));
-  return { status: 200, jsonBody: { ended: true, plan } };
+  const { plan, warnings } = await cancelTravelPlan(tenantId, requireParam(request, "userId"));
+  return { status: 200, jsonBody: { ended: warnings.length === 0, warnings, plan } };
 });
 
 app.http("caTravelPlan", {

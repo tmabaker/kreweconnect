@@ -320,24 +320,56 @@ async function activatePlan(
   ).catch(() => undefined);
 }
 
+/** Run a teardown step with retries; report a warning instead of throwing. */
+async function tryStep(
+  warnings: string[],
+  label: string,
+  fn: () => Promise<unknown>
+): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+    try {
+      await fn();
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Already gone = success for a teardown.
+      if (/does not exist|not found|404/i.test(msg)) return;
+      if (attempt === 2) warnings.push(`${label}: ${msg}`);
+    }
+  }
+}
+
 async function teardownPlan(
   tenantId: string,
   plan: Pick<TravelPlan, "userId" | "travelPolicyId" | "namedLocationId" | "excludePolicyIds">
-): Promise<void> {
+): Promise<string[]> {
+  const warnings: string[] = [];
   for (const policyId of plan.excludePolicyIds) {
-    await setCaExclusion(tenantId, policyId, plan.userId, "remove").catch(() => undefined);
+    await tryStep(warnings, `remove exclusion from policy ${policyId}`, () =>
+      setCaExclusion(tenantId, policyId, plan.userId, "remove")
+    );
   }
-  await graphRequest(
-    tenantId,
-    "DELETE",
-    `/identity/conditionalAccess/policies/${plan.travelPolicyId}`
-  ).catch(() => undefined);
-  await graphRequest(
-    tenantId,
-    "DELETE",
-    `/identity/conditionalAccess/namedLocations/${plan.namedLocationId}`
-  ).catch(() => undefined);
-  await deletePlanExtension(tenantId, plan.userId);
+  if (plan.travelPolicyId) {
+    await tryStep(warnings, "delete travel policy", () =>
+      graphRequest(tenantId, "DELETE", `/identity/conditionalAccess/policies/${plan.travelPolicyId}`)
+    );
+  }
+  if (plan.namedLocationId) {
+    await tryStep(warnings, "delete named location", () =>
+      graphRequest(
+        tenantId,
+        "DELETE",
+        `/identity/conditionalAccess/namedLocations/${plan.namedLocationId}`
+      )
+    );
+  }
+  // Keep the plan record when the policy could not be deleted, so the plan
+  // stays visible (with its full metadata) and "End now" can be retried.
+  if (warnings.length === 0) {
+    await deletePlanExtension(tenantId, plan.userId);
+  }
+  return warnings;
 }
 
 /* ── list / cancel / sweep ──────────────────────────────────────────── */
@@ -394,20 +426,21 @@ export async function listTravelPlans(tenantId: string): Promise<TravelPlan[]> {
 }
 
 /** End a user's travel plan now (remove exclusions, delete policy + location). */
-export async function cancelTravelPlan(tenantId: string, userId: string): Promise<TravelPlan> {
+export async function cancelTravelPlan(
+  tenantId: string,
+  userId: string
+): Promise<{ plan: TravelPlan; warnings: string[] }> {
   const ext = await readPlanExtension(tenantId, userId);
   if (!ext) {
     // Fall back to policy discovery so orphans can still be cleaned up.
     const plans = await listTravelPlans(tenantId);
     const plan = plans.find((p) => p.userId.toLowerCase() === userId.toLowerCase());
     if (!plan) throw new BadRequestError("This user has no travel plan.");
-    await teardownPlan(tenantId, plan);
-    return plan;
+    return { plan, warnings: await teardownPlan(tenantId, plan) };
   }
   const user = await fetchUserById(tenantId, userId);
   const plan = planFromExtension(userId, user.displayName || user.userPrincipalName, ext);
-  await teardownPlan(tenantId, plan);
-  return plan;
+  return { plan, warnings: await teardownPlan(tenantId, plan) };
 }
 
 export interface SweepAction {
@@ -427,8 +460,16 @@ export async function sweepTravelPlans(tenantId: string): Promise<SweepAction[]>
   for (const plan of await listTravelPlans(tenantId)) {
     try {
       if (plan.endDate < today) {
-        await teardownPlan(tenantId, plan);
-        actions.push({ policyName: plan.policyName, action: "removed" });
+        const warnings = await teardownPlan(tenantId, plan);
+        actions.push(
+          warnings.length
+            ? {
+                policyName: plan.policyName,
+                action: "none",
+                detail: `teardown incomplete (will retry next sweep): ${warnings.join("; ")}`,
+              }
+            : { policyName: plan.policyName, action: "removed" }
+        );
       } else if (plan.status === "pending" && plan.startDate <= today) {
         await activatePlan(tenantId, plan);
         actions.push({ policyName: plan.policyName, action: "activated" });
