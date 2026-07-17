@@ -287,6 +287,139 @@ export async function setAutoReply(
   });
 }
 
+/* ── group membership (Modify User page) ────────────────────────────── */
+
+const GROUP_SELECT =
+  "id,displayName,description,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole";
+
+export interface GroupInfo {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  groupTypes?: string[];
+  mailEnabled?: boolean;
+  securityEnabled?: boolean;
+  /** False when Graph can't change this group's membership; reason says why. */
+  manageable: boolean;
+  reason?: string;
+}
+
+/**
+ * Whether Graph can change the group's membership, mirroring the skip rules
+ * offboarding applies. The reason is display text for the tool pages.
+ */
+function groupManageability(g: MemberGroup): { manageable: boolean; reason?: string } {
+  const isDynamic = (g.groupTypes ?? []).includes("DynamicMembership");
+  const isUnified = (g.groupTypes ?? []).includes("Unified");
+  if (isDynamic) return { manageable: false, reason: "dynamic membership — edit the membership rule instead" };
+  if (g.onPremisesSyncEnabled) return { manageable: false, reason: "synced from on-prem AD" };
+  if (g.isAssignableToRole)
+    return { manageable: false, reason: "role-assignable group — change membership in the Entra portal" };
+  if (g.mailEnabled && !isUnified)
+    return {
+      manageable: false,
+      reason: "Exchange distribution/mail-enabled security group — change membership in Exchange admin or CIPP",
+    };
+  return { manageable: true };
+}
+
+function toGroupInfo(g: MemberGroup & { description?: string | null }): GroupInfo {
+  const m = groupManageability(g);
+  return {
+    id: g.id,
+    displayName: g.displayName,
+    description: g.description ?? null,
+    groupTypes: g.groupTypes ?? [],
+    mailEnabled: g.mailEnabled ?? false,
+    securityEnabled: g.securityEnabled ?? false,
+    manageable: m.manageable,
+    reason: m.reason,
+  };
+}
+
+function byDisplayName(a: GroupInfo, b: GroupInfo): number {
+  return a.displayName.localeCompare(b.displayName);
+}
+
+/** All groups in the tenant, flagged with whether Graph can edit membership. */
+export async function listGroups(tenantId: string): Promise<GroupInfo[]> {
+  const groups: MemberGroup[] = [];
+  let path = `/groups?$select=${GROUP_SELECT}&$top=999`;
+  while (path) {
+    const page = await graphRequest<{ value: MemberGroup[]; "@odata.nextLink"?: string }>(
+      tenantId,
+      "GET",
+      path
+    );
+    groups.push(...(page?.value ?? []));
+    path = (page?.["@odata.nextLink"] || "").replace("https://graph.microsoft.com/v1.0", "");
+  }
+  return groups.map(toGroupInfo).sort(byDisplayName);
+}
+
+/** The user's direct group memberships. */
+export async function listUserGroups(tenantId: string, userId: string): Promise<GroupInfo[]> {
+  const response = await graphRequest<{ value: MemberGroup[] }>(
+    tenantId,
+    "GET",
+    `/users/${encodeURIComponent(userId)}/memberOf/microsoft.graph.group?$select=${GROUP_SELECT}&$top=999`
+  );
+  return (response?.value ?? []).map(toGroupInfo).sort(byDisplayName);
+}
+
+export interface GroupChangeResult {
+  id: string;
+  displayName: string;
+  action: "add" | "remove";
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * Add/remove the user to/from the given groups, one result per group —
+ * a failure on one group must not abandon the rest.
+ */
+export async function setUserGroups(
+  tenantId: string,
+  userId: string,
+  add: string[],
+  remove: string[]
+): Promise<GroupChangeResult[]> {
+  const results: GroupChangeResult[] = [];
+  const apply = async (groupId: string, action: "add" | "remove") => {
+    let name = groupId;
+    try {
+      const g = await graphRequest<MemberGroup>(
+        tenantId,
+        "GET",
+        `/groups/${encodeURIComponent(groupId)}?$select=${GROUP_SELECT}`
+      );
+      if (!g) throw new Error("Group not found.");
+      name = g.displayName || groupId;
+      const m = groupManageability(g);
+      if (!m.manageable) throw new Error(`Can't change membership: ${m.reason}.`);
+      if (action === "add") {
+        await graphRequest(tenantId, "POST", `/groups/${encodeURIComponent(groupId)}/members/$ref`, {
+          "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${encodeURIComponent(userId)}`,
+        });
+        results.push({ id: groupId, displayName: name, action, ok: true, detail: "Added." });
+      } else {
+        await graphRequest(
+          tenantId,
+          "DELETE",
+          `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}/$ref`
+        );
+        results.push({ id: groupId, displayName: name, action, ok: true, detail: "Removed." });
+      }
+    } catch (err) {
+      results.push({ id: groupId, displayName: name, action, ok: false, detail: errMessage(err) });
+    }
+  };
+  for (const id of add) await apply(id, "add");
+  for (const id of remove) await apply(id, "remove");
+  return results;
+}
+
 /* ── offboarding (the techtools Remove User page) ───────────────────── */
 
 export interface OffboardOptions {
@@ -342,27 +475,12 @@ async function removeFromAllGroups(tenantId: string, userId: string): Promise<st
   const skipped: string[] = [];
   const failed: string[] = [];
   for (const g of groups) {
-    const isDynamic = (g.groupTypes ?? []).includes("DynamicMembership");
-    const isUnified = (g.groupTypes ?? []).includes("Unified");
-    if (isDynamic) {
-      skipped.push(`${g.displayName} (dynamic membership)`);
-      continue;
-    }
-    if (g.onPremisesSyncEnabled) {
-      skipped.push(`${g.displayName} (synced from on-prem AD)`);
-      continue;
-    }
-    if (g.isAssignableToRole) {
-      // Membership of role-assignable groups can only be changed by callers
-      // holding RoleManagement.ReadWrite.Directory — Group.ReadWrite.All is
-      // rejected by design (the group can carry admin roles).
-      skipped.push(
-        `${g.displayName} (role-assignable group — remove the member in the Entra portal)`
-      );
-      continue;
-    }
-    if (g.mailEnabled && !isUnified) {
-      skipped.push(`${g.displayName} (Exchange distribution/mail-enabled group — remove in Exchange admin or CIPP)`);
+    // Membership of role-assignable groups can only be changed by callers
+    // holding RoleManagement.ReadWrite.Directory — Group.ReadWrite.All is
+    // rejected by design (the group can carry admin roles).
+    const m = groupManageability(g);
+    if (!m.manageable) {
+      skipped.push(`${g.displayName} (${m.reason})`);
       continue;
     }
     try {
