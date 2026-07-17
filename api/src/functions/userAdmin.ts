@@ -11,6 +11,9 @@
  *   POST  /api/tenants/{tenantId}/users/{userId}/offboard         — offboarding actions (Remove User page)
  *   GET   /api/tenants/{tenantId}/users/{userId}/mailboxSettings  — current OOO state
  *   PATCH /api/tenants/{tenantId}/users/{userId}/mailboxSettings  — set auto-reply (OOO)
+ *   GET   /api/tenants/{tenantId}/users/{userId}/groups           — user's direct group memberships
+ *   POST  /api/tenants/{tenantId}/users/{userId}/groups           — add/remove group memberships
+ *   GET   /api/tenants/{tenantId}/groups                          — all groups in the tenant
  *   GET   /api/tenants/{tenantId}/licenses                        — subscribed SKUs
  *   GET   /api/tenants/{tenantId}/caPolicies                      — CA policies + exclusions
  *   POST  /api/tenants/{tenantId}/caPolicies/{policyId}/exclusions — add/remove excluded user
@@ -23,6 +26,9 @@ import {
   revokeSessions,
   listLicenses,
   setUserLicenses,
+  listGroups,
+  listUserGroups,
+  setUserGroups,
   getMailboxSettings,
   setAutoReply,
   listCaPolicies,
@@ -187,6 +193,45 @@ app.http("userMailboxSettings", {
     }
     const settings = await setAutoReply(tenantId, userId, body as unknown as AutoReplyInput);
     return { status: 200, jsonBody: settings };
+  }),
+});
+
+// GET and POST share one registration: behind Static Web Apps a route
+// template registered twice resolves only to the first registration (see
+// the create/update note above), so both methods must live together.
+app.http("userGroups", {
+  methods: ["GET", "POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/users/{userId}/groups",
+  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+    const userId = requireParam(request, "userId");
+    if (request.method === "GET") {
+      const groups = await listUserGroups(tenantId, userId);
+      return { status: 200, jsonBody: { value: groups } };
+    }
+    const body = await readJsonBody(request);
+    const add = Array.isArray(body.add)
+      ? body.add.filter((s): s is string => typeof s === "string")
+      : [];
+    const remove = Array.isArray(body.remove)
+      ? body.remove.filter((s): s is string => typeof s === "string")
+      : [];
+    if (add.length === 0 && remove.length === 0) {
+      throw new BadRequestError("Provide 'add' and/or 'remove' arrays of group ids.");
+    }
+    const results = await setUserGroups(tenantId, userId, add, remove);
+    const ok = results.every((r) => r.ok);
+    return { status: 200, jsonBody: { ok, results } };
+  }),
+});
+
+app.http("tenantGroups", {
+  methods: ["GET", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/groups",
+  handler: withMspWriteAuth(async (_request, _caller, tenantId) => {
+    const groups = await listGroups(tenantId);
+    return { status: 200, jsonBody: { value: groups } };
   }),
 });
 
