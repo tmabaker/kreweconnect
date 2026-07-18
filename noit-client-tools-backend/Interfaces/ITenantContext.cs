@@ -13,4 +13,11 @@ public interface ITenantContext
 
     /// <summary>The database ID of the current ClientTenant, if resolved.</summary>
     int? ClientTenantDbId { get; set; }
+
+    /// <summary>
+    /// True when the authenticated caller belongs to the MSP (NOIT) home tenant.
+    /// Derived from the VERIFIED token `tid` by TenantContextMiddleware — only MSP
+    /// admins may act across tenants or run cross-tenant/admin operations.
+    /// </summary>
+    bool IsMspAdmin { get; set; }
 }

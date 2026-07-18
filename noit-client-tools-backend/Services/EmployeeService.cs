@@ -11,12 +11,23 @@ public class EmployeeService : IEmployeeService
 {
     private readonly AppDbContext _db;
     private readonly ILogger<EmployeeService> _logger;
+    private readonly ITenantContext _tenantContext;
 
-    public EmployeeService(AppDbContext db, ILogger<EmployeeService> logger)
+    public EmployeeService(AppDbContext db, ILogger<EmployeeService> logger, ITenantContext tenantContext)
     {
         _db = db;
         _logger = logger;
+        _tenantContext = tenantContext;
     }
+
+    /// <summary>
+    /// Tenant-isolation predicate for by-id lookups. Only MSP admins (querying
+    /// "all") may cross tenants; everyone else is confined to the tenant the
+    /// middleware authorized from their token. Fails closed when no tenant is
+    /// resolved (ClientTenantDbId is null).
+    /// </summary>
+    private bool InScope(int clientTenantDbId) =>
+        _tenantContext.IsAllTenants || _tenantContext.ClientTenantDbId == clientTenantDbId;
 
     public async Task<PagedResult<EmployeeListDto>> GetAllAsync(
         int? tenantId,
@@ -112,6 +123,10 @@ public class EmployeeService : IEmployeeService
 
         if (emp == null) return null;
 
+        // SECURITY: tenant isolation for a by-id lookup — return "not found"
+        // (never leak existence) when the employee is outside the caller's scope.
+        if (!InScope(emp.ClientTenantId)) return null;
+
         return new EmployeeDetailDto
         {
             Id = emp.Id,
@@ -161,6 +176,9 @@ public class EmployeeService : IEmployeeService
 
     public async Task<OrgChartNodeDto?> GetOrgChartAsync(int tenantId, Guid? rootEmployeeId = null, CancellationToken ct = default)
     {
+        // SECURITY: never build an org chart for a tenant outside the caller's scope.
+        if (!InScope(tenantId)) return null;
+
         var employees = await _db.Employees
             .Where(e => e.ClientTenantId == tenantId && e.IsActive)
             .AsNoTracking()
@@ -204,6 +222,12 @@ public class EmployeeService : IEmployeeService
 
     public async Task<List<CustomFieldValueDto>> GetCustomFieldsAsync(Guid employeeId, CancellationToken ct = default)
     {
+        // SECURITY: don't return another tenant's custom-field values.
+        var owner = await _db.Employees.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == employeeId, ct);
+        if (owner == null || !InScope(owner.ClientTenantId))
+            return new List<CustomFieldValueDto>();
+
         return await _db.EmployeeCustomFields
             .Where(f => f.EmployeeId == employeeId)
             .OrderBy(f => f.FieldName)
@@ -220,6 +244,13 @@ public class EmployeeService : IEmployeeService
 
     public async Task SetCustomFieldsAsync(Guid employeeId, List<CustomFieldUpdateItem> fields, CancellationToken ct = default)
     {
+        // SECURITY: confirm the target employee is within the caller's tenant
+        // scope before mutating their custom fields (by-id write).
+        var owner = await _db.Employees.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == employeeId, ct);
+        if (owner == null || !InScope(owner.ClientTenantId))
+            throw new UnauthorizedAccessException("Employee is outside the caller's tenant scope.");
+
         var existing = await _db.EmployeeCustomFields
             .Where(f => f.EmployeeId == employeeId)
             .ToListAsync(ct);
