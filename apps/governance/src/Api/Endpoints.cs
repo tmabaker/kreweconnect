@@ -4,6 +4,7 @@
 // Entra auth is deliberately deferred to the kreweconnect transplant, where the
 // existing token/tenant middleware is ported in front of these routes.
 
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOIT.KreweGovernance.Data;
 using NOIT.KreweGovernance.Domain;
@@ -15,9 +16,12 @@ public static class Endpoints
 {
     public static void MapKreweGovernance(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api");
+        // Every route under /api requires a validated bearer token. Health is
+        // the only anonymous endpoint (liveness probes must not need a token).
+        var api = app.MapGroup("/api").RequireAuthorization();
 
-        api.MapGet("/health", () => Results.Ok(new { status = "ok", app = "krewe-governance", apiVersion = "0.1.0-reconstruction" }));
+        api.MapGet("/health", () => Results.Ok(new { status = "ok", app = "krewe-governance", apiVersion = "0.1.0-reconstruction" }))
+            .AllowAnonymous();
 
         // --- Clients ---
         api.MapGet("/clients", async (KreweGovernanceDbContext db) =>
@@ -57,8 +61,12 @@ public static class Endpoints
         // Questions for a policy, pre-filled with the client's existing answers
         // (universal questions first — they're shared across all policies).
         api.MapGet("/policies/{id:guid}/wizard", async (
-            Guid id, Guid clientId, KreweGovernanceDbContext db, AssemblyService assembly) =>
+            Guid id, Guid clientId, ClaimsPrincipal user, IConfiguration config,
+            KreweGovernanceDbContext db, AssemblyService assembly) =>
         {
+            var denied = GovernanceAuth.EnforceClientAccess(user, config, clientId);
+            if (denied is not null) return denied;
+
             var policy = await db.Policies.AsNoTracking()
                 .Include(p => p.Variables)
                 .FirstOrDefaultAsync(p => p.Id == id);
@@ -79,8 +87,12 @@ public static class Endpoints
 
         // Upsert a client's answers (the wizard's save).
         api.MapPut("/clients/{clientId:guid}/variables", async (
-            Guid clientId, List<VariableAnswer> answers, KreweGovernanceDbContext db) =>
+            Guid clientId, List<VariableAnswer> answers, ClaimsPrincipal user,
+            IConfiguration config, KreweGovernanceDbContext db) =>
         {
+            var denied = GovernanceAuth.EnforceClientAccess(user, config, clientId);
+            if (denied is not null) return denied;
+
             var client = await db.ClientCompanies.FindAsync(clientId);
             if (client is null) return Results.NotFound();
 
@@ -113,14 +125,23 @@ public static class Endpoints
 
         // --- Assembly ---
         api.MapPost("/policies/{id:guid}/assemble", async (
-            Guid id, AssembleRequest request, AssemblyService assembly) =>
+            Guid id, AssembleRequest request, ClaimsPrincipal user, IConfiguration config,
+            AssemblyService assembly) =>
         {
+            var denied = GovernanceAuth.EnforceClientAccess(user, config, request.ClientCompanyId);
+            if (denied is not null) return denied;
+
             var outcome = await assembly.AssembleAsync(id, request.ClientCompanyId, request.AssembledBy);
             return outcome is null ? Results.NotFound() : Results.Ok(outcome);
         });
 
-        api.MapGet("/clients/{clientId:guid}/assembled", async (Guid clientId, KreweGovernanceDbContext db) =>
-            await db.AssembledPolicies.AsNoTracking()
+        api.MapGet("/clients/{clientId:guid}/assembled", async (
+            Guid clientId, ClaimsPrincipal user, IConfiguration config, KreweGovernanceDbContext db) =>
+        {
+            var denied = GovernanceAuth.EnforceClientAccess(user, config, clientId);
+            if (denied is not null) return denied;
+
+            return Results.Ok(await db.AssembledPolicies.AsNoTracking()
                 .Where(a => a.ClientCompanyId == clientId)
                 .OrderByDescending(a => a.AssembledAt)
                 .Select(a => new
@@ -129,7 +150,12 @@ public static class Endpoints
                     a.AssembledAt, a.AssembledBy, a.AcknowledgedByClient, a.AcknowledgedAt,
                 })
                 .ToListAsync());
+        });
 
+        // SECURITY: this by-id lookup is not client-scoped. Under the current
+        // NOIT-only authority every authenticated caller is an MSP admin, so
+        // this is safe today; when client (non-MSP) tokens are enabled, load the
+        // row's ClientCompanyId and run GovernanceAuth.EnforceClientAccess on it.
         api.MapGet("/assembled/{id:int}", async (int id, KreweGovernanceDbContext db) =>
         {
             var assembled = await db.AssembledPolicies.AsNoTracking()
@@ -144,6 +170,10 @@ public static class Endpoints
         });
 
         // --- Acknowledgment (Phase 3d: client sign-off; PhinSec sync lands here too) ---
+        // SECURITY: like GET /assembled/{id}, this mutates a row addressed by its
+        // assembled id, not a clientId. Authentication is enforced (group-level).
+        // When client (non-MSP) tokens are enabled, load the row's ClientCompanyId
+        // and gate with GovernanceAuth.EnforceClientAccess before mutating.
         api.MapPost("/assembled/{id:int}/acknowledge", async (int id, KreweGovernanceDbContext db) =>
         {
             var assembled = await db.AssembledPolicies.FindAsync(id);
@@ -153,6 +183,49 @@ public static class Endpoints
             await db.SaveChangesAsync();
             return Results.Ok(new { assembled.Id, assembled.AcknowledgedByClient, assembled.AcknowledgedAt });
         });
+    }
+}
+
+/// <summary>
+/// Caller authorization helpers mirroring the tenant-isolation intent of
+/// api/src/lib/authMiddleware.ts: MSP-tenant (NOIT) callers may act across all
+/// client companies; everyone else is confined to their own.
+/// </summary>
+internal static class GovernanceAuth
+{
+    // NOIT home tenant — callers whose token `tid` matches are MSP admins.
+    // Kept in sync with the auth authority default in Program.cs.
+    public const string DefaultMspTenantId = "7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e";
+
+    private static string MspTenantId(IConfiguration config) =>
+        config["Governance:Auth:MspTenantId"]
+        ?? Environment.GetEnvironmentVariable("KREWE_GOVERNANCE_MSP_TENANT_ID")
+        ?? DefaultMspTenantId;
+
+    public static bool IsMspAdmin(ClaimsPrincipal user, IConfiguration config)
+    {
+        var tid = user.FindFirst("tid")?.Value
+            ?? user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value;
+        return !string.IsNullOrEmpty(tid)
+            && string.Equals(tid, MspTenantId(config), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Returns <c>null</c> when the caller may act on <paramref name="clientId"/>,
+    /// or a 403 result when the request must be denied.
+    /// </summary>
+    public static IResult? EnforceClientAccess(ClaimsPrincipal user, IConfiguration config, Guid clientId)
+    {
+        // MSP admins (NOIT staff) may act across every client company.
+        if (IsMspAdmin(user, config)) return null;
+
+        // SECURITY: client (non-MSP) callers are not yet mapped to a specific
+        // ClientCompany, so there is no verified way to prove this clientId is
+        // theirs. Fail closed until that token-tenant -> ClientCompany mapping
+        // exists, so a client can never reach another client's governance data.
+        return Results.Problem(
+            statusCode: StatusCodes.Status403Forbidden,
+            title: "Not authorized to access this client.");
     }
 }
 
