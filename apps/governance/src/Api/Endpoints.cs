@@ -1,10 +1,10 @@
 // KREWE Governance API surface (reconstructed from NOC-19's feature list):
-// policy library, variable-collection wizard (NOC-19 #4), assembly (#5), and
-// client acknowledgment (the AssembledPolicies.Acknowledged* columns — Phase 3d).
-// Entra auth is deliberately deferred to the kreweconnect transplant, where the
-// existing token/tenant middleware is ported in front of these routes.
+// policy library (reads + staff-only writes, NOC-55), variable-collection
+// wizard (NOC-19 #4), assembly (#5), and client acknowledgment.
+//
+// Scoping (see CallerContext): NOIT staff see everything; a client user is
+// confined to its own ClientCompanyId. Library writes are staff-only.
 
-using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOIT.KreweGovernance.Data;
 using NOIT.KreweGovernance.Domain;
@@ -14,36 +14,79 @@ namespace NOIT.KreweGovernance.Api;
 
 public static class Endpoints
 {
-    public static void MapKreweGovernance(this IEndpointRouteBuilder app)
+    public static void MapKreweGovernance(this IEndpointRouteBuilder app, bool requireAuth = false)
     {
-        // Every route under /api requires a validated bearer token. Health is
-        // the only anonymous endpoint (liveness probes must not need a token).
-        var api = app.MapGroup("/api").RequireAuthorization();
+        app.MapGet("/api/health", () => Results.Ok(new
+        {
+            status = "ok",
+            app = "krewe-governance",
+            apiVersion = "0.2.0-r3",
+        }));
 
-        api.MapGet("/health", () => Results.Ok(new { status = "ok", app = "krewe-governance", apiVersion = "0.1.0-reconstruction" }))
-            .AllowAnonymous();
+        var api = app.MapGroup("/api");
+        if (requireAuth) api.RequireAuthorization();
 
         // --- Clients ---
-        api.MapGet("/clients", async (KreweGovernanceDbContext db) =>
+        api.MapGet("/clients", async (CallerContext caller, KreweGovernanceDbContext db) =>
             await db.ClientCompanies.AsNoTracking()
-                .Where(c => c.IsActive)
+                .Where(c => c.IsActive && (caller.IsStaff || c.Id == caller.ClientCompanyId))
                 .OrderBy(c => c.Name)
                 .Select(c => new { c.Id, c.Name, c.Industry, c.PrimaryContactName, c.PrimaryContactEmail, c.MitpClientId })
                 .ToListAsync());
 
-        // --- Policy library ---
+        // Client-profile writes (staff-only) — the R3 client profile editor.
+        api.MapPost("/clients", async (ClientUpsert input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            if (string.IsNullOrWhiteSpace(input.Name)) return Results.BadRequest(new { error = "name_required" });
+            var now = DateTime.UtcNow;
+            var client = new ClientCompany
+            {
+                Id = Guid.NewGuid(),
+                Name = input.Name.Trim(),
+                Industry = input.Industry,
+                PrimaryContactName = input.PrimaryContactName,
+                PrimaryContactEmail = input.PrimaryContactEmail,
+                MitpClientId = input.MitpClientId,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ClientCompanies.Add(client);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/clients/{client.Id}", new { client.Id });
+        });
+
+        api.MapPut("/clients/{id:guid}", async (Guid id, ClientUpsert input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            var client = await db.ClientCompanies.FindAsync(id);
+            if (client is null) return Results.NotFound();
+            if (!string.IsNullOrWhiteSpace(input.Name)) client.Name = input.Name.Trim();
+            if (input.Industry is not null) client.Industry = input.Industry;
+            if (input.PrimaryContactName is not null) client.PrimaryContactName = input.PrimaryContactName;
+            if (input.PrimaryContactEmail is not null) client.PrimaryContactEmail = input.PrimaryContactEmail;
+            if (input.MitpClientId is not null) client.MitpClientId = input.MitpClientId;
+            if (input.IsActive is not null) client.IsActive = input.IsActive.Value;
+            client.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { client.Id });
+        });
+
+        // --- Policy library (reads) ---
         api.MapGet("/policies", async (KreweGovernanceDbContext db) =>
             await db.Policies.AsNoTracking()
                 .OrderBy(p => p.Category.SortOrder).ThenBy(p => p.Title)
                 .Select(p => new
                 {
                     p.Id, p.Title, p.Summary, p.Status, p.CurrentVersion, p.NextReviewDate,
-                    Category = p.Category.Name,
+                    Category = p.Category.Name, p.CategoryId,
                 })
                 .ToListAsync());
 
-        api.MapGet("/policies/{id:guid}", async (Guid id, KreweGovernanceDbContext db) =>
+        api.MapGet("/policies/{id:guid}", async (Guid id, CallerContext caller, KreweGovernanceDbContext db) =>
         {
+            if (!caller.IsStaff) return Results.Forbid();   // full template content is staff-only
             var policy = await db.Policies.AsNoTracking()
                 .Include(p => p.Category)
                 .Include(p => p.Variables)
@@ -51,22 +94,166 @@ public static class Endpoints
             return policy is null ? Results.NotFound() : Results.Ok(new
             {
                 policy.Id, policy.Title, policy.Summary, policy.Content, policy.Status,
-                policy.CurrentVersion, policy.NextReviewDate, Category = policy.Category.Name,
+                policy.CurrentVersion, policy.NextReviewDate, Category = policy.Category.Name, policy.CategoryId,
                 Variables = policy.Variables.OrderBy(v => v.SortOrder)
                     .Select(v => new { v.Key, v.Label, v.Question, v.InputType, v.Options, v.IsUniversal, v.Required, v.SortOrder }),
             });
+        });
+
+        api.MapGet("/policies/{id:guid}/versions", async (Guid id, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            var versions = await db.PolicyVersions.AsNoTracking()
+                .Where(v => v.PolicyId == id)
+                .OrderByDescending(v => v.VersionNumber)
+                .Select(v => new { v.Id, v.VersionNumber, v.ChangeNotes, v.CreatedAt })
+                .ToListAsync();
+            return Results.Ok(versions);
+        });
+
+        // --- Categories ---
+        api.MapGet("/categories", async (KreweGovernanceDbContext db) =>
+            await db.PolicyCategories.AsNoTracking()
+                .OrderBy(c => c.SortOrder)
+                .Select(c => new { c.Id, c.Name, c.Description, c.SortOrder })
+                .ToListAsync());
+
+        // --- Library writes (staff-only, NOC-55) ---
+        api.MapPost("/categories", async (CategoryUpsert input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            if (string.IsNullOrWhiteSpace(input.Name)) return Results.BadRequest(new { error = "name_required" });
+            var now = DateTime.UtcNow;
+            var category = new PolicyCategory
+            {
+                Id = Guid.NewGuid(),
+                Name = input.Name.Trim(),
+                Description = input.Description,
+                SortOrder = input.SortOrder ?? 0,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.PolicyCategories.Add(category);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/categories/{category.Id}", new { category.Id });
+        });
+
+        api.MapPut("/categories/{id:guid}", async (Guid id, CategoryUpsert input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            var category = await db.PolicyCategories.FindAsync(id);
+            if (category is null) return Results.NotFound();
+            if (!string.IsNullOrWhiteSpace(input.Name)) category.Name = input.Name.Trim();
+            if (input.Description is not null) category.Description = input.Description;
+            if (input.SortOrder is not null) category.SortOrder = input.SortOrder.Value;
+            category.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { category.Id });
+        });
+
+        api.MapPost("/policies", async (PolicyCreate input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            if (string.IsNullOrWhiteSpace(input.Title)) return Results.BadRequest(new { error = "title_required" });
+            if (!await db.PolicyCategories.AnyAsync(c => c.Id == input.CategoryId))
+                return Results.BadRequest(new { error = "unknown_category" });
+
+            var now = DateTime.UtcNow;
+            var userId = await ResolveUserIdAsync(caller, db);
+            var policy = new Policy
+            {
+                Id = Guid.NewGuid(),
+                Title = input.Title.Trim(),
+                Summary = input.Summary,
+                Content = input.Content,
+                CategoryId = input.CategoryId,
+                AssignedClientIds = "[]",
+                Status = string.IsNullOrWhiteSpace(input.Status) ? "draft" : input.Status!,
+                CurrentVersion = 1,
+                CreatedByUserId = userId,
+                NextReviewDate = input.NextReviewDate,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.Policies.Add(policy);
+            if (!string.IsNullOrEmpty(input.Content))
+                db.PolicyVersions.Add(NewVersion(policy.Id, 1, input.Content, "Initial version.", userId, now));
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/policies/{policy.Id}", new { policy.Id, policy.CurrentVersion });
+        });
+
+        api.MapPut("/policies/{id:guid}", async (Guid id, PolicyUpdate input, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            var policy = await db.Policies.FirstOrDefaultAsync(p => p.Id == id);
+            if (policy is null) return Results.NotFound();
+            if (input.CategoryId is not null)
+            {
+                if (!await db.PolicyCategories.AnyAsync(c => c.Id == input.CategoryId))
+                    return Results.BadRequest(new { error = "unknown_category" });
+                policy.CategoryId = input.CategoryId.Value;
+            }
+
+            var now = DateTime.UtcNow;
+            if (input.Title is not null) policy.Title = input.Title.Trim();
+            if (input.Summary is not null) policy.Summary = input.Summary;
+            if (input.Status is not null) policy.Status = input.Status;
+            if (input.NextReviewDate is not null) policy.NextReviewDate = input.NextReviewDate;
+
+            // Content change is versioned: bump CurrentVersion + snapshot the new body.
+            var versionBumped = false;
+            if (input.Content is not null && input.Content != policy.Content)
+            {
+                policy.Content = input.Content;
+                policy.CurrentVersion += 1;
+                versionBumped = true;
+                db.PolicyVersions.Add(NewVersion(
+                    policy.Id, policy.CurrentVersion, input.Content,
+                    string.IsNullOrWhiteSpace(input.ChangeNotes) ? "Content updated." : input.ChangeNotes,
+                    await ResolveUserIdAsync(caller, db), now));
+            }
+            policy.UpdatedAt = now;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { policy.Id, policy.CurrentVersion, versionBumped });
+        });
+
+        // Replace a policy's wizard variable definitions (staff-only).
+        api.MapPut("/policies/{id:guid}/variables", async (
+            Guid id, List<VariableDefinition> definitions, CallerContext caller, KreweGovernanceDbContext db) =>
+        {
+            if (!caller.IsStaff) return Results.Forbid();
+            var policy = await db.Policies.Include(p => p.Variables).FirstOrDefaultAsync(p => p.Id == id);
+            if (policy is null) return Results.NotFound();
+            var invalid = definitions.Where(d => string.IsNullOrWhiteSpace(d.Key)).ToList();
+            if (invalid.Count > 0) return Results.BadRequest(new { error = "key_required" });
+
+            db.PolicyVariables.RemoveRange(policy.Variables);
+            var sort = 0;
+            foreach (var d in definitions)
+                db.PolicyVariables.Add(new PolicyVariable
+                {
+                    PolicyId = policy.Id,
+                    Key = d.Key.Trim(),
+                    Label = d.Label ?? d.Key,
+                    Question = d.Question ?? d.Label ?? d.Key,
+                    InputType = string.IsNullOrWhiteSpace(d.InputType) ? "text" : d.InputType!,
+                    Options = d.Options,
+                    IsUniversal = d.IsUniversal,
+                    Required = d.Required,
+                    SortOrder = d.SortOrder ?? sort++,
+                });
+            policy.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { policy.Id, count = definitions.Count });
         });
 
         // --- Variable-collection wizard ---
         // Questions for a policy, pre-filled with the client's existing answers
         // (universal questions first — they're shared across all policies).
         api.MapGet("/policies/{id:guid}/wizard", async (
-            Guid id, Guid clientId, ClaimsPrincipal user, IConfiguration config,
-            KreweGovernanceDbContext db, AssemblyService assembly) =>
+            Guid id, Guid clientId, CallerContext caller, KreweGovernanceDbContext db, AssemblyService assembly) =>
         {
-            var denied = GovernanceAuth.EnforceClientAccess(user, config, clientId);
-            if (denied is not null) return denied;
-
+            if (!caller.CanAccessClient(clientId)) return Results.Forbid();
             var policy = await db.Policies.AsNoTracking()
                 .Include(p => p.Variables)
                 .FirstOrDefaultAsync(p => p.Id == id);
@@ -87,12 +274,9 @@ public static class Endpoints
 
         // Upsert a client's answers (the wizard's save).
         api.MapPut("/clients/{clientId:guid}/variables", async (
-            Guid clientId, List<VariableAnswer> answers, ClaimsPrincipal user,
-            IConfiguration config, KreweGovernanceDbContext db) =>
+            Guid clientId, List<VariableAnswer> answers, CallerContext caller, KreweGovernanceDbContext db) =>
         {
-            var denied = GovernanceAuth.EnforceClientAccess(user, config, clientId);
-            if (denied is not null) return denied;
-
+            if (!caller.CanAccessClient(clientId)) return Results.Forbid();
             var client = await db.ClientCompanies.FindAsync(clientId);
             if (client is null) return Results.NotFound();
 
@@ -123,24 +307,18 @@ public static class Endpoints
             return Results.Ok(new { saved = answers.Count });
         });
 
-        // --- Assembly ---
+        // --- Assembly (staff runs assembly; clients consume the output) ---
         api.MapPost("/policies/{id:guid}/assemble", async (
-            Guid id, AssembleRequest request, ClaimsPrincipal user, IConfiguration config,
-            AssemblyService assembly) =>
+            Guid id, AssembleRequest request, CallerContext caller, AssemblyService assembly) =>
         {
-            var denied = GovernanceAuth.EnforceClientAccess(user, config, request.ClientCompanyId);
-            if (denied is not null) return denied;
-
+            if (!caller.IsStaff) return Results.Forbid();
             var outcome = await assembly.AssembleAsync(id, request.ClientCompanyId, request.AssembledBy);
             return outcome is null ? Results.NotFound() : Results.Ok(outcome);
         });
 
-        api.MapGet("/clients/{clientId:guid}/assembled", async (
-            Guid clientId, ClaimsPrincipal user, IConfiguration config, KreweGovernanceDbContext db) =>
+        api.MapGet("/clients/{clientId:guid}/assembled", async (Guid clientId, CallerContext caller, KreweGovernanceDbContext db) =>
         {
-            var denied = GovernanceAuth.EnforceClientAccess(user, config, clientId);
-            if (denied is not null) return denied;
-
+            if (!caller.CanAccessClient(clientId)) return Results.Forbid();
             return Results.Ok(await db.AssembledPolicies.AsNoTracking()
                 .Where(a => a.ClientCompanyId == clientId)
                 .OrderByDescending(a => a.AssembledAt)
@@ -152,16 +330,14 @@ public static class Endpoints
                 .ToListAsync());
         });
 
-        // SECURITY: this by-id lookup is not client-scoped. Under the current
-        // NOIT-only authority every authenticated caller is an MSP admin, so
-        // this is safe today; when client (non-MSP) tokens are enabled, load the
-        // row's ClientCompanyId and run GovernanceAuth.EnforceClientAccess on it.
-        api.MapGet("/assembled/{id:int}", async (int id, KreweGovernanceDbContext db) =>
+        api.MapGet("/assembled/{id:int}", async (int id, CallerContext caller, KreweGovernanceDbContext db) =>
         {
             var assembled = await db.AssembledPolicies.AsNoTracking()
                 .Include(a => a.Policy).Include(a => a.ClientCompany)
                 .FirstOrDefaultAsync(a => a.Id == id);
-            return assembled is null ? Results.NotFound() : Results.Ok(new
+            if (assembled is null) return Results.NotFound();
+            if (!caller.CanAccessClient(assembled.ClientCompanyId)) return Results.Forbid();
+            return Results.Ok(new
             {
                 assembled.Id, PolicyTitle = assembled.Policy.Title, Client = assembled.ClientCompany.Name,
                 assembled.AssembledContent, assembled.AssembledAt, assembled.AssembledBy,
@@ -170,63 +346,38 @@ public static class Endpoints
         });
 
         // --- Acknowledgment (Phase 3d: client sign-off; PhinSec sync lands here too) ---
-        // SECURITY: like GET /assembled/{id}, this mutates a row addressed by its
-        // assembled id, not a clientId. Authentication is enforced (group-level).
-        // When client (non-MSP) tokens are enabled, load the row's ClientCompanyId
-        // and gate with GovernanceAuth.EnforceClientAccess before mutating.
-        api.MapPost("/assembled/{id:int}/acknowledge", async (int id, KreweGovernanceDbContext db) =>
+        api.MapPost("/assembled/{id:int}/acknowledge", async (int id, CallerContext caller, KreweGovernanceDbContext db) =>
         {
             var assembled = await db.AssembledPolicies.FindAsync(id);
             if (assembled is null) return Results.NotFound();
+            if (!caller.CanAccessClient(assembled.ClientCompanyId)) return Results.Forbid();
             assembled.AcknowledgedByClient = true;
             assembled.AcknowledgedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             return Results.Ok(new { assembled.Id, assembled.AcknowledgedByClient, assembled.AcknowledgedAt });
         });
     }
-}
 
-/// <summary>
-/// Caller authorization helpers mirroring the tenant-isolation intent of
-/// api/src/lib/authMiddleware.ts: MSP-tenant (NOIT) callers may act across all
-/// client companies; everyone else is confined to their own.
-/// </summary>
-internal static class GovernanceAuth
-{
-    // NOIT home tenant — callers whose token `tid` matches are MSP admins.
-    // Kept in sync with the auth authority default in Program.cs.
-    public const string DefaultMspTenantId = "7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e";
-
-    private static string MspTenantId(IConfiguration config) =>
-        config["Governance:Auth:MspTenantId"]
-        ?? Environment.GetEnvironmentVariable("KREWE_GOVERNANCE_MSP_TENANT_ID")
-        ?? DefaultMspTenantId;
-
-    public static bool IsMspAdmin(ClaimsPrincipal user, IConfiguration config)
+    /// <summary>The caller's Users.Id if provisioned; Guid.Empty for tid-based staff (system).</summary>
+    private static async Task<Guid> ResolveUserIdAsync(CallerContext caller, KreweGovernanceDbContext db)
     {
-        var tid = user.FindFirst("tid")?.Value
-            ?? user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value;
-        return !string.IsNullOrEmpty(tid)
-            && string.Equals(tid, MspTenantId(config), StringComparison.OrdinalIgnoreCase);
+        if (caller.ObjectId is null) return Guid.Empty;
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.EntraObjectId == caller.ObjectId && u.IsActive);
+        return user?.Id ?? Guid.Empty;
     }
 
-    /// <summary>
-    /// Returns <c>null</c> when the caller may act on <paramref name="clientId"/>,
-    /// or a 403 result when the request must be denied.
-    /// </summary>
-    public static IResult? EnforceClientAccess(ClaimsPrincipal user, IConfiguration config, Guid clientId)
+    private static PolicyVersion NewVersion(
+        Guid policyId, int number, string content, string? notes, Guid userId, DateTime at) => new()
     {
-        // MSP admins (NOIT staff) may act across every client company.
-        if (IsMspAdmin(user, config)) return null;
-
-        // SECURITY: client (non-MSP) callers are not yet mapped to a specific
-        // ClientCompany, so there is no verified way to prove this clientId is
-        // theirs. Fail closed until that token-tenant -> ClientCompany mapping
-        // exists, so a client can never reach another client's governance data.
-        return Results.Problem(
-            statusCode: StatusCodes.Status403Forbidden,
-            title: "Not authorized to access this client.");
-    }
+        Id = Guid.NewGuid(),
+        PolicyId = policyId,
+        VersionNumber = number,
+        Content = content,
+        ChangeNotes = notes,
+        CreatedByUserId = userId,
+        CreatedAt = at,
+    };
 }
 
 public record WizardQuestion(
@@ -236,3 +387,20 @@ public record WizardQuestion(
 public record VariableAnswer(string Key, string Value);
 
 public record AssembleRequest(Guid ClientCompanyId, string AssembledBy);
+
+public record CategoryUpsert(string? Name, string? Description, int? SortOrder);
+
+public record ClientUpsert(
+    string? Name, string? Industry, string? PrimaryContactName, string? PrimaryContactEmail,
+    string? MitpClientId, bool? IsActive);
+
+public record PolicyCreate(
+    string Title, string? Summary, string? Content, Guid CategoryId, string? Status, DateTime? NextReviewDate);
+
+public record PolicyUpdate(
+    string? Title, string? Summary, string? Content, Guid? CategoryId, string? Status,
+    DateTime? NextReviewDate, string? ChangeNotes);
+
+public record VariableDefinition(
+    string Key, string? Label, string? Question, string? InputType, string? Options,
+    bool IsUniversal, bool Required, int? SortOrder);

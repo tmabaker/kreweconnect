@@ -3,10 +3,15 @@
 // migrations. Connection string comes from ConnectionStrings:KreweGovernance or
 // the KREWE_GOVERNANCE_SQL environment variable (value lives in AWS Secrets
 // Manager `noit/krewe-governance-sql` — never in this repo).
+//
+// Auth (NOC-55): Entra JWT bearer on the shared `eaeafccb` app registration,
+// multi-tenant (/organizations) — the same model as the consolidated backend.
+// KREWE_AUTH_DISABLED=true bypasses auth entirely (local dev + tools/smoke
+// only; never set it on a deployed instance).
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.Identity.Web;
 using NOIT.KreweGovernance.Api;
 using NOIT.KreweGovernance.Data;
 using NOIT.KreweGovernance.Services;
@@ -23,48 +28,35 @@ var connectionString =
 builder.Services.AddDbContext<KreweGovernanceDbContext>(options =>
     options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 builder.Services.AddScoped<AssemblyService>();
+builder.Services.AddScoped<CallerContext>();
 
-// --- Authentication / authorization ---
-// This API exposes client governance data and must NEVER run unauthenticated.
-// Tokens are Entra (Azure AD) v2 access tokens. Authority defaults to the NOIT
-// home tenant; audience (this API's App ID URI / client ID) has no safe default
-// and is a hard startup requirement — the app fails fast if it is not set, so a
-// misconfigured deploy cannot come up accepting unvalidated tokens.
-var authAuthority =
-    builder.Configuration["Governance:Auth:Authority"]
-    ?? Environment.GetEnvironmentVariable("KREWE_GOVERNANCE_AUTHORITY")
-    ?? "https://login.microsoftonline.com/7fb15bf6-9cea-4c72-89bd-1ab9f16eec8e/v2.0"; // NOIT tenant
-
-var authAudience =
-    builder.Configuration["Governance:Auth:Audience"]
-    ?? Environment.GetEnvironmentVariable("KREWE_GOVERNANCE_AUDIENCE")
-    ?? throw new InvalidOperationException(
-        "No API audience configured. Set Governance:Auth:Audience or KREWE_GOVERNANCE_AUDIENCE " +
-        "(this API's App ID URI, e.g. api://<clientId>). Refusing to start without authentication configured.");
-
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority = authAuthority;
-        options.Audience = authAudience;
-        options.MapInboundClaims = false; // keep raw claim names (tid, scp, oid)
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ClockSkew = TimeSpan.FromMinutes(2),
-        };
-    });
-builder.Services.AddAuthorization();
+var authDisabled = builder.Configuration.GetValue<bool>("KREWE_AUTH_DISABLED");
+if (!authDisabled)
+{
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+    builder.Services.AddAuthorization();
+}
 
 var app = builder.Build();
 
-app.UseAuthentication();
-app.UseAuthorization();
+if (authDisabled)
+{
+    app.Logger.LogWarning(
+        "KREWE_AUTH_DISABLED is set — ALL requests run as NOIT staff. Local dev/smoke only.");
+    app.Use(async (http, next) =>
+    {
+        http.RequestServices.GetRequiredService<CallerContext>().IsStaff = true;
+        await next(http);
+    });
+}
+else
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.UseMiddleware<CallerResolutionMiddleware>();
+}
 
-app.MapKreweGovernance();
+app.MapKreweGovernance(requireAuth: !authDisabled);
 
 app.Run();

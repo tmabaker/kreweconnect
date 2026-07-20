@@ -55,7 +55,7 @@ function RequireAuthMsal({ children }: { children: ReactNode }) {
             <ShieldKeyhole24Regular style={{ fontSize: 48 }} />
             <Title1>KreweConnect</Title1>
           </div>
-          <Text size={400}>Sign in with your NOIT Group account to continue</Text>
+          <Text size={400}>Enter your Microsoft username and password to continue</Text>
           <Button appearance="primary" size="large" onClick={handleLogin}>
             Sign in with Microsoft
           </Button>

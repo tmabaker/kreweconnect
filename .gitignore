@@ -24,3 +24,5 @@ npm-debug.log*
 # .NET build output
 bin/
 obj/
+__pycache__/
+tools/sharepoint-shortcuts/clients.local.json

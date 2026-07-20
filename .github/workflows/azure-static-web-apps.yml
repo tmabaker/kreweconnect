@@ -23,6 +23,9 @@ on:
       - "docs/**"
       - "README.md"
       - "noit-client-tools-backend/**"
+      # The governance .NET API deploys to App Service (krewe-governance-api),
+      # not through this workflow.
+      - "apps/**"
   workflow_dispatch:
 
 # Least-privilege default token: this workflow only reads source and deploys
@@ -66,6 +69,7 @@ jobs:
           VITE_USE_BACKEND_API: "true"
           VITE_API_BASE_URL: "/api"
           VITE_REDIRECT_URI: "https://krewesuite.noitgroup.com/app/kreweconnect/"
+          VITE_GOVERNANCE_API_URL: "https://krewe-governance-api.azurewebsites.net"
         run: |
           npm ci
           npm run build

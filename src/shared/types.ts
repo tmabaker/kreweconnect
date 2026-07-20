@@ -25,6 +25,12 @@ export interface EmployeeListItem {
   businessPhone: string | null;
   photo: string | null;
   isActive: boolean;
+  /** Graph companyName — per-employee company/location (e.g. a dealership) */
+  companyName?: string | null;
+  /** Work anniversary (ISO); only month/day shown. Null/absent when unset in Entra */
+  hireDate?: string | null;
+  /** Birthday (ISO); only month/day shown. Null/absent when unset in Entra */
+  birthday?: string | null;
   tenantDisplayName: string | null;
   /** Source tenant GUID — set in the aggregated "all clients" view */
   tenantId?: string | null;
@@ -58,6 +64,8 @@ export interface EmployeeFacets {
   departments: string[];
   offices: string[];
   titles: string[];
+  /** Distinct company/tenant names — populated in the MSP "all tenants" view */
+  companies: string[];
 }
 
 export interface CustomFieldDefinition {

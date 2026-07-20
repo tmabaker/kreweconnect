@@ -267,6 +267,7 @@ function OrgTreeNode({
           <Avatar
             name={node.displayName}
             initials={getInitials(node.displayName)}
+            image={{ src: node.photo ?? undefined }}
             color={getAvatarColor(node.displayName)}
             size={36}
           />

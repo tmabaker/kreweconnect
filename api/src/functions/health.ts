@@ -5,7 +5,7 @@
 
 import { app } from "@azure/functions";
 
-const API_VERSION = "0.3.0"; // bump when API behavior changes
+const API_VERSION = "0.5.0"; // bump when API behavior changes
 
 app.http("health", {
   methods: ["GET"],

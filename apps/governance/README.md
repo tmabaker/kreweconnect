@@ -22,8 +22,17 @@ against the **existing** database with zero data loss.
   - `Program.cs` / `NOIT.KreweGovernance.csproj` — entry point (connection via `KREWE_GOVERNANCE_SQL`).
 
 > **Build status: VERIFIED** — `dotnet build` (SDK 8.0, 2026-07-07) succeeds with
-> 0 warnings / 0 errors, no changes required. Remaining: smoke-test
-> `GET /api/health` and the wizard round-trip against the live DB.
+> 0 warnings / 0 errors, no changes required.
+>
+> **Smoke test: PASSED 15/15 (2026-07-08, live DB)** — run from an ephemeral
+> Azure VM (`tools/smoke/`): DB connect → seed (3 NIST/CMMC policies) → health
+> → policy library → wizard round-trip → assemble (0 missing variables, full
+> {{token}} substitution) → acknowledge. Test rows live under the ZZ-TEST
+> client `d1000000-0000-4000-8000-000000000001` (safe to delete).
+> Note: the server is **Entra-only auth** (`azureADOnlyAuthentication: true`);
+> the SQL login in AWS `noit/krewe-governance-sql` only works while that flag
+> is off (it was toggled off for the test and restored). Decide at R5 deploy
+> time: managed-identity auth (keep Entra-only) vs. SQL auth (turn it off).
 
 ## Repo decision (2026-07-06, Tammy)
 The Krewe Suite consolidates into **one operational monorepo: `tmabaker/kreweconnect`**
@@ -39,6 +48,34 @@ now the historical/recovery record; develop here.
 > workflow is untouched; `apps/**` is not in its `paths-ignore`, so a `main` push
 > touching this folder triggers an SWA run — harmless (it doesn't build this folder),
 > but worth adding to `paths-ignore` when R5 decides the real deploy target.
+
+## Auth & tenant scoping (NOC-55)
+
+Entra JWT bearer on the shared app registration `eaeafccb…` (audience
+`api://eaeafccb…`, `/organizations` multi-tenant authority — config in
+`appsettings.json`, no secrets needed server-side). Scoping is schema-faithful
+(`ClientCompanies` has no tenant column):
+
+- **NOIT staff** — token `tid` == NOIT tenant (`7fb15bf6…`): full access + all writes.
+- **Client user** — `Users` row matched on token `oid` (`EntraObjectId`), scoped to
+  its `ClientCompanyId`; no active row → 403 `not_provisioned`. Clients can use the
+  wizard, save answers, view/acknowledge their assembled policies — not the raw
+  template library or any write endpoint.
+- `KREWE_AUTH_DISABLED=true` bypasses auth and runs every request as staff —
+  **local dev + `tools/smoke` only**, never on a deployed instance.
+- **Real-token verified (2026-07-08, NOC-56):** the JWT path was exercised with
+  a real Entra token (aud `api://eaeafccb…`, NOIT `tid`) against the live DB on
+  an ephemeral VM — signature/lifetime/audience/issuer validation, tid→staff
+  resolution, wizard prefill, and the client write endpoints all pass; no-token
+  and malformed-token requests get 401. Note for daemon callers: an **app-only**
+  token with no `scp`/`roles` is 401'd by Microsoft.Identity.Web's ACL guard
+  (`AzureAd:AllowWebApiToBeAuthorizedByACL` stays false in prod; the test set it
+  via env var only). SPA user tokens carry `scp=access_as_user` and are unaffected.
+
+Library writes (staff-only): `POST/PUT /api/categories`, `POST/PUT /api/policies`
+(content change ⇒ `PolicyVersions` snapshot + `CurrentVersion` bump),
+`PUT /api/policies/{id}/variables` (replace wizard definitions),
+`GET /api/policies/{id}/versions`.
 
 ## Connect to the live DB
 Credentials are in AWS Secrets Manager `noit/krewe-governance-sql`

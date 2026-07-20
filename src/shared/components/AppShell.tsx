@@ -27,8 +27,11 @@ import {
   Organization24Regular,
   Gavel24Regular,
   CalendarClock24Regular,
+  ShieldTask24Regular,
+  Building24Regular,
 } from "@fluentui/react-icons";
 import { TenantSwitcher } from "../../components/TenantSwitcher";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { useTenantContext } from "../hooks/useTenantContext";
 import { detectUserTenantContext } from "../../services/tenantService";
 
@@ -126,6 +129,10 @@ const navItems = [
   { path: "/contracts", label: "Dashboard", icon: <Gavel24Regular />, section: "KreweReview", mspOnly: true },
   { path: "/contracts/all", label: "All Contracts", icon: <DocumentText24Regular />, section: null, indent: true, mspOnly: true },
   { path: "/contracts/renewals", label: "Renewals", icon: <CalendarClock24Regular />, section: null, indent: true, mspOnly: true },
+  // Governance: clients keep the "Clients" entry — it routes them straight to
+  // their own company (wizard answers + assembled policies).
+  { path: "/governance", label: "Policy Library", icon: <ShieldTask24Regular />, section: "KREWE Governance", mspOnly: true },
+  { path: "/governance/clients", label: "Clients", icon: <Building24Regular />, section: null, indent: true },
   { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null, mspOnly: true },
 ];
 
@@ -180,7 +187,10 @@ export function AppShell() {
                 ? location.pathname === "/"
                 : item.path === "/contracts"
                   ? location.pathname === "/contracts"
-                  : location.pathname.startsWith(item.path);
+                  : item.path === "/governance"
+                    ? location.pathname === "/governance" ||
+                      location.pathname.startsWith("/governance/policies")
+                    : location.pathname.startsWith(item.path);
 
             return (
               <div key={item.path}>
@@ -271,9 +281,13 @@ export function AppShell() {
         </div>
 
         <div className={styles.content}>
-          <Suspense fallback={<Spinner label="Loading..." />}>
-            <Outlet />
-          </Suspense>
+          {/* Keyed by route so a crash on one page clears when navigating away,
+              instead of the old behavior where one error blanked the whole app. */}
+          <ErrorBoundary key={location.pathname}>
+            <Suspense fallback={<Spinner label="Loading..." />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
     </div>

@@ -1,22 +1,137 @@
 # Session Handoff / State — pick up exactly where we left off
 
-**Last updated:** 2026-06-11. Read this first in any new session, then the
-files it points to. Everything below is committed to git (branch `main` and
-`claude/brave-feynman-g2j9v5`) unless explicitly marked "not in git".
+**Last updated:** 2026-06-18. Read this first in any new session, then the
+files it points to. `main` holds the latest deployed work — `git fetch && git
+checkout main`.
+
+> ⚠️ **This repo is PUBLIC.** No secret values or the client-tenant roster live
+> here. Full **credential notes + access paths** are in the private
+> **SharePoint handoff**: `sites/tabcc → Shared Documents → KreweConnect → docs
+> → SESSION-HANDOFF-2026-06-18.md` (and Linear). Make the repo private — NOC-51.
 
 ---
 
-## 0. One-paragraph status
+## 0ZA. 2026-07-11 — SharePoint shortcuts on client portals (PR #23 + follow-up)
 
-KreweConnect frontend is recovered, deployed, and the foundational
-tenant-switching bug is fixed (live). A working per-tenant GDAP backend exists
-as Azure Functions (`api/`). We discovered the *real* product backend — a .NET
-app ("NOIT Client Tools") that lived only in SharePoint — and began preserving
-it into git. Decisions are locked to consolidate onto the .NET backend on the
-Apps365 admin-consent model. The one hard blocker is a **rotated app secret**
-that only Tammy can refresh from a keyboard; it blocks agent-side Graph testing
-but NOT the deployed app.
+- **`tools/sharepoint-shortcuts/`** puts an "Employee Directory & Org Chart"
+  Quick Links web part on each client's SharePoint portal home page, linking to
+  the KreweConnect directory/org-chart URLs. Graph v1.0 sitePage APIs;
+  idempotent; appends a section (never edits existing content); revertible via
+  page version history. Verified end-to-end in NOIT:
+  `/sites/tabcc/SitePages/kreweconnect-shortcuts-test.aspx` (delete anytime).
+- **Actor = new single-purpose multi-tenant app "NOIT KreweConnect Shortcuts"**
+  (`cf03866e-22d1-433f-84cb-bb08aee083c6`), manifest = Graph
+  `Sites.ReadWrite.All` (application) ONLY. No stored secret — the tool mints
+  an ephemeral secret per run via the Taila Agent app and removes it after.
+- **BLOCKED per client tenant on one-time admin consent** (`--consent-urls`
+  prints the links; grant via GDAP or client GA, then `--apply`). All target
+  tenants returned AADSTS7000229 as of 2026-07-11.
+- Roster is NOT in the repo: the tool reads `CLIENT_TENANTS` from the SWA at
+  runtime (`clients.local.json` override, gitignored). ⚠️ PR #23 briefly
+  committed a `clients.json` roster (names + tenant IDs) — removed at HEAD by
+  the follow-up PR, but it remains in **git history** of this PUBLIC repo:
+  one more reason to finish NOC-51 (make repo private) or rewrite history.
+- Security observation: in one client tenant the product app `eaeafccb` is
+  consented far beyond `User.Read.All` (password-profile/license/CA-policy
+  writes — details in the 2026-07-11 session chat / consent matrix). Trim it.
 
+## 0Z. ACCESS PATHS (2026-06-18) — identities only; secrets/roster in SharePoint
+
+- **Taila delegated** (`taila@noitgroup.com`) — primary agent identity, headless.
+  Refresh token in SharePoint `Agent Workspace/Taila/kc-claude-auth.json`;
+  bootstrap = read it via the M365 connector → refresh against public client
+  `14d82eec-204b-4c2f-b7e8-296a70dab67e` → re-store rotated token. Scopes incl.
+  `Sites/Files.ReadWrite.All`, `Application.Read/ReadWrite.All`,
+  `Policy.ReadWrite.ConditionalAccess`. (Steps in the `noit-ops` skill.) No ARM.
+- **MS Claude Agent / "Taila Agent"** app `90f52d62-…` (secret `noit/0626_MSClaudeAgent`)
+  — app-only Graph (NOIT) **and Azure ARM Contributor** on subs
+  `e9251b04…` + `567260a7…` (RGs: CIPP, cipp-swa-orq6j, noit-techportal,
+  **krewesuite**). Use for SWA app settings (read/set `CLIENT_TENANTS`, read the
+  live `AZURE_CLIENT_SECRET`).
+- **eaeafccb** (KreweConnect app): `User.Read.All` **[App, READ-ONLY]** — cannot
+  PATCH users. Live secret only in the **`krewesuite` SWA** app settings (read via
+  ARM). AWS `noit/azure-taila-agent` copy is dead.
+- **KreweConnect SWA** = `krewesuite` · RG `krewesuite_group` · sub `567260a7…` ·
+  host `red-dune-0b9e42210`. `witty-coast-02d8d4d0f` = the unrelated `noit-techportal`
+  SWA. **CIPP** `cipporq6j` (RG `cipp`, sub `e9251b04…`) — API 503s from the agent
+  egress; healthy via browser. AWS: `GetSecretValue` only, prefix `noit/`.
+- **Client tenant IDs** (real, 12 clients): in SharePoint handoff + Linear NOC-52.
+  `CLIENT_TENANTS` (SWA app setting) currently has 6 consented tenants.
+
+## 0Y. SHIPPED THIS SESSION (2026-06-18) — PRs #3–#8, all live on `main`
+
+1. MSAL v4 `initialize()` white-screen fix (awaited before render).
+2. Multi-tenant authority `/organizations` (client users keep their own `tid`).
+3. Consent `/status` now does a real `/users` read (no false "authorized").
+4. Post-login **redirect loop** fix (`handleRedirectPromise` before render +
+   `navigateToLoginRequestUrl:false`); login copy → "Enter your Microsoft username…".
+5. **Real tenant list:** `GET /api/tenants` from `CLIENT_TENANTS`; removed fake
+   placeholder GUIDs from `tenantConfig.ts` (they made broken consent URLs + leaked
+   the roster). Set `CLIENT_TENANTS` on the SWA (6 tenants).
+6. **Photos:** all users, progressive, and in the All-Tenants view (per-user tenant).
+   Reality: few users have photos (~6/199 at Geaux).
+7. **Filters:** dropped phone-number "Location" (officeLocation); "Company" → "Location"
+   (`companyName`); **licensed non-guest users only** (server-side).
+8. Entra: added Web redirect URI to `eaeafccb` for `/adminconsent`.
+
+**In progress:** Geaux directory remediation (normalize company/dept/title/phone/
+address from an admin spreadsheet). Dry-run files in SharePoint. **Write blocked**
+— eaeafccb is read-only in Geaux; needs `User.ReadWrite.All` via GDAP/remediation
+identity. Open: GDAP expansion (CIPP + partner.microsoft.com), make repo private,
+rotate `noit/0626_MSClaudeAgent`, CIPP egress.
+
+---
+
+## (historical below — 2026-06-16)
+
+
+## 0. One-paragraph status (2026-06-16)
+
+KreweConnect is live and being onboarded to real clients. A **critical
+client-isolation bug was fixed and deployed** (MSAL authority was the NOIT single
+tenant → every user looked like an MSP admin; now `/organizations` +
+`MspAdminRoute` guards). The directory gained **per-employee `companyName`
+filtering, click-to-contact links (email/Teams/office/mobile), and work
+anniversary + birthday (MM/DD)** sourced from a configurable custom extension
+attribute (12/31 = opt-out). Org-chart crash + app-blanking fixed (cycle guard +
+error boundaries). **Onboarding is in progress**; tenant-ID/domain resolution by
+guessing proved unreliable, so **wiring CIPP `ListTenants` is the key unblock**
+(still pending env config + a fresh session). All frontend/api work is on `main`
+and auto-deploys via SWA.
+
+## 0a. 2026-06-16 — deployed this session
+
+- **SECURITY (deployed):** client users no longer see the MSP dashboard /
+  cross-client switcher / other tenants' data. Root cause + fix in
+  LESSONS-LEARNED (single-tenant MSAL authority).
+- **Directory UX (deployed):** filters open by default; **Company filter uses
+  Graph `companyName`** (per-employee location, not org name); contact links
+  (mailto / Teams deep link / `tel:` office+mobile); **work anniversary +
+  birthday MM/DD** rendered only when populated; tenant-GUID label removed.
+- **Birthday/anniversary source:** app settings **`BIRTHDAY_ATTRIBUTE`** /
+  **`ANNIVERSARY_ATTRIBUTE`** name the Graph attribute (directory extension or
+  `extensionAttributeN`); empty → standard `birthday`/`employeeHireDate`.
+  **OPEN:** Tammy to provide the exact attribute name + set the app setting.
+- **Resilience:** `/users` falls back to base `$select` on 400/404; Graph errors
+  now surface code+message+request-id. Org-chart cycle guard + top-level &
+  per-route ErrorBoundary.
+
+## 0b. OPEN / next (2026-06-16)
+
+1. **CIPP access** — still not connected (no AWS creds in-session; env changes
+   need a new session). Runbook `docs/cipp-access-setup.md` + `scripts/
+   verify_cipp.py` ready. Unblocks authoritative domain↔tenant lookups.
+2. **Level BR / Engquist directory 404** — freshly consented tenant returns
+   "Graph 404"; redeployed with detailed error surfacing — get the real error
+   line; likely consent-propagation (retry after ~15 min).
+3. **Set `BIRTHDAY_ATTRIBUTE`** once Tammy supplies the attribute name.
+4. **Finish onboarding** the remaining consented clients (consent + add to the
+   `CLIENT_TENANTS` SWA app setting). Tenant roster kept OUT of the public repo —
+   it's in Linear (NOC-52) + the SharePoint handoff doc.
+5. Cosmetic: friendly "consent complete" landing for the `?admin_consent=True`
+   redirect (currently blank).
+
+---
 ## 1. Key identifiers
 
 | Thing | Value |
@@ -135,41 +250,20 @@ Full rationale: `docs/architecture-reset.md`.
 
 ## 7. NEXT STEPS (priority order)
 
-> **PRODUCT STATUS 2026-06-15:** ⚠️ **SECURITY** — a client user
-> (guest in NOIT) was being treated as an MSP admin and could see the
-> cross-client dashboard/switcher + reach other tenants' directory data. Root
-> cause: MSAL authority was pinned to the NOIT single tenant, so every token's
-> `tid` was NOIT. **Fix is committed on branch `claude/determined-archimedes-wor91s`
-> (commit `798aaac`) but STAGED — not yet on `main`/deployed** (Tammy's call,
-> pending the client-consent rollout). The NOIT "All Tenants" merge works; the
-> .NET consolidation is optional. See item 0 below before anything else.
+> **PRODUCT STATUS 2026-06-15:** Both halves of the north star are LIVE and
+> verified — clients see only their own tenant; NOIT "All Tenants" merges
+> across consented clients. Geaux pilot loads real data. Remaining work is
+> onboarding/ops + the agent-enablement + the optional .NET consolidation,
+> NOT core product gaps.
 
-0. **⚠️ STAGED SECURITY FIX — deploy once clients are consented.** Client users
-   were seeing the MSP dashboard + cross-client switcher + other tenants' data
-   because the SPA's MSAL authority was the NOIT single tenant (→ every token
-   `tid`=NOIT → `isMspAdmin=true` for everyone, defeating the API's tid
-   isolation too). Fix (branch `claude/determined-archimedes-wor91s`, `798aaac`):
-   authority → `/organizations` (each user auths in their own tenant) + frontend
-   `MspAdminRoute` guards + role-filtered nav so clients see only Directory +
-   Org Chart. **Verified 2026-06-15:** product app `eaeafccb` is already
-   multi-tenant and the redirect URI is registered (probe returned AADSTS50058,
-   not 50194), so the fix won't break sign-in mechanics. **To go live:** (1) send
-   each active client its admin-consent URL (Geaux already consented; see the
-   onboarding helper `scripts/onboard-client.mjs`); (2) merge the branch → `main`
-   to deploy. Client login fails *closed* until a tenant consents (no leak).
+0. **OPEN DECISION (Tammy) — agent identity intent.** The new `90f52d62`
+   "MS Claude Agent" credential is valid but (a) Graph is network-blocked and
+   (b) it lacks directory-read perms + is single-tenant. Decide what it should
+   do → then open `graph.microsoft.com` in the network policy and (if directory
+   read is wanted) add `User.Read.All`/`Directory.Read.All` + consent. Rotate
+   the secret (leaked in transcript) and re-store in proper JSON shape. See §4.
 
-1. **DECIDED (Tammy 2026-06-15) — agent identity intent: directory/users read
-   + MSP device/Intune ops (cross-tenant).** Full step-by-step in
-   `docs/agent-identity-runbook.md`. Remaining (all Tammy portal/env actions):
-   (A) add Graph app perms `User.Read.All` + `Directory.Read.All` and — for
-   Intune *managed-device inventory* — `DeviceManagementManagedDevices.Read.All`
-   (the existing `Device.Read.All` is Entra device objects, not Intune devices),
-   then grant NOIT admin consent; (B) make the app multi-tenant + per-client
-   consent so ops reach client tenants (today it's single-tenant →
-   `AADSTS700016`); (C) open `graph.microsoft.com` in the network policy;
-   (D) rotate the leaked secret + re-store as `{clientId,clientSecret,tenantId}`.
-
-2. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
+1. **DONE on branch `claude/brave-feynman-g2j9v5` (UNVERIFIED — no .NET SDK
    here; not merged to main):** the whole .NET backend was made build-ready:
    - `GdapService` port — real per-tenant token + GDAP discovery (`9a7f7c1`)
    - `EmployeeSyncService` port — real Graph `/users` fetch (`dfc0cf4`)
@@ -182,18 +276,15 @@ Full rationale: `docs/architecture-reset.md`.
    `appsettings.Development.json` + EF `Migrations` if using SQL Server.
    **Agent work is blocked here pending the frontend↔backend consolidation
    decision (below) and a deploy target for the .NET backend.**
-3. **(Tammy, dev env)** Export the 3 non-search items the build needs:
+2. **(Tammy, dev env)** Export the 3 non-search items the build needs:
    second `Enums` file, `TenantContextMiddleware.cs`, and
    `.sln`/`.csproj`/`Migrations/`. Then a fresh session can build/run it.
-4. **(Tammy)** Onboard more clients: send each the admin-consent URL, then add
+3. **(Tammy)** Onboard more clients: send each the admin-consent URL, then add
    to the `CLIENT_TENANTS` SWA app setting so they appear in the NOIT all-clients
-   view. This is how the multi-client vision is realized in practice. **8 clients
-   staged this session** (tenant IDs resolved, consent URLs + merged
-   `CLIENT_TENANTS` generated; roster kept out of git per Tammy). Level Homes
-   domain still needed. Helper: `scripts/onboard-client.mjs`.
-5. **(Tammy, browser) — DONE:** Geaux pilot verified (directory + org chart load
+   view. This is how the multi-client vision is realized in practice.
+4. **(Tammy, browser) — DONE:** Geaux pilot verified (directory + org chart load
    real data in incognito). Org-chart gaps = managers not set in Geaux's Entra.
-6. **(Tammy, hygiene — not urgent)** Scrub the historical plaintext secrets
+5. **(Tammy, hygiene — not urgent)** Scrub the historical plaintext secrets
    from the SharePoint `appsettings.json`. These were init-time values already
    rotated out when AWS Secrets Manager was adopted, so they're dead — cleanup
    only, no active exposure.

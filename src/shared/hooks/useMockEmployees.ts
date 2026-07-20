@@ -139,6 +139,7 @@ export function useMockEmployees(tenantId: string) {
       departments: [...new Set(list.map((e) => e.department).filter(Boolean) as string[])].sort(),
       offices: [...new Set(list.map((e) => e.officeLocation).filter(Boolean) as string[])].sort(),
       titles: [...new Set(list.map((e) => e.jobTitle).filter(Boolean) as string[])].sort(),
+      companies: [...new Set(list.map((e) => e.companyName).filter(Boolean) as string[])].sort(),
     };
   }, [tenantId]);
 

@@ -30,5 +30,6 @@ marked universal (`IsUniversal = 1`) — Part B is asked once per client.
 - Generated file — don't hand-edit. Edit the templates under
   `../policy-templates/nist-cmmc/` and re-run `python3 generate_seed.py`.
 
-Status: generated 2026-07-07 but **not yet executed** — the session had no AWS
-credentials to read the connection string (see NOC-54).
+Status: **executed against the live DB 2026-07-08** (via the tools/smoke run —
+Policies 0→3, 20 wizard variables, 3 categories, 3 v1 versions). Safe to
+re-run; it is a no-op against the seeded rows.

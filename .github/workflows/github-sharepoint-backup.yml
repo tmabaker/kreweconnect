@@ -1,0 +1,24 @@
+name: GitHub → SharePoint backup
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Daily 03:00 AM Central (08:00 UTC)
+    - cron: "0 8 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run backup
+        env:
+          MSGRAPH_CLIENT_ID: ${{ secrets.MSGRAPH_CLIENT_ID }}
+          MSGRAPH_CLIENT_SECRET: ${{ secrets.MSGRAPH_CLIENT_SECRET }}
+          MSGRAPH_TENANT_ID: ${{ secrets.MSGRAPH_TENANT_ID }}
+          BACKUP_GH_PAT: ${{ secrets.BACKUP_GH_PAT }}
+        run: python3 scripts/github-sharepoint-backup/backup_github_to_sharepoint.py
