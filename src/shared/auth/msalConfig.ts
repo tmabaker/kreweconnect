@@ -30,7 +30,10 @@ export const msalConfig: Configuration = {
     navigateToLoginRequestUrl: false,
   },
   cache: {
-    cacheLocation: "localStorage",
+    // sessionStorage keeps tokens scoped to the browser tab/session rather than
+    // persisting them across restarts in localStorage — smaller theft window if
+    // another script on the origin is compromised (XSS).
+    cacheLocation: "sessionStorage",
   },
   system: {
     loggerOptions: {

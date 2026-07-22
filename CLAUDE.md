@@ -45,7 +45,10 @@ token (`tid`) and enforced server-side.
   files); see its `README.md` / `PRESERVATION-MANIFEST.md`.
 - `docs/` — orientation + plan + app-registration setup.
 - `.claude/skills/` — `azure-ops` (KreweConnect Azure runbook), `noit-ops`
-  (AWS Secrets bootstrap + connection verification).
+  (AWS Secrets bootstrap + connection verification), `long-horizon-coding`
+  (spec-first autonomous run loop), `model-routing` (per-phase model
+  assignment), `reverse-engineer-api` (headless-browser capture/replay for
+  API-less platforms).
 
 ## Conventions
 

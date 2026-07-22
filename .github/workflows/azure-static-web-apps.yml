@@ -28,22 +28,41 @@ on:
       - "apps/**"
   workflow_dispatch:
 
+# Least-privilege default token: this workflow only reads source and deploys
+# via the SWA deployment token secret, so it needs no write scopes.
+permissions:
+  contents: read
+
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     name: Build and Deploy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: tmabaker/krewesuite
           path: .krewesuite
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
+
+      - name: Guard against demo mode in production build
+        env:
+          VITE_DEMO_MODE: ${{ vars.VITE_DEMO_MODE }}
+        run: |
+          # Demo mode bypasses MSAL/Entra auth entirely (see
+          # src/shared/auth/demoMode.ts). It must never ship to production.
+          case "$(printf '%s' "${VITE_DEMO_MODE}" | tr '[:upper:]' '[:lower:]')" in
+            ""|false|0|no|off)
+              echo "VITE_DEMO_MODE is not enabled — OK." ;;
+            *)
+              echo "::error::VITE_DEMO_MODE is truthy ('${VITE_DEMO_MODE}') in a production build. Refusing to deploy an auth-bypassing build."
+              exit 1 ;;
+          esac
 
       - name: Build SPA
         env:
@@ -67,7 +86,7 @@ jobs:
           cp -r dist/* site/app/kreweconnect/
 
       - name: Deploy
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: "upload"

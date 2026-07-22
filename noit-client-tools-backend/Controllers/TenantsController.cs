@@ -16,13 +16,15 @@ public class TenantsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IGdapService _gdapService;
     private readonly IAuditService _audit;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<TenantsController> _logger;
 
-    public TenantsController(AppDbContext db, IGdapService gdapService, IAuditService audit, ILogger<TenantsController> logger)
+    public TenantsController(AppDbContext db, IGdapService gdapService, IAuditService audit, ITenantContext tenantContext, ILogger<TenantsController> logger)
     {
         _db = db;
         _gdapService = gdapService;
         _audit = audit;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -37,6 +39,11 @@ public class TenantsController : ControllerBase
         [FromQuery] int pageSize = 25)
     {
         var query = _db.ClientTenants.AsNoTracking().AsQueryable();
+
+        // SECURITY: only MSP admins may enumerate all client tenants; a client
+        // caller sees only their own tenant registry entry.
+        if (!_tenantContext.IsMspAdmin)
+            query = query.Where(t => t.Id == _tenantContext.ClientTenantDbId);
 
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
@@ -76,6 +83,11 @@ public class TenantsController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetTenant(int id)
     {
+        // SECURITY: a non-MSP caller may only read its own tenant; deny others
+        // as "not found" so tenant existence isn't leaked.
+        if (!_tenantContext.IsMspAdmin && id != _tenantContext.ClientTenantDbId)
+            return NotFound(new { error = new { code = "NOT_FOUND", message = "Tenant not found." } });
+
         var tenant = await _db.ClientTenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id);
         if (tenant == null)
             return NotFound(new { error = new { code = "NOT_FOUND", message = "Tenant not found." } });
@@ -106,6 +118,12 @@ public class TenantsController : ControllerBase
     [HttpPost("sync-gdap")]
     public async Task<IActionResult> SyncGdap()
     {
+        // SECURITY: GDAP sync is an MSP-wide (NOIT) operation over all client
+        // tenants, so it is restricted to MSP admins.
+        if (!_tenantContext.IsMspAdmin)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = new { code = "FORBIDDEN", message = "MSP admin role required." } });
+
         _logger.LogInformation("GDAP sync requested");
 
         var result = await _gdapService.SyncTenantRegistryAsync();

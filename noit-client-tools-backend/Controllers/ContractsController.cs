@@ -16,6 +16,7 @@ public class ContractsController : ControllerBase
     private readonly IContractApprovalService _approvalService;
     private readonly IRenewalAlertService _renewalService;
     private readonly AppDbContext _db;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<ContractsController> _logger;
 
     public ContractsController(
@@ -23,12 +24,14 @@ public class ContractsController : ControllerBase
         IContractApprovalService approvalService,
         IRenewalAlertService renewalService,
         AppDbContext db,
+        ITenantContext tenantContext,
         ILogger<ContractsController> logger)
     {
         _contractService = contractService;
         _approvalService = approvalService;
         _renewalService = renewalService;
         _db = db;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -193,21 +196,14 @@ public class ContractsController : ControllerBase
 
     // ─── Helpers ──────────────────────────────
 
+    // SECURITY: resolve the tenant filter from the middleware-authorized scope
+    // (derived from the caller's token), NOT from the raw X-Tenant-Id header, so
+    // a non-MSP caller cannot read another tenant's contracts by spoofing or
+    // omitting the header. Non-MSP callers are pinned to their own tenant; only
+    // MSP admins get the cross-tenant (null) scope.
     private int? ResolveTenantId()
     {
-        var headerVal = Request.Headers["X-Tenant-Id"].FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(headerVal) || headerVal == "all")
-            return null;
-
-        if (Guid.TryParse(headerVal, out var guid))
-        {
-            var tenant = _db.ClientTenants.FirstOrDefault(t => t.TenantId == guid);
-            return tenant?.Id;
-        }
-
-        if (int.TryParse(headerVal, out var id))
-            return id;
-
-        return null;
+        if (_tenantContext.IsAllTenants) return null; // MSP "all tenants"
+        return _tenantContext.ClientTenantDbId;       // specific authorized tenant
     }
 }

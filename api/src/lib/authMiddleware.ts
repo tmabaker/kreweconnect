@@ -79,7 +79,12 @@ export async function authenticate(request: HttpRequest): Promise<CallerContext>
     `https://sts.windows.net/${tid}/`, // v1.0 access tokens
     `https://login.microsoftonline.com/${tid}/v2.0`, // v2.0 access tokens
   ];
-  const expectedAudiences = [`api://${config.clientId}`, config.clientId];
+  // Only accept access tokens minted for our API's App ID URI. The bare
+  // clientId is intentionally NOT accepted: ID tokens carry aud == clientId,
+  // and an ID token is not authorization to call the API. The SPA requests
+  // `api://{clientId}/access_as_user`, so a valid access token has
+  // aud == `api://{clientId}`.
+  const expectedAudiences = [`api://${config.clientId}`];
 
   let payload: JWTPayload;
   try {
@@ -91,6 +96,28 @@ export async function authenticate(request: HttpRequest): Promise<CallerContext>
   } catch (err) {
     throw new AuthError(
       `Token validation failed: ${err instanceof Error ? err.message : "unknown error"}`
+    );
+  }
+
+  // Beyond a valid signature/issuer/audience, require that the token actually
+  // authorizes this API. Delegated user tokens (the SPA flow) carry a space-
+  // delimited `scp` claim that must include `access_as_user`. App-only
+  // (client-credentials) tokens carry `roles` instead of `scp`; accept those
+  // only when they present at least one app role. A token with neither — most
+  // importantly an ID token that slipped through — is rejected.
+  const scopes =
+    typeof payload.scp === "string"
+      ? payload.scp.split(" ")
+      : Array.isArray(payload.scp)
+        ? (payload.scp as string[])
+        : [];
+  const appRoles = Array.isArray(payload.roles) ? (payload.roles as string[]) : [];
+  const hasDelegatedScope = scopes.includes("access_as_user");
+  const hasAppRole = appRoles.length > 0;
+  if (!hasDelegatedScope && !hasAppRole) {
+    throw new AuthError(
+      "Token is not authorized for this API (missing access_as_user scope).",
+      403
     );
   }
 

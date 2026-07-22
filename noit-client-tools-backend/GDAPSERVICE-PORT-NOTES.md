@@ -54,6 +54,33 @@ registry).
   needs extra perms) — left null, a later pass. Needs `IHttpClientFactory`
   (already added to DI via `AddHttpClient()`).
 
+## Build-readiness static audit (2026-06-15)
+
+Full cross-file audit done by inspection (still no .NET SDK in this env — see
+`docs/SESSION-STATE.md` §5; `builds.dotnet.microsoft.com` is network-blocked so
+`dotnet restore/build` can't run here). Findings:
+
+- **Internally consistent ✅** — every `using NOIT.*` resolves to a declared
+  namespace; all 8 `Core.Interfaces` ↔ 8 `Infrastructure.Services` implementations
+  are DI-registered in `Program.cs`; the ported `GdapService`/`EmployeeSyncService`
+  and reconstructed middleware/enums type-check against their DTOs/models
+  (`GdapSyncResultDto`, `EmployeeSyncResultDto`, `Employee`, `ClientTenant`,
+  `TenantStatus`, `ITenantContext`, `TenantNotAuthorizedException`).
+- **Fixed: EF migrations assembly** — `Program.cs` set
+  `MigrationsAssembly("NOIT.ClientTools.Infrastructure")`, an assembly that does
+  not exist in this single-project build (everything compiles into
+  `NOIT.ClientTools`). It would have failed the **SQL Server** path at runtime;
+  in-memory dev masked it. Now uses the default (DbContext) assembly. If the
+  original Api/Core/Infrastructure split is restored, set it back.
+- **Fixed: `GenericEmployees` slice** — `EmployeeSyncService` sliced the
+  space-stripped tenant name with `Math.Min(3, tenantName.Length)` (the
+  *un*-stripped length), which could throw `ArgumentOutOfRangeException` for short
+  spaced names. Now slices against the stripped string's own length. Mock path only.
+- **Still unverifiable here:** package versions in `NOIT.ClientTools.csproj` are
+  best-effort (net8.0; EF Core 8.0.6; Microsoft.Identity.Web 2.19.0; etc.) — run
+  `dotnet restore`/`build` in the dev env and adjust to the target runtime. Export
+  the real `.sln`/`.csproj` + EF `Migrations/` if/when using SQL Server.
+
 ## Still stubbed (next pieces, out of scope for this change)
 
 - **Controllers** should catch `TenantNotAuthorizedException` and return its

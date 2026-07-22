@@ -36,6 +36,18 @@ public class ExceptionHandlingMiddleware
                 consentUrl = ex.ConsentUrl,
             });
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            // Tenant-isolation violation from a service-layer guard (e.g. a
+            // caller trying to write into a tenant outside their authorized
+            // scope). Return 403 rather than leaking a 500.
+            _logger.LogWarning(ex, "Tenant isolation violation");
+            await WriteError(context, StatusCodes.Status403Forbidden, new
+            {
+                code = "forbidden",
+                message = "Not authorized to access this tenant's resources.",
+            });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception");

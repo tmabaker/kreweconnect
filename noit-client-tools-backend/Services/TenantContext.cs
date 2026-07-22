@@ -10,4 +10,5 @@ public class TenantContext : ITenantContext
     public Guid? TenantId { get; set; }
     public bool IsAllTenants { get; set; }
     public int? ClientTenantDbId { get; set; }
+    public bool IsMspAdmin { get; set; }
 }

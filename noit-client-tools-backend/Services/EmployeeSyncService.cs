@@ -320,8 +320,9 @@ public class EmployeeSyncService : IEmployeeSyncService
 
     private static List<MockGraphUser> GenericEmployees(string tenantName, string tenantGuid)
     {
-        var prefix = tenantName.Replace(" ", "").ToLower()[..Math.Min(3, tenantName.Length)];
-        var domain = tenantName.Replace(" ", "").ToLower() + ".com";
+        var stripped = tenantName.Replace(" ", "").ToLower();
+        var prefix = stripped[..Math.Min(3, stripped.Length)];
+        var domain = stripped + ".com";
         return new List<MockGraphUser>
         {
             new($"{prefix}-001", $"Alex Morgan", "Alex", "Morgan", $"amorgan@{domain}", "Director", "Executive", "Main Office", "555-0001", null, "E001", new DateOnly(2012, 1, 15), null, null),

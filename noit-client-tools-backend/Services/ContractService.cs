@@ -12,12 +12,23 @@ public class ContractService : IContractService
 {
     private readonly AppDbContext _db;
     private readonly ILogger<ContractService> _logger;
+    private readonly ITenantContext _tenantContext;
 
-    public ContractService(AppDbContext db, ILogger<ContractService> logger)
+    public ContractService(AppDbContext db, ILogger<ContractService> logger, ITenantContext tenantContext)
     {
         _db = db;
         _logger = logger;
+        _tenantContext = tenantContext;
     }
+
+    /// <summary>
+    /// Tenant-isolation predicate for by-id lookups/mutations. Only MSP admins
+    /// (querying "all") may cross tenants; everyone else is confined to the
+    /// tenant the middleware authorized from their token. Fails closed when no
+    /// tenant is resolved.
+    /// </summary>
+    private bool InScope(int tenantDbId) =>
+        _tenantContext.IsAllTenants || _tenantContext.ClientTenantDbId == tenantDbId;
 
     public async Task<PagedResult<ContractListDto>> GetAllAsync(
         int? tenantId, string? search, ContractType? contractType, ContractStatus? status,
@@ -114,6 +125,10 @@ public class ContractService : IContractService
 
         if (c == null) return null;
 
+        // SECURITY: tenant isolation for a by-id lookup — return "not found"
+        // (never leak existence) when the contract is outside the caller's scope.
+        if (!InScope(c.TenantId)) return null;
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         return new ContractDetailDto
@@ -188,6 +203,12 @@ public class ContractService : IContractService
 
     public async Task<ContractDetailDto> CreateAsync(CreateContractRequest request, CancellationToken ct = default)
     {
+        // SECURITY: request.TenantId comes from the body, independent of the
+        // X-Tenant-Id header the middleware authorized. A caller may only create
+        // a contract in a tenant they're actually scoped to.
+        if (!InScope(request.TenantId))
+            throw new UnauthorizedAccessException("Cannot create a contract outside the caller's tenant scope.");
+
         var contract = new Contract
         {
             Id = Guid.NewGuid(),
@@ -269,6 +290,10 @@ public class ContractService : IContractService
             .FirstOrDefaultAsync(c => c.Id == id, ct);
         if (contract == null) return null;
 
+        // SECURITY: don't allow updating a contract outside the caller's scope
+        // (return null -> 404, never leaking that the contract exists).
+        if (!InScope(contract.TenantId)) return null;
+
         var changes = new List<string>();
 
         if (request.VendorName != null && request.VendorName != contract.VendorName) { contract.VendorName = request.VendorName; changes.Add("VendorName"); }
@@ -324,6 +349,9 @@ public class ContractService : IContractService
         var contract = await _db.Contracts.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (contract == null) return false;
 
+        // SECURITY: don't allow archiving a contract outside the caller's scope.
+        if (!InScope(contract.TenantId)) return false;
+
         contract.IsArchived = true;
         contract.ArchivedAt = DateTime.UtcNow;
         contract.UpdatedAt = DateTime.UtcNow;
@@ -331,6 +359,11 @@ public class ContractService : IContractService
         return true;
     }
 
+    // SECURITY TODO: the by-contractId helpers below (versions, documents,
+    // AddDocument) do not yet verify the parent contract is within the caller's
+    // tenant scope. They should load contract.TenantId and apply InScope(...)
+    // before returning/mutating, mirroring GetByIdAsync. Left as follow-up to
+    // avoid behavioural changes that need build/integration verification.
     public async Task<List<ContractVersionDto>> GetVersionsAsync(Guid contractId, CancellationToken ct = default)
     {
         return await _db.ContractVersions

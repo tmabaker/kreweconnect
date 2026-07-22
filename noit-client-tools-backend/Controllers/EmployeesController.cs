@@ -16,6 +16,7 @@ public class EmployeesController : ControllerBase
     private readonly IEmployeeSyncService _syncService;
     private readonly IAuditService _audit;
     private readonly AppDbContext _db;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<EmployeesController> _logger;
 
     public EmployeesController(
@@ -23,12 +24,14 @@ public class EmployeesController : ControllerBase
         IEmployeeSyncService syncService,
         IAuditService audit,
         AppDbContext db,
+        ITenantContext tenantContext,
         ILogger<EmployeesController> logger)
     {
         _employeeService = employeeService;
         _syncService = syncService;
         _audit = audit;
         _db = db;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -100,6 +103,9 @@ public class EmployeesController : ControllerBase
     [HttpPost("sync")]
     public async Task<IActionResult> SyncEmployees([FromQuery] int tenantId)
     {
+        // SECURITY: directory sync is an MSP (NOIT) operation across client tenants.
+        if (!RequireMspAdmin(out var forbid)) return forbid!;
+
         _logger.LogInformation("Employee sync requested for tenant {TenantId}", tenantId);
 
         var result = await _syncService.SyncTenantAsync(tenantId);
@@ -191,6 +197,10 @@ public class EmployeesController : ControllerBase
     [HttpPost("/api/v1/custom-fields/definitions")]
     public async Task<IActionResult> CreateCustomFieldDefinition([FromBody] CreateCustomFieldDefinitionRequest request)
     {
+        // SECURITY: custom-field definitions are shared schema (a null TenantId is
+        // a global definition), so only MSP admins may create them.
+        if (!RequireMspAdmin(out var forbid)) return forbid!;
+
         var definition = new Core.Models.CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
@@ -220,23 +230,22 @@ public class EmployeesController : ControllerBase
 
     // ─── Helpers ──────────────────────────────
 
+    // SECURITY: resolve the tenant filter from the middleware-authorized scope
+    // (derived from the caller's token), NOT from the raw X-Tenant-Id header.
+    // Non-MSP callers are pinned to their own tenant; only MSP admins get the
+    // cross-tenant (null) scope. This prevents a client from listing another
+    // tenant's employees by spoofing or omitting the header.
     private int? ResolveTenantId()
     {
-        var headerVal = Request.Headers["X-Tenant-Id"].FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(headerVal) || headerVal == "all")
-            return null;
+        if (_tenantContext.IsAllTenants) return null; // MSP "all tenants"
+        return _tenantContext.ClientTenantDbId;       // specific authorized tenant
+    }
 
-        // Look up by tenant GUID
-        if (Guid.TryParse(headerVal, out var guid))
-        {
-            var tenant = _db.ClientTenants.AsNoTracking().FirstOrDefault(t => t.TenantId == guid);
-            return tenant?.Id;
-        }
-
-        // Try as int (db ID)
-        if (int.TryParse(headerVal, out var id))
-            return id;
-
-        return null;
+    private bool RequireMspAdmin(out IActionResult? forbid)
+    {
+        if (_tenantContext.IsMspAdmin) { forbid = null; return true; }
+        forbid = StatusCode(StatusCodes.Status403Forbidden,
+            new { error = new { code = "FORBIDDEN", message = "MSP admin role required." } });
+        return false;
     }
 }

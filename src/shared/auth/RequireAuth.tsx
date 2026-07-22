@@ -38,7 +38,12 @@ function RequireAuthMsal({ children }: { children: ReactNode }) {
   const { instance } = useMsal();
 
   const handleLogin = () => {
-    instance.loginRedirect(loginRequest);
+    // loginRedirect returns a promise that rejects if MSAL can't even start the
+    // redirect (e.g. misconfigured redirect URI / interaction already in
+    // progress). Surface it instead of letting the failure vanish silently.
+    instance.loginRedirect(loginRequest).catch((error) => {
+      console.error("KreweConnect login failed to start:", error);
+    });
   };
 
   return (
