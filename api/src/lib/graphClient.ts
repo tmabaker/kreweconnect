@@ -26,6 +26,7 @@ const USER_SELECT_BASE = [
   "userType",
   "assignedLicenses",
   "usageLocation",
+  "otherMails",
 ];
 
 // Optional fields may be unreadable/unselectable depending on tenant + the
@@ -202,6 +203,8 @@ export interface GraphUser {
   assignedLicenses?: Array<{ skuId: string }>;
   /** Per-employee company (e.g. physical location); distinct from the tenant */
   companyName?: string | null;
+  /** Secondary addresses; [0] is used as the personal email by the tools */
+  otherMails?: string[] | null;
   /** Work anniversary source; may be null/unset or a 1604 sentinel in Graph */
   employeeHireDate?: string | null;
   /** Birthday; only the month/day is surfaced. May be null/unset in Graph */
