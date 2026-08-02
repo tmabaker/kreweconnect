@@ -114,7 +114,21 @@ export async function authenticate(request: HttpRequest): Promise<CallerContext>
   const appRoles = Array.isArray(payload.roles) ? (payload.roles as string[]) : [];
   const hasDelegatedScope = scopes.includes("access_as_user");
   const hasAppRole = appRoles.length > 0;
-  if (!hasDelegatedScope && !hasAppRole) {
+  // The scheduled CA-travel sweep authenticates as this application itself
+  // (client credentials for its own API scope). Self-tokens carry neither scp
+  // nor app roles — accept them only when the calling app IS this app and the
+  // token was issued by the MSP tenant. Nobody but the backend's own
+  // credential can mint that combination.
+  const callingAppId =
+    typeof payload.azp === "string"
+      ? payload.azp
+      : typeof payload.appid === "string"
+        ? (payload.appid as string)
+        : "";
+  const isSelfApp =
+    callingAppId.toLowerCase() === config.clientId.toLowerCase() &&
+    tid.toLowerCase() === config.mspTenantId.toLowerCase();
+  if (!hasDelegatedScope && !hasAppRole && !isSelfApp) {
     throw new AuthError(
       "Token is not authorized for this API (missing access_as_user scope).",
       403
