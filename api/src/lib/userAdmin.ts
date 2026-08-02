@@ -63,6 +63,14 @@ function pickProfileFields(input: Record<string, unknown>): Record<string, unkno
   for (const field of PROFILE_FIELDS) {
     if (input[field] !== undefined) out[field] = input[field];
   }
+  // Personal email lives in otherMails[0]; empty string clears it.
+  if (typeof input.personalEmail === "string") {
+    const personal = input.personalEmail.trim();
+    if (personal && !personal.includes("@")) {
+      throw new BadRequestError("personalEmail must be an email address.");
+    }
+    out.otherMails = personal ? [personal] : [];
+  }
   return out;
 }
 
