@@ -140,7 +140,22 @@ export async function updateUser(
   if (Object.keys(patch).length === 0) {
     throw new BadRequestError("No updatable fields in request body.");
   }
-  await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, patch);
+  try {
+    await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, patch);
+  } catch (err) {
+    // Entra refuses app-based writes to privileged users: admins and members
+    // of role-assignable groups. Replace the bare Graph error with the
+    // explanation and the workaround.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/Insufficient privileges/i.test(msg)) {
+      throw new BadRequestError(
+        "Entra blocks app-based edits to this user — they hold an admin role or belong to a " +
+          "role-assignable group. Edit them in the Entra portal, or recreate that group as a " +
+          "regular (non-role-assignable) group so the tools can manage its members."
+      );
+    }
+    throw err;
+  }
   if (typeof input.managerId === "string" && input.managerId) {
     await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(userId)}/manager/$ref`, {
       "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(input.managerId)}`,
