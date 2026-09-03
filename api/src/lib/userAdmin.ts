@@ -11,15 +11,19 @@ import { BadRequestError } from "./http";
 
 /* ── password generation ────────────────────────────────────────────── */
 
-// No ambiguous characters (0/O, 1/l/I); always includes each class.
+// No ambiguous letters (0/O, l/I); always includes each class.
 const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-const DIGIT = "23456789";
+const DIGIT = "123456789";
 const SYMBOL = "?!@#$%&";
 const APPROVED_PASSWORD_LENGTH = 10;
+const MINIMUM_PASSWORD_LENGTH = 8;
 const GEAUX_TENANT_ID = "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa";
 
 export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
+  if (length < MINIMUM_PASSWORD_LENGTH || length > APPROVED_PASSWORD_LENGTH) {
+    throw new BadRequestError("Generated passwords must be between 8 and 10 characters.");
+  }
   const all = LOWER + UPPER + DIGIT + SYMBOL;
   const chars = [
     LOWER[randomInt(LOWER.length)],
@@ -40,15 +44,16 @@ export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
 
 export function validateApprovedPassword(password: string): void {
   if (
-    password.length !== APPROVED_PASSWORD_LENGTH ||
+    password.length < MINIMUM_PASSWORD_LENGTH ||
+    password.length > APPROVED_PASSWORD_LENGTH ||
     !/[a-zA-Z]/.test(password) ||
-    !/[2-9]/.test(password) ||
+    !/[1-9]/.test(password) ||
     !/[?!@#$%&]/.test(password) ||
-    /[^a-zA-Z2-9?!@#$%&]/.test(password) ||
-    /[IlO01]/.test(password)
+    /[^a-zA-Z1-9?!@#$%&]/.test(password) ||
+    /[IlO0]/.test(password)
   ) {
     throw new BadRequestError(
-      "Password must be exactly 10 characters with letters, digits 2-9, and a symbol from ?!@#$%&, without I, l, O, 0, or 1."
+      "Password must be 8 to 10 characters with letters, digits 1-9, and a symbol from ?!@#$%&, without I, l, O, or 0."
     );
   }
 }
@@ -198,7 +203,7 @@ export async function updateUser(
   input: Record<string, unknown>
 ): Promise<GraphUser> {
   const patch = pickProfileFields(input);
-  const hasManagerPatch = typeof input.managerId === "string" && Boolean(input.managerId.trim());
+  const hasManagerPatch = Object.prototype.hasOwnProperty.call(input, "managerId");
   if (Object.keys(patch).length === 0 && !hasManagerPatch) {
     throw new BadRequestError("No updatable fields in request body.");
   }
@@ -221,13 +226,20 @@ export async function updateUser(
     throw err;
   }
   if (hasManagerPatch) {
-    const managerId = validateManagerIdentity(input.managerId as string);
-    if (managerId.toLowerCase() === userId.toLowerCase()) {
-      throw new BadRequestError("A user cannot be their own manager.");
+    if (input.managerId === null || input.managerId === "") {
+      await graphRequest(tenantId, "DELETE", `/users/${encodeURIComponent(userId)}/manager/$ref`);
+    } else {
+      if (typeof input.managerId !== "string") {
+        throw new BadRequestError("managerId must be a unique Entra identity, an empty string, or null.");
+      }
+      const managerId = validateManagerIdentity(input.managerId);
+      if (managerId.toLowerCase() === userId.toLowerCase()) {
+        throw new BadRequestError("A user cannot be their own manager.");
+      }
+      await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(userId)}/manager/$ref`, {
+        "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
+      });
     }
-    await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(userId)}/manager/$ref`, {
-      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
-    });
   }
   return fetchUserById(tenantId, userId);
 }
