@@ -6,18 +6,29 @@
  */
 
 import { randomInt } from "node:crypto";
-import { graphRequest, fetchUserById, type GraphUser } from "./graphClient";
+import {
+  graphRequest,
+  fetchUserById,
+  GraphRequestError,
+  type GraphUser,
+} from "./graphClient";
 import { BadRequestError } from "./http";
 
 /* ── password generation ────────────────────────────────────────────── */
 
-// No ambiguous characters (0/O, 1/l/I); always includes each class.
+// No ambiguous letters (0/O, l/I); always includes each class.
 const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-const DIGIT = "23456789";
-const SYMBOL = "!@#$%&*-+?";
+const DIGIT = "123456789";
+const SYMBOL = "?!@#$%&";
+const APPROVED_PASSWORD_LENGTH = 10;
+const MINIMUM_PASSWORD_LENGTH = 8;
+const GEAUX_TENANT_ID = "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa";
 
-export function generatePassword(length = 16): string {
+export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
+  if (length < MINIMUM_PASSWORD_LENGTH || length > APPROVED_PASSWORD_LENGTH) {
+    throw new BadRequestError("Generated passwords must be between 8 and 10 characters.");
+  }
   const all = LOWER + UPPER + DIGIT + SYMBOL;
   const chars = [
     LOWER[randomInt(LOWER.length)],
@@ -34,6 +45,42 @@ export function generatePassword(length = 16): string {
     [chars[i], chars[j]] = [chars[j], chars[i]];
   }
   return chars.join("");
+}
+
+export function validateApprovedPassword(password: string): void {
+  if (
+    password.length < MINIMUM_PASSWORD_LENGTH ||
+    password.length > APPROVED_PASSWORD_LENGTH ||
+    !/[a-zA-Z]/.test(password) ||
+    !/[1-9]/.test(password) ||
+    !/[?!@#$%&]/.test(password) ||
+    /[^a-zA-Z1-9?!@#$%&]/.test(password) ||
+    /[IlO0]/.test(password)
+  ) {
+    throw new BadRequestError(
+      "Password must be 8 to 10 characters with letters, digits 1-9, and a symbol from ?!@#$%&, without I, l, O, or 0."
+    );
+  }
+}
+
+export function normalizeE164(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (raw.startsWith("+") && digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+  throw new BadRequestError("Phone numbers must be valid E.164 values (for example +12254907649).");
+}
+
+export function validateManagerIdentity(value: string): string {
+  const manager = value.trim();
+  const objectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const upn = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!objectId.test(manager) && !upn.test(manager)) {
+    throw new BadRequestError("managerId must be a unique Entra object ID or user principal name, not a display name.");
+  }
+  return manager;
 }
 
 /* ── create / update ────────────────────────────────────────────────── */
@@ -63,6 +110,13 @@ function pickProfileFields(input: Record<string, unknown>): Record<string, unkno
   for (const field of PROFILE_FIELDS) {
     if (input[field] !== undefined) out[field] = input[field];
   }
+  if (typeof out.mobilePhone === "string") out.mobilePhone = normalizeE164(out.mobilePhone);
+  if (Array.isArray(out.businessPhones)) {
+    out.businessPhones = out.businessPhones.map((phone) => {
+      if (typeof phone !== "string") throw new BadRequestError("businessPhones must contain strings.");
+      return normalizeE164(phone);
+    });
+  }
   // Personal email lives in otherMails[0]; empty string clears it.
   if (typeof input.personalEmail === "string") {
     const personal = input.personalEmail.trim();
@@ -76,9 +130,59 @@ function pickProfileFields(input: Record<string, unknown>): Record<string, unkno
 
 export interface CreateUserResult {
   user: GraphUser;
-  /** Generated only when the caller didn't supply one */
-  password: string;
+  /** Returned only after all credential-delivery prerequisites succeed. */
+  password?: string;
+  deliveryReady: boolean;
+  mfaPhone?: {
+    registered: boolean;
+    phoneLast4: string;
+    warning?: string;
+  };
   licenseWarning?: string;
+}
+
+export interface PhoneAuthenticationMethod {
+  id: string;
+  phoneNumber: string;
+  phoneType: "mobile" | "alternateMobile" | "office";
+  smsSignInState?: string;
+}
+
+/**
+ * Register the verified mobile number as an Entra phone authentication
+ * method. The directory profile's mobilePhone value alone is not MFA
+ * registration, so Geaux onboarding must complete this separate write before
+ * a temporary password is considered ready for delivery.
+ */
+export async function registerMobilePhoneAuthenticationMethod(
+  tenantId: string,
+  userId: string,
+  mobilePhone: string
+): Promise<PhoneAuthenticationMethod> {
+  const phoneNumber = normalizeE164(mobilePhone);
+  if (!phoneNumber) throw new BadRequestError("mobilePhone is required for MFA registration.");
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const method = await graphRequest<PhoneAuthenticationMethod>(
+        tenantId,
+        "POST",
+        `/users/${encodeURIComponent(userId)}/authentication/phoneMethods`,
+        { phoneNumber, phoneType: "mobile" }
+      );
+      return method!;
+    } catch (err) {
+      lastError = err;
+      // A newly-created directory object can briefly return 404 from the
+      // authentication-methods service. Retry only that propagation case.
+      if (!(err instanceof GraphRequestError) || err.status !== 404 || attempt === 3) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+    }
+  }
+  throw lastError;
 }
 
 export async function createUser(
@@ -96,6 +200,14 @@ export async function createUser(
 
   const password =
     typeof input.password === "string" && input.password ? input.password : generatePassword();
+  validateApprovedPassword(password);
+
+  if (
+    tenantId.toLowerCase() === GEAUX_TENANT_ID &&
+    (typeof input.mobilePhone !== "string" || !input.mobilePhone.trim())
+  ) {
+    throw new BadRequestError("mobilePhone is required when creating a Geaux Automotive user.");
+  }
 
   const body: Record<string, unknown> = {
     ...pickProfileFields(input),
@@ -115,6 +227,28 @@ export async function createUser(
 
   const created = (await graphRequest<GraphUser>(tenantId, "POST", "/users", body))!;
 
+  let deliveryReady = true;
+  let mfaPhone: CreateUserResult["mfaPhone"];
+  if (tenantId.toLowerCase() === GEAUX_TENANT_ID) {
+    const normalizedMobile = normalizeE164(String(input.mobilePhone));
+    try {
+      await registerMobilePhoneAuthenticationMethod(tenantId, created.id, normalizedMobile);
+      mfaPhone = {
+        registered: true,
+        phoneLast4: normalizedMobile.slice(-4),
+      };
+    } catch (err) {
+      deliveryReady = false;
+      mfaPhone = {
+        registered: false,
+        phoneLast4: normalizedMobile.slice(-4),
+        warning: `User created, but MFA phone registration failed: ${
+          err instanceof Error ? err.message : "unknown error"
+        }`,
+      };
+    }
+  }
+
   let licenseWarning: string | undefined;
   const skuIds = Array.isArray(input.licenseSkuIds)
     ? input.licenseSkuIds.filter((s): s is string => typeof s === "string")
@@ -131,12 +265,19 @@ export async function createUser(
   }
 
   if (typeof input.managerId === "string" && input.managerId) {
+    const managerId = validateManagerIdentity(input.managerId);
     await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(created.id)}/manager/$ref`, {
-      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(input.managerId)}`,
+      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
     });
   }
 
-  return { user: created, password, licenseWarning };
+  return {
+    user: created,
+    password: deliveryReady ? password : undefined,
+    deliveryReady,
+    mfaPhone,
+    licenseWarning,
+  };
 }
 
 export async function updateUser(
@@ -145,11 +286,14 @@ export async function updateUser(
   input: Record<string, unknown>
 ): Promise<GraphUser> {
   const patch = pickProfileFields(input);
-  if (Object.keys(patch).length === 0) {
+  const hasManagerPatch = Object.prototype.hasOwnProperty.call(input, "managerId");
+  if (Object.keys(patch).length === 0 && !hasManagerPatch) {
     throw new BadRequestError("No updatable fields in request body.");
   }
   try {
-    await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, patch);
+    if (Object.keys(patch).length > 0) {
+      await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, patch);
+    }
   } catch (err) {
     // Entra refuses app-based writes to privileged users: admins and members
     // of role-assignable groups. Replace the bare Graph error with the
@@ -164,10 +308,21 @@ export async function updateUser(
     }
     throw err;
   }
-  if (typeof input.managerId === "string" && input.managerId) {
-    await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(userId)}/manager/$ref`, {
-      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(input.managerId)}`,
-    });
+  if (hasManagerPatch) {
+    if (input.managerId === null || input.managerId === "") {
+      await graphRequest(tenantId, "DELETE", `/users/${encodeURIComponent(userId)}/manager/$ref`);
+    } else {
+      if (typeof input.managerId !== "string") {
+        throw new BadRequestError("managerId must be a unique Entra identity, an empty string, or null.");
+      }
+      const managerId = validateManagerIdentity(input.managerId);
+      if (managerId.toLowerCase() === userId.toLowerCase()) {
+        throw new BadRequestError("A user cannot be their own manager.");
+      }
+      await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(userId)}/manager/$ref`, {
+        "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
+      });
+    }
   }
   return fetchUserById(tenantId, userId);
 }
@@ -181,6 +336,7 @@ export async function resetPassword(
 ): Promise<{ password: string; forceChangePasswordNextSignIn: boolean }> {
   const password =
     typeof input.password === "string" && input.password ? input.password : generatePassword();
+  validateApprovedPassword(password);
   const forceChange = input.forceChangePasswordNextSignIn !== false;
   await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, {
     passwordProfile: { password, forceChangePasswordNextSignIn: forceChange },

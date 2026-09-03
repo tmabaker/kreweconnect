@@ -34,6 +34,7 @@ import {
   listCaPolicies,
   setCaExclusion,
   createTemporaryAccessPass,
+  registerMobilePhoneAuthenticationMethod,
   offboardUser,
   type AutoReplyInput,
   type TapInput,
@@ -102,6 +103,32 @@ app.http("userTemporaryAccessPass", {
       body as unknown as TapInput
     );
     return { status: 201, jsonBody: tap };
+  }),
+});
+
+app.http("userMfaPhone", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/users/{userId}/mfaPhone",
+  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+    const body = await readJsonBody(request);
+    if (typeof body.mobilePhone !== "string" || !body.mobilePhone.trim()) {
+      throw new BadRequestError("mobilePhone is required for MFA registration.");
+    }
+    const method = await registerMobilePhoneAuthenticationMethod(
+      tenantId,
+      requireParam(request, "userId"),
+      body.mobilePhone
+    );
+    return {
+      status: 201,
+      jsonBody: {
+        registered: true,
+        methodId: method.id,
+        phoneLast4: method.phoneNumber.slice(-4),
+        phoneType: method.phoneType,
+      },
+    };
   }),
 });
 
