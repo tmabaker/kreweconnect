@@ -27,6 +27,11 @@ const USER_SELECT_BASE = [
   "assignedLicenses",
   "usageLocation",
   "otherMails",
+  "streetAddress",
+  "city",
+  "state",
+  "postalCode",
+  "country",
 ];
 
 // Optional fields may be unreadable/unselectable depending on tenant + the
@@ -195,6 +200,11 @@ export interface GraphUser {
   mail: string | null;
   businessPhones: string[];
   mobilePhone: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
   userPrincipalName: string;
   accountEnabled: boolean;
   /** "Member" or "Guest" — guests are excluded from the directory. */

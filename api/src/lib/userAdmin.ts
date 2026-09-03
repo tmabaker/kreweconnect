@@ -15,9 +15,11 @@ import { BadRequestError } from "./http";
 const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGIT = "23456789";
-const SYMBOL = "!@#$%&*-+?";
+const SYMBOL = "?!@#$%&";
+const APPROVED_PASSWORD_LENGTH = 10;
+const GEAUX_TENANT_ID = "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa";
 
-export function generatePassword(length = 16): string {
+export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
   const all = LOWER + UPPER + DIGIT + SYMBOL;
   const chars = [
     LOWER[randomInt(LOWER.length)],
@@ -34,6 +36,41 @@ export function generatePassword(length = 16): string {
     [chars[i], chars[j]] = [chars[j], chars[i]];
   }
   return chars.join("");
+}
+
+export function validateApprovedPassword(password: string): void {
+  if (
+    password.length !== APPROVED_PASSWORD_LENGTH ||
+    !/[a-zA-Z]/.test(password) ||
+    !/[2-9]/.test(password) ||
+    !/[?!@#$%&]/.test(password) ||
+    /[^a-zA-Z2-9?!@#$%&]/.test(password) ||
+    /[IlO01]/.test(password)
+  ) {
+    throw new BadRequestError(
+      "Password must be exactly 10 characters with letters, digits 2-9, and a symbol from ?!@#$%&, without I, l, O, 0, or 1."
+    );
+  }
+}
+
+export function normalizeE164(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (raw.startsWith("+") && digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+  throw new BadRequestError("Phone numbers must be valid E.164 values (for example +12254907649).");
+}
+
+export function validateManagerIdentity(value: string): string {
+  const manager = value.trim();
+  const objectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const upn = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!objectId.test(manager) && !upn.test(manager)) {
+    throw new BadRequestError("managerId must be a unique Entra object ID or user principal name, not a display name.");
+  }
+  return manager;
 }
 
 /* ── create / update ────────────────────────────────────────────────── */
@@ -62,6 +99,13 @@ function pickProfileFields(input: Record<string, unknown>): Record<string, unkno
   const out: Record<string, unknown> = {};
   for (const field of PROFILE_FIELDS) {
     if (input[field] !== undefined) out[field] = input[field];
+  }
+  if (typeof out.mobilePhone === "string") out.mobilePhone = normalizeE164(out.mobilePhone);
+  if (Array.isArray(out.businessPhones)) {
+    out.businessPhones = out.businessPhones.map((phone) => {
+      if (typeof phone !== "string") throw new BadRequestError("businessPhones must contain strings.");
+      return normalizeE164(phone);
+    });
   }
   // Personal email lives in otherMails[0]; empty string clears it.
   if (typeof input.personalEmail === "string") {
@@ -96,6 +140,14 @@ export async function createUser(
 
   const password =
     typeof input.password === "string" && input.password ? input.password : generatePassword();
+  validateApprovedPassword(password);
+
+  if (
+    tenantId.toLowerCase() === GEAUX_TENANT_ID &&
+    (typeof input.mobilePhone !== "string" || !input.mobilePhone.trim())
+  ) {
+    throw new BadRequestError("mobilePhone is required when creating a Geaux Automotive user.");
+  }
 
   const body: Record<string, unknown> = {
     ...pickProfileFields(input),
@@ -131,8 +183,9 @@ export async function createUser(
   }
 
   if (typeof input.managerId === "string" && input.managerId) {
+    const managerId = validateManagerIdentity(input.managerId);
     await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(created.id)}/manager/$ref`, {
-      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(input.managerId)}`,
+      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
     });
   }
 
@@ -145,11 +198,14 @@ export async function updateUser(
   input: Record<string, unknown>
 ): Promise<GraphUser> {
   const patch = pickProfileFields(input);
-  if (Object.keys(patch).length === 0) {
+  const hasManagerPatch = typeof input.managerId === "string" && Boolean(input.managerId.trim());
+  if (Object.keys(patch).length === 0 && !hasManagerPatch) {
     throw new BadRequestError("No updatable fields in request body.");
   }
   try {
-    await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, patch);
+    if (Object.keys(patch).length > 0) {
+      await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, patch);
+    }
   } catch (err) {
     // Entra refuses app-based writes to privileged users: admins and members
     // of role-assignable groups. Replace the bare Graph error with the
@@ -164,9 +220,13 @@ export async function updateUser(
     }
     throw err;
   }
-  if (typeof input.managerId === "string" && input.managerId) {
+  if (hasManagerPatch) {
+    const managerId = validateManagerIdentity(input.managerId as string);
+    if (managerId.toLowerCase() === userId.toLowerCase()) {
+      throw new BadRequestError("A user cannot be their own manager.");
+    }
     await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(userId)}/manager/$ref`, {
-      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(input.managerId)}`,
+      "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
     });
   }
   return fetchUserById(tenantId, userId);
@@ -181,6 +241,7 @@ export async function resetPassword(
 ): Promise<{ password: string; forceChangePasswordNextSignIn: boolean }> {
   const password =
     typeof input.password === "string" && input.password ? input.password : generatePassword();
+  validateApprovedPassword(password);
   const forceChange = input.forceChangePasswordNextSignIn !== false;
   await graphRequest(tenantId, "PATCH", `/users/${encodeURIComponent(userId)}`, {
     passwordProfile: { password, forceChangePasswordNextSignIn: forceChange },
