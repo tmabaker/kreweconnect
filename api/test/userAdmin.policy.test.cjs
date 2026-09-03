@@ -51,3 +51,19 @@ test('manager-only updates support both assignment and explicit clearing', () =>
   assert.match(source, /"DELETE", `\/users\/\$\{encodeURIComponent\(userId\)\}\/manager\/\$ref`/);
   assert.match(source, /"PUT", `\/users\/\$\{encodeURIComponent\(userId\)\}\/manager\/\$ref`/);
 });
+
+test('Geaux creation treats MFA registration as a credential-delivery gate', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'userAdmin.ts'), 'utf8');
+  assert.match(source, /authentication\/phoneMethods/);
+  assert.match(source, /phoneType:\s*"mobile"/);
+  assert.match(source, /deliveryReady:\s*boolean/);
+  assert.match(source, /password:\s*deliveryReady \? password : undefined/);
+  assert.match(source, /phoneLast4/);
+});
+
+test('MFA retry endpoint returns only nonsecret phone metadata', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'functions', 'userAdmin.ts'), 'utf8');
+  assert.match(source, /route:\s*"tenants\/\{tenantId\}\/users\/\{userId\}\/mfaPhone"/);
+  assert.match(source, /phoneLast4:\s*method\.phoneNumber\.slice\(-4\)/);
+  assert.doesNotMatch(source, /jsonBody:\s*\{[^}]*phoneNumber:/s);
+});

@@ -6,7 +6,12 @@
  */
 
 import { randomInt } from "node:crypto";
-import { graphRequest, fetchUserById, type GraphUser } from "./graphClient";
+import {
+  graphRequest,
+  fetchUserById,
+  GraphRequestError,
+  type GraphUser,
+} from "./graphClient";
 import { BadRequestError } from "./http";
 
 /* ── password generation ────────────────────────────────────────────── */
@@ -125,9 +130,59 @@ function pickProfileFields(input: Record<string, unknown>): Record<string, unkno
 
 export interface CreateUserResult {
   user: GraphUser;
-  /** Generated only when the caller didn't supply one */
-  password: string;
+  /** Returned only after all credential-delivery prerequisites succeed. */
+  password?: string;
+  deliveryReady: boolean;
+  mfaPhone?: {
+    registered: boolean;
+    phoneLast4: string;
+    warning?: string;
+  };
   licenseWarning?: string;
+}
+
+export interface PhoneAuthenticationMethod {
+  id: string;
+  phoneNumber: string;
+  phoneType: "mobile" | "alternateMobile" | "office";
+  smsSignInState?: string;
+}
+
+/**
+ * Register the verified mobile number as an Entra phone authentication
+ * method. The directory profile's mobilePhone value alone is not MFA
+ * registration, so Geaux onboarding must complete this separate write before
+ * a temporary password is considered ready for delivery.
+ */
+export async function registerMobilePhoneAuthenticationMethod(
+  tenantId: string,
+  userId: string,
+  mobilePhone: string
+): Promise<PhoneAuthenticationMethod> {
+  const phoneNumber = normalizeE164(mobilePhone);
+  if (!phoneNumber) throw new BadRequestError("mobilePhone is required for MFA registration.");
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const method = await graphRequest<PhoneAuthenticationMethod>(
+        tenantId,
+        "POST",
+        `/users/${encodeURIComponent(userId)}/authentication/phoneMethods`,
+        { phoneNumber, phoneType: "mobile" }
+      );
+      return method!;
+    } catch (err) {
+      lastError = err;
+      // A newly-created directory object can briefly return 404 from the
+      // authentication-methods service. Retry only that propagation case.
+      if (!(err instanceof GraphRequestError) || err.status !== 404 || attempt === 3) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+    }
+  }
+  throw lastError;
 }
 
 export async function createUser(
@@ -172,6 +227,28 @@ export async function createUser(
 
   const created = (await graphRequest<GraphUser>(tenantId, "POST", "/users", body))!;
 
+  let deliveryReady = true;
+  let mfaPhone: CreateUserResult["mfaPhone"];
+  if (tenantId.toLowerCase() === GEAUX_TENANT_ID) {
+    const normalizedMobile = normalizeE164(String(input.mobilePhone));
+    try {
+      await registerMobilePhoneAuthenticationMethod(tenantId, created.id, normalizedMobile);
+      mfaPhone = {
+        registered: true,
+        phoneLast4: normalizedMobile.slice(-4),
+      };
+    } catch (err) {
+      deliveryReady = false;
+      mfaPhone = {
+        registered: false,
+        phoneLast4: normalizedMobile.slice(-4),
+        warning: `User created, but MFA phone registration failed: ${
+          err instanceof Error ? err.message : "unknown error"
+        }`,
+      };
+    }
+  }
+
   let licenseWarning: string | undefined;
   const skuIds = Array.isArray(input.licenseSkuIds)
     ? input.licenseSkuIds.filter((s): s is string => typeof s === "string")
@@ -194,7 +271,13 @@ export async function createUser(
     });
   }
 
-  return { user: created, password, licenseWarning };
+  return {
+    user: created,
+    password: deliveryReady ? password : undefined,
+    deliveryReady,
+    mfaPhone,
+    licenseWarning,
+  };
 }
 
 export async function updateUser(
