@@ -113,6 +113,28 @@ function mapError(err: unknown, context: InvocationContext): HttpResponseInit {
 }
 
 /**
+ * Wraps the user-management writes an invited client user may perform
+ * (create user, update user, reset password, license/group edits). On top of
+ * withAuth: MSP staff always pass; a client caller passes only when named in
+ * CLIENT_USER_ALLOWLIST for their own tenant (withAuth already restricts them
+ * to that tenant). The target must be one concrete tenant — never "all".
+ */
+export function withUserManageAuth(handler: Handler) {
+  return withAuth(async (request, caller, tenantId) => {
+    if (!caller.canManageUsers) {
+      throw new AuthError(
+        "This account is not authorized for user management. Contact NOIT Group.",
+        403
+      );
+    }
+    if (tenantId === "all") {
+      throw new BadRequestError("Write operations require a specific tenant, not 'all'.");
+    }
+    return handler(request, caller, tenantId);
+  });
+}
+
+/**
  * Wraps a handler that changes directory state. On top of withAuth:
  * only MSP (NOIT) staff may call, and the target must be one concrete
  * tenant — never the "all" aggregate.

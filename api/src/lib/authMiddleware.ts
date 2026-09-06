@@ -18,6 +18,14 @@ export interface CallerContext {
   tenantId: string;
   /** Whether the caller is from the MSP (NOIT) tenant */
   isMspAdmin: boolean;
+  /**
+   * Whether the caller may perform the user-management writes exposed to
+   * invited client users (create user, update user, reset password, and the
+   * license/group edits that are part of Modify). True for all MSP admins;
+   * true for a client caller only when CLIENT_USER_ALLOWLIST names them for
+   * their own tenant.
+   */
+  canManageUsers: boolean;
   userObjectId: string;
   userPrincipalName: string;
 }
@@ -135,16 +143,31 @@ export async function authenticate(request: HttpRequest): Promise<CallerContext>
     );
   }
 
+  const isMspAdmin = tid.toLowerCase() === config.mspTenantId.toLowerCase();
+  const userObjectId = typeof payload.oid === "string" ? payload.oid : "";
+  const userPrincipalName =
+    typeof payload.upn === "string"
+      ? payload.upn
+      : typeof payload.preferred_username === "string"
+        ? payload.preferred_username
+        : "";
+
+  // Invited client users: named in CLIENT_USER_ALLOWLIST for their own tenant
+  // (by object id or UPN, case-insensitive). MSP admins always qualify.
+  let canManageUsers = isMspAdmin;
+  if (!isMspAdmin) {
+    const allowed = config.clientUserAllowlist.get(tid.toLowerCase());
+    canManageUsers =
+      !!allowed &&
+      (allowed.has(userObjectId.toLowerCase()) || allowed.has(userPrincipalName.toLowerCase()));
+  }
+
   return {
     tenantId: tid,
-    isMspAdmin: tid.toLowerCase() === config.mspTenantId.toLowerCase(),
-    userObjectId: typeof payload.oid === "string" ? payload.oid : "",
-    userPrincipalName:
-      typeof payload.upn === "string"
-        ? payload.upn
-        : typeof payload.preferred_username === "string"
-          ? payload.preferred_username
-          : "",
+    isMspAdmin,
+    canManageUsers,
+    userObjectId,
+    userPrincipalName,
   };
 }
 

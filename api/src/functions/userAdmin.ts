@@ -20,7 +20,7 @@
  */
 
 import { app, type HttpRequest } from "@azure/functions";
-import { withAuth, withMspWriteAuth, readJsonBody, BadRequestError } from "../lib/http";
+import { withAuth, withMspWriteAuth, withUserManageAuth, readJsonBody, BadRequestError } from "../lib/http";
 import {
   resetPassword,
   revokeSessions,
@@ -59,7 +59,7 @@ app.http("userResetPassword", {
   methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/password",
-  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+  handler: withUserManageAuth(async (request, caller, tenantId) => {
     const body = await readJsonBody(request).catch(() => ({}) as Record<string, unknown>);
     const userId = requireParam(request, "userId");
     const result = await resetPassword(tenantId, userId, body);
@@ -67,7 +67,8 @@ app.http("userResetPassword", {
     // Optionally vault the new password in IT Glue. A failure here must not
     // fail the reset (the password is already changed) — report it instead.
     let itGlue: { saved: boolean; id?: string; action?: string; folder?: string; warning?: string } | undefined;
-    if (body.saveToItGlue === true) {
+    // IT Glue vaulting is NOIT's documentation store — MSP staff only.
+    if (body.saveToItGlue === true && caller.isMspAdmin) {
       try {
         const user = await fetchUserById(tenantId, userId);
         const saved = await savePasswordToItGlue({
@@ -188,7 +189,7 @@ app.http("userSetLicenses", {
   methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/licenses",
-  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+  handler: withUserManageAuth(async (request, _caller, tenantId) => {
     const body = await readJsonBody(request);
     const add = Array.isArray(body.add)
       ? body.add.filter((s): s is string => typeof s === "string")
@@ -230,7 +231,7 @@ app.http("userGroups", {
   methods: ["GET", "POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/users/{userId}/groups",
-  handler: withMspWriteAuth(async (request, _caller, tenantId) => {
+  handler: withUserManageAuth(async (request, _caller, tenantId) => {
     const userId = requireParam(request, "userId");
     if (request.method === "GET") {
       const groups = await listUserGroups(tenantId, userId);
@@ -256,7 +257,7 @@ app.http("tenantGroups", {
   methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   route: "tenants/{tenantId}/groups",
-  handler: withMspWriteAuth(async (_request, _caller, tenantId) => {
+  handler: withUserManageAuth(async (_request, _caller, tenantId) => {
     const groups = await listGroups(tenantId);
     return { status: 200, jsonBody: { value: groups } };
   }),

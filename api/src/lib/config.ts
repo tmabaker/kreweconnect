@@ -32,6 +32,40 @@ export const config = {
     return process.env.CONSENT_REDIRECT_URI || "https://krewesuite.noitgroup.com/app/kreweconnect/";
   },
   /**
+   * Invited client users allowed to manage users in their OWN tenant through
+   * the tech-tools pages (create user, update user, reset password, and the
+   * license/group edits that are part of Modify). Reads (the KreweConnect
+   * directory) are not affected by this list. Configure via the
+   * CLIENT_USER_ALLOWLIST app setting: a JSON object mapping tenant id to an
+   * array of user object ids and/or UPNs, e.g.
+   *   { "<tenantId>": ["<oid>", "user@client.com"] }
+   * Matching is case-insensitive. Default: empty (no client user may write).
+   */
+  get clientUserAllowlist(): Map<string, Set<string>> {
+    const out = new Map<string, Set<string>>();
+    const raw = process.env.CLIENT_USER_ALLOWLIST;
+    if (!raw) return out;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const [tenantId, users] of Object.entries(parsed)) {
+          if (!Array.isArray(users)) continue;
+          out.set(
+            tenantId.toLowerCase(),
+            new Set(
+              users
+                .filter((u): u is string => typeof u === "string" && u.trim() !== "")
+                .map((u) => u.trim().toLowerCase())
+            )
+          );
+        }
+      }
+    } catch {
+      // malformed setting — treat as empty; writes stay MSP-only
+    }
+    return out;
+  },
+  /**
    * Client tenants to merge in the MSP "all clients" view. Configure via the
    * CLIENT_TENANTS app setting (JSON array of {id,name}); defaults to the pilot
    * tenant. Tenants that haven't consented are skipped gracefully at fetch time.

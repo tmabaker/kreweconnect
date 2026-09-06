@@ -13,7 +13,7 @@
  */
 
 import { app } from "@azure/functions";
-import { withAuth, withMspWriteAuth, readJsonBody } from "../lib/http";
+import { withAuth, withUserManageAuth, readJsonBody } from "../lib/http";
 import { checkTenantAuthorization } from "../lib/tokenService";
 import {
   fetchUsers,
@@ -81,7 +81,7 @@ const listUsersHandler = withAuth(async (request, caller, tenantId) => {
   return { status: 200, jsonBody: { value: users } };
 });
 
-const createUserHandler = withMspWriteAuth(async (request, _caller, tenantId) => {
+const createUserHandler = withUserManageAuth(async (request, _caller, tenantId) => {
   const body = await readJsonBody(request);
   const result = await createUser(tenantId, body);
   return { status: 201, jsonBody: result };
@@ -102,7 +102,7 @@ const getUserHandler = withAuth(async (request, _caller, tenantId) => {
   return { status: 200, jsonBody: user };
 });
 
-const updateUserHandler = withMspWriteAuth(async (request, _caller, tenantId) => {
+const updateUserHandler = withUserManageAuth(async (request, _caller, tenantId) => {
   const body = await readJsonBody(request);
   const user = await updateUser(tenantId, request.params.userId || "", body);
   return { status: 200, jsonBody: user };
