@@ -67,3 +67,14 @@ test('MFA retry endpoint returns only nonsecret phone metadata', () => {
   assert.match(source, /phoneLast4:\s*method\.phoneNumber\.slice\(-4\)/);
   assert.doesNotMatch(source, /jsonBody:\s*\{[^}]*phoneNumber:/s);
 });
+
+test('Geaux creation requires and pre-resolves a direct manager before account creation', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'userAdmin.ts'), 'utf8');
+  const managerGate = source.indexOf('A direct manager must be selected before creating a Geaux Automotive user.');
+  const managerLookup = source.indexOf('manager = await fetchUserById(tenantId, managerId)');
+  const accountCreate = source.indexOf('"POST", "/users", body');
+  assert.ok(managerGate > -1);
+  assert.ok(managerLookup > managerGate);
+  assert.ok(accountCreate > managerLookup);
+  assert.match(source, /email: manager\.mail \|\| manager\.userPrincipalName/);
+});
