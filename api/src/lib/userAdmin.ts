@@ -130,6 +130,12 @@ function pickProfileFields(input: Record<string, unknown>): Record<string, unkno
 
 export interface CreateUserResult {
   user: GraphUser;
+  /** Manager resolved before creation so Geaux onboarding cannot use a free-text identity. */
+  manager?: {
+    id: string;
+    displayName: string;
+    email: string;
+  };
   /** Returned only after all credential-delivery prerequisites succeed. */
   password?: string;
   deliveryReady: boolean;
@@ -208,6 +214,24 @@ export async function createUser(
   ) {
     throw new BadRequestError("mobilePhone is required when creating a Geaux Automotive user.");
   }
+  const isGeaux = tenantId.toLowerCase() === GEAUX_TENANT_ID;
+  if (isGeaux && (typeof input.managerId !== "string" || !input.managerId.trim())) {
+    throw new BadRequestError(
+      "A direct manager must be selected before creating a Geaux Automotive user."
+    );
+  }
+
+  let manager: GraphUser | undefined;
+  let managerId: string | undefined;
+  if (typeof input.managerId === "string" && input.managerId.trim()) {
+    managerId = validateManagerIdentity(input.managerId);
+    if (managerId.toLowerCase() === userPrincipalName.toLowerCase()) {
+      throw new BadRequestError("A user cannot be their own manager.");
+    }
+    // Resolve before creating the user. A stale or invalid selection must fail
+    // without leaving an orphaned account that has no direct manager.
+    manager = await fetchUserById(tenantId, managerId);
+  }
 
   const body: Record<string, unknown> = {
     ...pickProfileFields(input),
@@ -264,8 +288,7 @@ export async function createUser(
     }
   }
 
-  if (typeof input.managerId === "string" && input.managerId) {
-    const managerId = validateManagerIdentity(input.managerId);
+  if (managerId) {
     await graphRequest(tenantId, "PUT", `/users/${encodeURIComponent(created.id)}/manager/$ref`, {
       "@odata.id": `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(managerId)}`,
     });
@@ -275,6 +298,13 @@ export async function createUser(
     user: created,
     password: deliveryReady ? password : undefined,
     deliveryReady,
+    manager: manager
+      ? {
+          id: manager.id,
+          displayName: manager.displayName,
+          email: manager.mail || manager.userPrincipalName,
+        }
+      : undefined,
     mfaPhone,
     licenseWarning,
   };
