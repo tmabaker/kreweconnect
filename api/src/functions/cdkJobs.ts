@@ -111,7 +111,6 @@ app.http("cdkJobSubmit", {
         state: "queued",
         operation,
         assignment,
-        ...(password ? { temporaryPassword: password } : {}),
       },
     };
   }),
