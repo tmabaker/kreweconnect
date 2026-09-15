@@ -1,0 +1,481 @@
+{
+  "client": "geaux",
+  "displayName": "Geaux Automotive",
+  "version": "1.0.0",
+  "status": "PRODUCTION with review-gated matrix rows",
+  "updated": "2026-09-15",
+  "enterpriseId": "E256191",
+  "dmsBox": "C209656",
+  "commandCenterUrl": "https://admin.connectcdk.com/enterprise/E256191/users",
+  "tenantIds": [
+    "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa"
+  ],
+  "tenantDomains": [
+    "geauxautomotive.com",
+    "expressautogroup.com",
+    "gulfautodirect.com"
+  ],
+  "credentialRef": {
+    "system": "itglue",
+    "organization": "Geaux Automotive",
+    "account": "support@geauxautomotive.com",
+    "note": "Values live in IT Glue only. Never copy them into this file."
+  },
+  "passwordDelivery": {
+    "channel": "callrail",
+    "separateFromMicrosoft": true,
+    "senderRef": "geaux-callrail-number",
+    "template": "Your CDK temporary password is xxxxxxxx. This is for CDK only and is not your email password. You will be asked to change it and set up multi-factor authentication the first time you sign in. For help, email support@geauxautomotive.com.",
+    "placeholder": "xxxxxxxx",
+    "sendWhen": "resolution.cdkRequired is true",
+    "note": "Wording is DRAFT pending Tammy's sign off. Once approved it must be mirrored into the live CallRail Quick Text and the bridge template."
+  },
+  "stores": {
+    "Geaux Chevrolet - Laplace": {
+      "prefix": "GC",
+      "dmsCompany": "11",
+      "storeId": "S100118414",
+      "storeName": "Geaux Chevrolet, LLC"
+    },
+    "Express Chevrolet - Brownsville": {
+      "prefix": "ECGMC",
+      "dmsCompany": "15",
+      "storeId": "S100154509",
+      "storeName": "Express Brownsville Chevrolet GMC"
+    },
+    "Express Chevrolet - Dyersburg": {
+      "prefix": "ED",
+      "dmsCompany": "16",
+      "storeId": "S100163829",
+      "storeName": "Express Dyersburg Chevrolet Buick GMC"
+    },
+    "Express Chevrolet - Terry": {
+      "prefix": "ET",
+      "dmsCompany": "18",
+      "storeId": "S100182891",
+      "storeName": "Express Terry Chevrolet GMC"
+    },
+    "Geaux CDJR - Plaquemine": {
+      "prefix": "GCDJR",
+      "dmsCompany": "19",
+      "storeId": "S100182950",
+      "storeName": "Geaux Chrysler Dodge Jeep Ram"
+    },
+    "Geaux Chevrolet - West": {
+      "prefix": "GCW",
+      "dmsCompany": "20",
+      "storeId": "S100187469",
+      "storeName": "Geaux Chevrolet West"
+    },
+    "Geaux Ford - Waveland": {
+      "prefix": "GF",
+      "dmsCompany": "21",
+      "storeId": "S000501773",
+      "storeName": "Geaux Ford"
+    },
+    "Gulf Auto Direct - Waveland": {
+      "prefix": "GAD",
+      "dmsCompany": "22",
+      "storeId": "S000504024",
+      "storeName": "Gulf Auto Direct"
+    },
+    "Geaux Ford - Denham Springs": {
+      "prefix": "GFDS",
+      "dmsCompany": "23",
+      "storeId": "S200303084",
+      "storeName": "Geaux Ford of Denham Springs"
+    },
+    "Geaux CDJR - Denham Springs": {
+      "prefix": "GDS",
+      "dmsCompany": "24",
+      "storeId": "S200303080",
+      "storeName": "Geaux CDJR Denham Springs"
+    },
+    "Volvo - Baton Rouge": {
+      "prefix": "GV",
+      "dmsCompany": "25",
+      "storeId": "S200303081",
+      "storeName": "Geaux Volvo"
+    },
+    "Geaux SuperCenter - Baton Rouge": {
+      "prefix": "GSC",
+      "dmsCompany": "25",
+      "storeId": "S200303081",
+      "storeName": "Geaux Volvo (shared box, pending review)"
+    },
+    "Geaux Automotive - Corporate": {
+      "prefix": null,
+      "dmsCompany": null,
+      "storeId": "S000501104",
+      "storeName": "Geaux Mgmt Company",
+      "note": "Corporate access is per need: AC plus assigned store sets. Confirm scope with Tammy."
+    }
+  },
+  "titles": {
+    "Service Technician": {
+      "profile": "STECH",
+      "accounts": [
+        "S"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ]
+    },
+    "Service Lube Technician": {
+      "profile": "STECH",
+      "accounts": [
+        "S"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ]
+    },
+    "Service Advisor": {
+      "profile": "SADV",
+      "accounts": [
+        "S"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ]
+    },
+    "BDC Service": {
+      "profile": "SADV",
+      "accounts": [
+        "S"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ]
+    },
+    "Service Manager": {
+      "profile": "SVMGR",
+      "accounts": [
+        "S",
+        "I"
+      ],
+      "roles": [
+        "ServiceEdge Web",
+        "Timeclock User"
+      ]
+    },
+    "Parts Advisor": {
+      "profile": "PCTR",
+      "accounts": [
+        "I"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ]
+    },
+    "Parts Manager": {
+      "profile": "PTMGR",
+      "accounts": [
+        "I",
+        "S"
+      ],
+      "roles": [
+        "ServiceEdge Web",
+        "Cloud Printing"
+      ]
+    },
+    "Sales Advisor": {
+      "access": "none",
+      "note": "No CDK access. Confirmed by Tammy 2026-09-11."
+    },
+    "BDC Sales": {
+      "profile": "SLSP",
+      "accounts": [
+        "SL",
+        "V"
+      ],
+      "roles": [
+        "CDK Hub User"
+      ]
+    },
+    "Fleet Sales Advisor": {
+      "profile": "SLSP",
+      "accounts": [
+        "SL",
+        "V"
+      ],
+      "roles": [
+        "CDK Hub User"
+      ],
+      "review": true
+    },
+    "Sales Manager": {
+      "profile": "SLMGR",
+      "accounts": [
+        "SL",
+        "V",
+        "FI"
+      ],
+      "roles": [
+        "CDK Hub User",
+        "F&I User-eSign"
+      ]
+    },
+    "Fleet Sales Manager": {
+      "profile": "SLMGR",
+      "accounts": [
+        "SL",
+        "V",
+        "FI"
+      ],
+      "roles": [
+        "CDK Hub User",
+        "F&I User-eSign"
+      ],
+      "review": true
+    },
+    "General Sales Manager": {
+      "profile": "GSM",
+      "accounts": [
+        "SL",
+        "V",
+        "FI"
+      ],
+      "roles": [
+        "CDK Hub User",
+        "F&I User-eSign"
+      ]
+    },
+    "Inventory Manager": {
+      "profile": "SLMGR",
+      "accounts": [
+        "SL",
+        "V"
+      ],
+      "roles": [
+        "CDK Hub User"
+      ],
+      "review": true
+    },
+    "F&I Manager": {
+      "profile": "FIMGR",
+      "accounts": [
+        "FI",
+        "V",
+        "SL"
+      ],
+      "roles": [
+        "F&I User-eSign",
+        "Document Management Platform"
+      ]
+    },
+    "Office Manager": {
+      "profile": "AGOFF",
+      "accounts": [
+        "A",
+        "AC",
+        "FI",
+        "I",
+        "S",
+        "SL",
+        "V",
+        "CM"
+      ],
+      "roles": [
+        "Office Manager",
+        "1099 Preparer",
+        "AR Manager",
+        "Document Management Platform"
+      ]
+    },
+    "General Manager": {
+      "profile": "GM",
+      "accounts": [
+        "A",
+        "AC",
+        "FI",
+        "I",
+        "S",
+        "SL",
+        "V"
+      ],
+      "roles": [
+        "CDK Hub User",
+        "TechView",
+        "Timeclock User"
+      ]
+    },
+    "Fixed Operations Manager": {
+      "profile": "FOMGR",
+      "accounts": [
+        "S",
+        "I",
+        "AC"
+      ],
+      "roles": [
+        "ServiceEdge Web",
+        "Timeclock User"
+      ],
+      "review": true
+    },
+    "Controller": {
+      "profile": "MSTR",
+      "accounts": [
+        "AC",
+        "A"
+      ],
+      "roles": [
+        "Office Manager",
+        "GL Apprentice",
+        "PO Accounting Manager"
+      ],
+      "review": true
+    },
+    "Accounting - Billing": {
+      "profile": "AGOFF",
+      "accounts": [
+        "AC",
+        "A"
+      ],
+      "roles": [
+        "GL Apprentice"
+      ],
+      "review": true
+    },
+    "Accounting - Clerk": {
+      "profile": "AGOFF",
+      "accounts": [
+        "AC",
+        "A"
+      ],
+      "roles": [
+        "GL Apprentice"
+      ],
+      "review": true
+    },
+    "Accounting - Payables": {
+      "profile": "AGOFF",
+      "accounts": [
+        "AC",
+        "A"
+      ],
+      "roles": [
+        "AP Clerk"
+      ],
+      "review": true
+    },
+    "Cashier": {
+      "profile": "PSCASH",
+      "accounts": [
+        "S"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ],
+      "review": true
+    },
+    "Receptionist": {
+      "profile": "PSCASH",
+      "accounts": [
+        "S"
+      ],
+      "roles": [],
+      "review": true
+    },
+    "Body Shop Manager": {
+      "profile": "SVMGR",
+      "accounts": [
+        "S",
+        "SB"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ],
+      "review": true
+    },
+    "Body Shop Estimator": {
+      "profile": "SADV",
+      "accounts": [
+        "S",
+        "SB"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ],
+      "review": true
+    },
+    "Body Shop Technician": {
+      "profile": "STECH",
+      "accounts": [
+        "S",
+        "SB"
+      ],
+      "roles": [
+        "ServiceEdge Web"
+      ],
+      "review": true
+    },
+    "Chief Executive Officer": {
+      "access": "manual",
+      "note": "Executive access is assigned per need with Tammy's sign off."
+    },
+    "Chief Financial Officer": {
+      "access": "manual",
+      "note": "Executive access is assigned per need with Tammy's sign off."
+    },
+    "Chief Operating Officer": {
+      "access": "manual",
+      "note": "Executive access is assigned per need with Tammy's sign off."
+    },
+    "Chief Marketing Officer": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Executive Assistant": {
+      "access": "manual",
+      "note": "Assigned per need; confirm with the executive they support."
+    },
+    "Marketing Assistant": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Marketing Director": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Human Resources Assistant": {
+      "access": "none",
+      "note": "No CDK access by default. Timeclock needs go through payroll tooling."
+    },
+    "Human Resources Director": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Human Resources Intern": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Detailer": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Porter": {
+      "access": "none",
+      "note": "No CDK access by default."
+    },
+    "Runner": {
+      "access": "none",
+      "note": "No CDK access by default."
+    }
+  },
+  "departmentOverrides": {},
+  "literalAccounts": [
+    "AC"
+  ],
+  "standards": [
+    "MFA on in Command Center from day one.",
+    "One named account per person; no shared logins.",
+    "CDK access ends the same day Microsoft access ends: disable the Command Center user AND the Drive DMS user.",
+    "Enterprise Administrator stays restricted to NOIT plus owner designated corporate staff."
+  ],
+  "offboardingSteps": [
+    "Disable the user in CDK Command Center (admin.connectcdk.com, enterprise E256191).",
+    "Confirm the linked Drive DMS user on box C209656 shows disabled.",
+    "Verify both surfaces show disabled; a submitted request is not proof."
+  ]
+}
