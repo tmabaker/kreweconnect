@@ -32,6 +32,7 @@ const USER_SELECT_BASE = [
   "state",
   "postalCode",
   "country",
+  "onPremisesExtensionAttributes",
 ];
 
 // Optional fields may be unreadable/unselectable depending on tenant + the
@@ -205,6 +206,8 @@ export interface GraphUser {
   state?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  /** Geaux extensionAttribute1 stores the assigned endpoint name. */
+  onPremisesExtensionAttributes?: Record<string, string | null> | null;
   userPrincipalName: string;
   accountEnabled: boolean;
   /** "Member" or "Guest" — guests are excluded from the directory. */

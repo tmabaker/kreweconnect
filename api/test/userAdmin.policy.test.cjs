@@ -7,6 +7,7 @@ const {
   normalizeE164,
   validateApprovedPassword,
   validateManagerIdentity,
+  normalizeEndpointName,
 } = require('../dist/src/lib/userAdmin.js');
 
 test('generated passwords satisfy the approved 10-character policy', () => {
@@ -42,6 +43,14 @@ test('manager must be a unique directory identity', () => {
   assert.equal(validateManagerIdentity('manager@geauxautomotive.com'), 'manager@geauxautomotive.com');
   assert.equal(validateManagerIdentity('d5fe2f90-0be4-4d02-a378-f085aeb8f413'), 'd5fe2f90-0be4-4d02-a378-f085aeb8f413');
   assert.throws(() => validateManagerIdentity('Jane Manager'), /display name/);
+});
+
+test('Geaux endpoint names normalize and fail closed', () => {
+  assert.equal(normalizeEndpointName('ga-btrc-pc2', true), 'GA-BTRC-PC2');
+  assert.equal(normalizeEndpointName('', false), '');
+  assert.throws(() => normalizeEndpointName('', true), /required/);
+  assert.throws(() => normalizeEndpointName('bad endpoint', true), /3 to 15/);
+  assert.throws(() => normalizeEndpointName('GA-BTRC-PC-TOO-LONG', true), /3 to 15/);
 });
 
 test('manager-only updates support both assignment and explicit clearing', () => {
@@ -104,4 +113,12 @@ test('Geaux creation requires and pre-resolves a direct manager before account c
   assert.ok(managerLookup > managerGate);
   assert.ok(accountCreate > managerLookup);
   assert.match(source, /email: manager\.mail \|\| manager\.userPrincipalName/);
+});
+
+test('Geaux creation and modification persist Endpoint Name in extensionAttribute1', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'userAdmin.ts'), 'utf8');
+  assert.ok(source.includes("normalizeEndpointName(input.endpointName, true)"));
+  assert.ok(source.includes("body.onPremisesExtensionAttributes = { extensionAttribute1: endpointName }"));
+  assert.ok(source.includes("hasOwnProperty.call(input, \"endpointName\")"));
+  assert.ok(source.includes("extensionAttribute1: normalizeEndpointName(input.endpointName) || null"));
 });
