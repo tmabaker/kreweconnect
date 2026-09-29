@@ -94,3 +94,21 @@ jobs:
           api_location: "api"
           output_location: ""
           skip_app_build: true
+
+      - name: Verify production API readiness
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          for attempt in {1..18}; do
+            health="$(curl --fail --silent --show-error https://krewesuite.noitgroup.com/api/health || true)"
+            if HEALTH="$health" node -e '
+              const health = JSON.parse(process.env.HEALTH || "{}");
+              if (health.ok !== true || health.settings?.CDK_STORAGE_CONNECTION !== true) process.exit(1);
+            '; then
+              echo "KreweConnect API and CDK lifecycle storage are ready."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::KreweConnect production readiness check failed."
+          exit 1

@@ -15,6 +15,13 @@ export class BadRequestError extends Error {
   }
 }
 
+export class ServiceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 /**
  * Cross-origin support. The static techtools portal pages (served from a
  * different origin than this SWA) call these routes with the signed-in
@@ -88,6 +95,12 @@ function mapError(err: unknown, context: InvocationContext): HttpResponseInit {
   }
   if (err instanceof BadRequestError) {
     return { status: 400, jsonBody: { code: "bad_request", message: err.message } };
+  }
+  if (err instanceof ServiceUnavailableError) {
+    return {
+      status: 503,
+      jsonBody: { code: "service_unavailable", message: err.message },
+    };
   }
   if (err instanceof TenantNotAuthorizedError) {
     return {
