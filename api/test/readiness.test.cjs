@@ -24,3 +24,14 @@ test("deployment is not ready when CDK lifecycle storage is absent", () => {
   assert.equal(settings.CDK_STORAGE_CONNECTION, false);
   assert.equal(deploymentReady(settings), false);
 });
+
+test("deployment readiness accepts the production Azure setting aliases", () => {
+  const settings = deploymentSettings({
+    Azure_Client_ID: "client",
+    AZURE_CLIENT_SECRET: "secret",
+    MSP_Tenant_ID: "tenant",
+    CONSENT_REDIRECT_URI: "https://example.test/consent",
+    CDK_STORAGE_CONNECTION: "storage",
+  });
+  assert.equal(deploymentReady(settings), true);
+});
