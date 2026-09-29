@@ -8,9 +8,9 @@ export type DeploymentSettings = {
 
 export function deploymentSettings(env: NodeJS.ProcessEnv = process.env): DeploymentSettings {
   return {
-    AZURE_CLIENT_ID: Boolean(env.AZURE_CLIENT_ID),
+    AZURE_CLIENT_ID: Boolean(env.AZURE_CLIENT_ID || env.Azure_Client_ID),
     AZURE_CLIENT_SECRET: Boolean(env.AZURE_CLIENT_SECRET),
-    MSP_TENANT_ID: Boolean(env.MSP_TENANT_ID),
+    MSP_TENANT_ID: Boolean(env.MSP_TENANT_ID || env.MSP_Tenant_ID),
     CONSENT_REDIRECT_URI: Boolean(env.CONSENT_REDIRECT_URI),
     CDK_STORAGE_CONNECTION: Boolean(env.CDK_STORAGE_CONNECTION),
   };
