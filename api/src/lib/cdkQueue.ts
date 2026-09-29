@@ -1,5 +1,6 @@
 import { BlobServiceClient } from "@azure/storage-blob";
 import { QueueClient } from "@azure/storage-queue";
+import { ServiceUnavailableError } from "./http";
 
 const QUEUE = "cdk-jobs";
 const STATUS = "cdkjobstatus";
@@ -7,7 +8,11 @@ const SECRETS = "cdkjobsecrets";
 
 function connection(): string {
   const value = process.env.CDK_STORAGE_CONNECTION;
-  if (!value) throw new Error("CDK job storage is not configured.");
+  if (!value) {
+    throw new ServiceUnavailableError(
+      "CDK lifecycle storage is unavailable. No CDK job was created."
+    );
+  }
   return value;
 }
 
