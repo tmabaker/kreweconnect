@@ -29,8 +29,9 @@ test("no access titles never queue CDK", () => {
 });
 
 test("DMS user ids are derived without manager input", () => {
-  assert.equal(deriveDmsUserId("Charles", "Landry"), "clandry");
-  assert.equal(deriveDmsUserId("Jean", "D'Arcy-Smith"), "jdarcysm");
+  assert.equal(deriveDmsUserId("Charles", "Landry"), "landryc");
+  assert.equal(deriveDmsUserId("Jean", "D'Arcy-Smith"), "darcysmithj");
+  assert.equal(deriveDmsUserId("Christopher", "Spicer"), "spicerc");
 });
 
 test("CDK temporary passwords use the protected deployment setting", () => {

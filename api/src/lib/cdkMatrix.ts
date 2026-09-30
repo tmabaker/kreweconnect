@@ -67,9 +67,9 @@ export function resolveCDK(company: string, department: string, title: string): 
 }
 
 export function deriveDmsUserId(firstName: string, lastName: string): string {
-  const clean = (firstName.slice(0, 1) + lastName).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const clean = (lastName + firstName.slice(0, 1)).toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!clean) throw new BadRequestError("A CDK DMS user ID could not be derived from the employee name.");
-  return clean.slice(0, 8);
+  return clean;
 }
 
 export function temporaryPassword(env: NodeJS.ProcessEnv = process.env): string {
