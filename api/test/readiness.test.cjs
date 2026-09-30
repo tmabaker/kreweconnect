@@ -11,12 +11,19 @@ const complete = {
   MSP_TENANT_ID: "tenant",
   CONSENT_REDIRECT_URI: "https://example.test/consent",
   CDK_STORAGE_CONNECTION: "storage",
+  CDK_INITIAL_PASSWORD: "configured",
 };
 
 test("deployment readiness includes CDK lifecycle storage", () => {
   const settings = deploymentSettings(complete);
   assert.equal(settings.CDK_STORAGE_CONNECTION, true);
   assert.equal(deploymentReady(settings), true);
+});
+
+test("deployment is not ready when the CDK initial password is absent", () => {
+  const settings = deploymentSettings({ ...complete, CDK_INITIAL_PASSWORD: "" });
+  assert.equal(settings.CDK_INITIAL_PASSWORD, false);
+  assert.equal(deploymentReady(settings), false);
 });
 
 test("deployment is not ready when CDK lifecycle storage is absent", () => {
@@ -32,6 +39,7 @@ test("deployment readiness accepts the production Azure setting aliases", () => 
     MSP_Tenant_ID: "tenant",
     CONSENT_REDIRECT_URI: "https://example.test/consent",
     CDK_STORAGE_CONNECTION: "storage",
+    CDK_INITIAL_PASSWORD: "configured",
   });
   assert.equal(deploymentReady(settings), true);
 });

@@ -103,9 +103,9 @@ jobs:
             health="$(curl --fail --silent --show-error https://krewesuite.noitgroup.com/api/health || true)"
             if HEALTH="$health" node -e '
               const health = JSON.parse(process.env.HEALTH || "{}");
-              if (health.ok !== true || health.settings?.CDK_STORAGE_CONNECTION !== true) process.exit(1);
+              if (health.ok !== true || health.settings?.CDK_STORAGE_CONNECTION !== true || health.settings?.CDK_INITIAL_PASSWORD !== true) process.exit(1);
             '; then
-              echo "KreweConnect API and CDK lifecycle storage are ready."
+              echo "KreweConnect API, CDK storage, and the protected initial password are ready."
               exit 0
             fi
             sleep 10

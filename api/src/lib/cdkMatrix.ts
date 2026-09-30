@@ -1,5 +1,5 @@
 import matrix from "../config/geaux-cdk.json";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { BadRequestError } from "./http";
 
 export const GEAUX_TENANT_ID = "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa";
@@ -72,10 +72,10 @@ export function deriveDmsUserId(firstName: string, lastName: string): string {
   return clean.slice(0, 8);
 }
 
-export function temporaryPassword(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$";
-  const bytes = randomBytes(18);
-  return Array.from(bytes, value => alphabet[value % alphabet.length]).join("");
+export function temporaryPassword(env: NodeJS.ProcessEnv = process.env): string {
+  const value = String(env.CDK_INITIAL_PASSWORD || "");
+  if (!value) throw new Error("CDK_INITIAL_PASSWORD is not configured.");
+  return value;
 }
 
 export function newJobId(): string {
