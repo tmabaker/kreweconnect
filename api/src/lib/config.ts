@@ -148,25 +148,19 @@ export const config = {
     return process.env.GEAUX_SUPPORT_MAILBOX || "support@geauxautomotive.com";
   },
   get geauxManagerMailSubject(): string {
-    return process.env.GEAUX_MANAGER_MAIL_SUBJECT || "";
+    return process.env.GEAUX_MANAGER_MAIL_SUBJECT || "Geaux Automotive Temporary Credentials";
   },
   get geauxManagerMailTriggerHeader(): string {
-    return process.env.GEAUX_MANAGER_MAIL_TRIGGER_HEADER || "";
+    return process.env.GEAUX_MANAGER_MAIL_TRIGGER_HEADER || "X-NOIT-Credential-Delivery";
   },
   get geauxManagerMailTriggerValue(): string {
-    return process.env.GEAUX_MANAGER_MAIL_TRIGGER_VALUE || "";
+    return process.env.GEAUX_MANAGER_MAIL_TRIGGER_VALUE || "geaux-manager-password";
   },
   get geauxManagerMailAppliedHeader(): string {
-    return process.env.GEAUX_MANAGER_MAIL_APPLIED_HEADER || "";
+    return process.env.GEAUX_MANAGER_MAIL_APPLIED_HEADER || "X-NOIT-Encryption-Applied";
   },
   get geauxManagerMailAppliedValue(): string {
-    return process.env.GEAUX_MANAGER_MAIL_APPLIED_VALUE || "";
-  },
-  get geauxMailClientId(): string {
-    return process.env.GEAUX_MAIL_CLIENT_ID || "";
-  },
-  get geauxMailClientSecret(): string {
-    return process.env.GEAUX_MAIL_CLIENT_SECRET || "";
+    return process.env.GEAUX_MANAGER_MAIL_APPLIED_VALUE || "true";
   },
 
   /* ── IT Glue (optional password vaulting) ─────────────────────────── */
