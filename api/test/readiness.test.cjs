@@ -11,11 +11,22 @@ const complete = {
   MSP_TENANT_ID: "tenant",
   CONSENT_REDIRECT_URI: "https://example.test/consent",
   CDK_STORAGE_CONNECTION: "storage",
+  CALLRAIL_API_KEY: "callrail-secret",
+  CALLRAIL_ACCOUNT_ID: "account",
+  CALLRAIL_TRACKING_NUMBER: "+15045550100",
+  GEAUX_MANAGER_MAIL_SUBJECT: "established encrypted subject",
+  GEAUX_MANAGER_MAIL_TRIGGER_HEADER: "X-NOIT-Credential-Delivery",
+  GEAUX_MANAGER_MAIL_TRIGGER_VALUE: "geaux-manager-password",
+  GEAUX_MANAGER_MAIL_APPLIED_HEADER: "X-NOIT-Encryption-Applied",
+  GEAUX_MANAGER_MAIL_APPLIED_VALUE: "true",
+  GEAUX_MAIL_CLIENT_ID: "mail-client",
+  GEAUX_MAIL_CLIENT_SECRET: "mail-secret",
 };
 
-test("deployment readiness includes CDK lifecycle storage", () => {
+test("deployment readiness includes every lifecycle dependency", () => {
   const settings = deploymentSettings(complete);
   assert.equal(settings.CDK_STORAGE_CONNECTION, true);
+  assert.equal(settings.CALLRAIL_API_KEY, true);
   assert.equal(deploymentReady(settings), true);
 });
 
@@ -25,13 +36,19 @@ test("deployment is not ready when CDK lifecycle storage is absent", () => {
   assert.equal(deploymentReady(settings), false);
 });
 
+test("deployment is not ready when CallRail delivery is absent", () => {
+  const settings = deploymentSettings({ ...complete, CALLRAIL_API_KEY: "" });
+  assert.equal(settings.CALLRAIL_API_KEY, false);
+  assert.equal(deploymentReady(settings), false);
+});
+
 test("deployment readiness accepts the production Azure setting aliases", () => {
   const settings = deploymentSettings({
+    ...complete,
     Azure_Client_ID: "client",
-    AZURE_CLIENT_SECRET: "secret",
     MSP_Tenant_ID: "tenant",
-    CONSENT_REDIRECT_URI: "https://example.test/consent",
-    CDK_STORAGE_CONNECTION: "storage",
+    AZURE_CLIENT_ID: "",
+    MSP_TENANT_ID: "",
   });
   assert.equal(deploymentReady(settings), true);
 });

@@ -13,6 +13,7 @@ import {
   type GraphUser,
 } from "./graphClient";
 import { BadRequestError } from "./http";
+import { deliverGeauxCredentials, type CredentialDeliveryResult } from "./credentialDelivery";
 
 /* ── password generation ────────────────────────────────────────────── */
 
@@ -136,9 +137,8 @@ export interface CreateUserResult {
     displayName: string;
     email: string;
   };
-  /** Returned only after all credential-delivery prerequisites succeed. */
-  password?: string;
   deliveryReady: boolean;
+  credentialDelivery?: CredentialDeliveryResult;
   mfaPhone?: {
     registered: boolean;
     phoneLast4: string;
@@ -294,10 +294,23 @@ export async function createUser(
     });
   }
 
+  let credentialDelivery: CredentialDeliveryResult | undefined;
+  if (isGeaux && deliveryReady && manager) {
+    credentialDelivery = await deliverGeauxCredentials({
+      tenantId,
+      mobilePhone: normalizeE164(String(input.mobilePhone)),
+      managerEmail: manager.mail || manager.userPrincipalName,
+      employeeDisplayName: created.displayName,
+      employeeUpn: created.userPrincipalName,
+      password,
+    });
+    deliveryReady = credentialDelivery.complete;
+  }
+
   return {
     user: created,
-    password: deliveryReady ? password : undefined,
     deliveryReady,
+    credentialDelivery,
     manager: manager
       ? {
           id: manager.id,

@@ -57,8 +57,35 @@ test('Geaux creation treats MFA registration as a credential-delivery gate', () 
   assert.match(source, /authentication\/phoneMethods/);
   assert.match(source, /phoneType:\s*"mobile"/);
   assert.match(source, /deliveryReady:\s*boolean/);
-  assert.match(source, /password:\s*deliveryReady \? password : undefined/);
+  assert.doesNotMatch(source, /password:\s*deliveryReady \? password : undefined/);
+  assert.match(source, /deliverGeauxCredentials/);
+  assert.match(source, /credentialDelivery\.complete/);
   assert.match(source, /phoneLast4/);
+});
+
+test('credential delivery executes CallRail before manager mail and returns metadata only', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'credentialDelivery.ts'), 'utf8');
+  const text = source.indexOf('await sendCallRailPassword');
+  const mail = source.indexOf('await sendManagerCredentialEmail');
+  assert.ok(text > -1 && mail > text);
+  assert.match(source, /destinationLast4/);
+  assert.match(source, /messageId/);
+  assert.doesNotMatch(source, /password:\s*input\.password/);
+  assert.match(source, /Employee delivery must succeed first/);
+});
+
+test('manager mail uses the send-only app and verifies final delivery with KreweConnect', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'credentialDelivery.ts'), 'utf8');
+  assert.match(source, /getMailSendToken/);
+  assert.match(source, /geauxMailClientId/);
+  assert.match(source, /\/sendMail/);
+  assert.match(source, /mailFolders\/inbox\/messages/);
+  assert.match(source, /geauxManagerMailTriggerHeader/);
+  assert.match(source, /geauxManagerMailAppliedHeader/);
+  assert.match(source, /Outlook encryption marker/);
+  assert.match(source, /encryptionVerified: true/);
+  assert.match(source, /Manager mail was accepted by Graph but was not verified/);
+  assert.match(source, /messageId: delivered\.id/);
 });
 
 test('MFA retry endpoint returns only nonsecret phone metadata', () => {
