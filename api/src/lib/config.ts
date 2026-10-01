@@ -147,6 +147,12 @@ export const config = {
   get geauxSupportMailbox(): string {
     return process.env.GEAUX_SUPPORT_MAILBOX || "support@geauxautomotive.com";
   },
+  get geauxMailClientId(): string {
+    return process.env.GEAUX_MAIL_CLIENT_ID || "";
+  },
+  get geauxMailClientSecret(): string {
+    return process.env.GEAUX_MAIL_CLIENT_SECRET || "";
+  },
   get geauxManagerMailSubject(): string {
     return process.env.GEAUX_MANAGER_MAIL_SUBJECT || "Geaux Automotive Temporary Credentials";
   },
