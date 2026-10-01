@@ -87,10 +87,10 @@ test('credential delivery executes CallRail before manager mail and returns meta
   assert.match(source, /Employee delivery must succeed first/);
 });
 
-test('manager mail uses the existing tenant Graph app and verifies final delivery', () => {
+test('manager mail uses the send-only app and verifies final delivery with the tenant Graph app', () => {
   const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'credentialDelivery.ts'), 'utf8');
-  assert.match(source, /getAppToken/);
-  assert.doesNotMatch(source, /geauxMailClientId/);
+  assert.match(source, /getMailSendToken/);
+  assert.match(source, /geauxMailClientId/);
   assert.match(source, /\/sendMail/);
   assert.match(source, /mailFolders\/inbox\/messages/);
   assert.match(source, /geauxManagerMailTriggerHeader/);

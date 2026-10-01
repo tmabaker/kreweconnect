@@ -8,6 +8,8 @@ export type DeploymentSettings = {
   CALLRAIL_API_KEY: boolean;
   CALLRAIL_ACCOUNT_ID: boolean;
   CALLRAIL_TRACKING_NUMBER: boolean;
+  GEAUX_MAIL_CLIENT_ID: boolean;
+  GEAUX_MAIL_CLIENT_SECRET: boolean;
 };
 
 export function deploymentSettings(env: NodeJS.ProcessEnv = process.env): DeploymentSettings {
@@ -21,6 +23,8 @@ export function deploymentSettings(env: NodeJS.ProcessEnv = process.env): Deploy
     CALLRAIL_API_KEY: Boolean(env.CALLRAIL_API_KEY),
     CALLRAIL_ACCOUNT_ID: Boolean(env.CALLRAIL_ACCOUNT_ID),
     CALLRAIL_TRACKING_NUMBER: Boolean(env.CALLRAIL_TRACKING_NUMBER),
+    GEAUX_MAIL_CLIENT_ID: Boolean(env.GEAUX_MAIL_CLIENT_ID),
+    GEAUX_MAIL_CLIENT_SECRET: Boolean(env.GEAUX_MAIL_CLIENT_SECRET),
   };
 }
 
