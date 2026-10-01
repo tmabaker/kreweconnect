@@ -6,7 +6,7 @@
 import { app } from "@azure/functions";
 import { deploymentReady, deploymentSettings } from "../lib/readiness";
 
-const API_VERSION = "0.6.0"; // bump when API behavior changes
+const API_VERSION = "0.7.0"; // bump when API behavior changes
 
 app.http("health", {
   methods: ["GET"],

@@ -5,3 +5,4 @@ import "./functions/health";
 import "./functions/me";
 
 import "./functions/cdkJobs";
+import "./functions/vendorJobs";

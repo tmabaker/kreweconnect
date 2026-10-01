@@ -134,6 +134,41 @@ export const config = {
     return process.env.ANNIVERSARY_ATTRIBUTE || "";
   },
 
+  /* ── Geaux credential delivery (required in production) ─────────── */
+  get callRailApiKey(): string {
+    return process.env.CALLRAIL_API_KEY || "";
+  },
+  get callRailAccountId(): string {
+    return process.env.CALLRAIL_ACCOUNT_ID || "";
+  },
+  get callRailTrackingNumber(): string {
+    return process.env.CALLRAIL_TRACKING_NUMBER || "";
+  },
+  get geauxSupportMailbox(): string {
+    return process.env.GEAUX_SUPPORT_MAILBOX || "support@geauxautomotive.com";
+  },
+  get geauxManagerMailSubject(): string {
+    return process.env.GEAUX_MANAGER_MAIL_SUBJECT || "";
+  },
+  get geauxManagerMailTriggerHeader(): string {
+    return process.env.GEAUX_MANAGER_MAIL_TRIGGER_HEADER || "";
+  },
+  get geauxManagerMailTriggerValue(): string {
+    return process.env.GEAUX_MANAGER_MAIL_TRIGGER_VALUE || "";
+  },
+  get geauxManagerMailAppliedHeader(): string {
+    return process.env.GEAUX_MANAGER_MAIL_APPLIED_HEADER || "";
+  },
+  get geauxManagerMailAppliedValue(): string {
+    return process.env.GEAUX_MANAGER_MAIL_APPLIED_VALUE || "";
+  },
+  get geauxMailClientId(): string {
+    return process.env.GEAUX_MAIL_CLIENT_ID || "";
+  },
+  get geauxMailClientSecret(): string {
+    return process.env.GEAUX_MAIL_CLIENT_SECRET || "";
+  },
+
   /* ── IT Glue (optional password vaulting) ─────────────────────────── */
   get itGlueApiKey(): string {
     return process.env.ITGLUE_API_KEY || "";

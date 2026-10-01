@@ -13,6 +13,7 @@ import {
   type GraphUser,
 } from "./graphClient";
 import { BadRequestError } from "./http";
+import { deliverGeauxCredentials, type CredentialDeliveryResult } from "./credentialDelivery";
 
 /* ── password generation ────────────────────────────────────────────── */
 
@@ -24,6 +25,25 @@ const SYMBOL = "?!@#$%&";
 const APPROVED_PASSWORD_LENGTH = 10;
 const MINIMUM_PASSWORD_LENGTH = 8;
 const GEAUX_TENANT_ID = "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa";
+const ENDPOINT_NAME = /^[A-Z0-9][A-Z0-9-]{2,14}$/;
+
+export function normalizeEndpointName(value: unknown, required = false): string {
+  if (typeof value !== "string") {
+    if (!required && (value === undefined || value === null)) return "";
+    throw new BadRequestError("endpointName must be a computer name.");
+  }
+  const endpoint = value.trim().toUpperCase();
+  if (!endpoint) {
+    if (required) throw new BadRequestError("Endpoint Name is required for every Geaux user.");
+    return "";
+  }
+  if (!ENDPOINT_NAME.test(endpoint)) {
+    throw new BadRequestError(
+      "Endpoint Name must be 3 to 15 letters, numbers, or hyphens, beginning with a letter or number."
+    );
+  }
+  return endpoint;
+}
 
 export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
   if (length < MINIMUM_PASSWORD_LENGTH || length > APPROVED_PASSWORD_LENGTH) {
@@ -136,9 +156,8 @@ export interface CreateUserResult {
     displayName: string;
     email: string;
   };
-  /** Returned only after all credential-delivery prerequisites succeed. */
-  password?: string;
   deliveryReady: boolean;
+  credentialDelivery?: CredentialDeliveryResult;
   mfaPhone?: {
     registered: boolean;
     phoneLast4: string;
@@ -220,6 +239,7 @@ export async function createUser(
       "A direct manager must be selected before creating a Geaux Automotive user."
     );
   }
+  const endpointName = isGeaux ? normalizeEndpointName(input.endpointName, true) : "";
 
   let manager: GraphUser | undefined;
   let managerId: string | undefined;
@@ -248,6 +268,9 @@ export async function createUser(
   };
   // License assignment requires usageLocation; default to US when omitted.
   if (!body.usageLocation) body.usageLocation = "US";
+  if (isGeaux) {
+    body.onPremisesExtensionAttributes = { extensionAttribute1: endpointName };
+  }
 
   const created = (await graphRequest<GraphUser>(tenantId, "POST", "/users", body))!;
 
@@ -294,10 +317,23 @@ export async function createUser(
     });
   }
 
+  let credentialDelivery: CredentialDeliveryResult | undefined;
+  if (isGeaux && deliveryReady && manager) {
+    credentialDelivery = await deliverGeauxCredentials({
+      tenantId,
+      mobilePhone: normalizeE164(String(input.mobilePhone)),
+      managerEmail: manager.mail || manager.userPrincipalName,
+      employeeDisplayName: created.displayName,
+      employeeUpn: created.userPrincipalName,
+      password,
+    });
+    deliveryReady = credentialDelivery.complete;
+  }
+
   return {
     user: created,
-    password: deliveryReady ? password : undefined,
     deliveryReady,
+    credentialDelivery,
     manager: manager
       ? {
           id: manager.id,
@@ -317,6 +353,15 @@ export async function updateUser(
 ): Promise<GraphUser> {
   const patch = pickProfileFields(input);
   const hasManagerPatch = Object.prototype.hasOwnProperty.call(input, "managerId");
+  const hasEndpointPatch = Object.prototype.hasOwnProperty.call(input, "endpointName");
+  if (hasEndpointPatch) {
+    if (tenantId.toLowerCase() !== GEAUX_TENANT_ID) {
+      throw new BadRequestError("Endpoint Name is currently supported only for Geaux Automotive.");
+    }
+    patch.onPremisesExtensionAttributes = {
+      extensionAttribute1: normalizeEndpointName(input.endpointName) || null,
+    };
+  }
   if (Object.keys(patch).length === 0 && !hasManagerPatch) {
     throw new BadRequestError("No updatable fields in request body.");
   }
