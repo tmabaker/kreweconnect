@@ -29,14 +29,13 @@ test("no access titles never queue CDK", () => {
 });
 
 test("DMS user ids are derived without manager input", () => {
-  assert.equal(deriveDmsUserId("Charles", "Landry"), "clandry");
-  assert.equal(deriveDmsUserId("Jean", "D'Arcy-Smith"), "jdarcysm");
+  assert.equal(deriveDmsUserId("Charles", "Landry"), "landryc");
+  assert.equal(deriveDmsUserId("Jean", "D'Arcy-Smith"), "darcysmithj");
+  assert.equal(deriveDmsUserId("Christopher", "Spicer"), "spicerc");
 });
 
-test("CDK temporary passwords are generated in memory", () => {
-  const first = temporaryPassword();
-  const second = temporaryPassword();
-  assert.equal(first.length, 18);
-  assert.notEqual(first, second);
-  assert.match(first, /^[A-Za-z0-9!@#$]+$/);
+test("CDK temporary passwords use the protected deployment setting", () => {
+  const configured = "Configured9!";
+  assert.equal(temporaryPassword({ CDK_INITIAL_PASSWORD: configured }), configured);
+  assert.throws(() => temporaryPassword({}), /CDK_INITIAL_PASSWORD/);
 });

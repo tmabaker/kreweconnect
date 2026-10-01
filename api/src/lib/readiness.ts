@@ -4,6 +4,7 @@ export type DeploymentSettings = {
   MSP_TENANT_ID: boolean;
   CONSENT_REDIRECT_URI: boolean;
   CDK_STORAGE_CONNECTION: boolean;
+  CDK_INITIAL_PASSWORD: boolean;
   VENDOR_STORAGE_CONNECTION: boolean;
   CALLRAIL_API_KEY: boolean;
   CALLRAIL_ACCOUNT_ID: boolean;
@@ -19,6 +20,7 @@ export function deploymentSettings(env: NodeJS.ProcessEnv = process.env): Deploy
     MSP_TENANT_ID: Boolean(env.MSP_TENANT_ID || env.MSP_Tenant_ID),
     CONSENT_REDIRECT_URI: Boolean(env.CONSENT_REDIRECT_URI),
     CDK_STORAGE_CONNECTION: Boolean(env.CDK_STORAGE_CONNECTION),
+    CDK_INITIAL_PASSWORD: Boolean(env.CDK_INITIAL_PASSWORD),
     VENDOR_STORAGE_CONNECTION: Boolean(env.VENDOR_STORAGE_CONNECTION || env.CDK_STORAGE_CONNECTION),
     CALLRAIL_API_KEY: Boolean(env.CALLRAIL_API_KEY),
     CALLRAIL_ACCOUNT_ID: Boolean(env.CALLRAIL_ACCOUNT_ID),
