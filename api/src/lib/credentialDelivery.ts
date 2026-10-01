@@ -2,11 +2,10 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config";
 import { submitLifecycleFailureAlert } from "./vendorQueue";
 import { graphRequest } from "./graphClient";
+import { getAppToken } from "./tokenService";
 
 const CALLRAIL_BASE = "https://api.callrail.com/v3";
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
-const TOKEN_SCOPE = "https://graph.microsoft.com/.default";
-let mailToken: { value: string; expiresAt: number } | null = null;
 
 export type DeliveryStatus = "sent" | "failed" | "not_attempted";
 
@@ -50,8 +49,6 @@ function callRailSettingsError(): string | null {
 
 function mailSettingsError(): string | null {
   const missing = [
-    ["GEAUX_MAIL_CLIENT_ID", config.geauxMailClientId],
-    ["GEAUX_MAIL_CLIENT_SECRET", config.geauxMailClientSecret],
     ["GEAUX_MANAGER_MAIL_SUBJECT", config.geauxManagerMailSubject],
     ["GEAUX_MANAGER_MAIL_TRIGGER_HEADER", config.geauxManagerMailTriggerHeader],
     ["GEAUX_MANAGER_MAIL_TRIGGER_VALUE", config.geauxManagerMailTriggerValue],
@@ -61,32 +58,6 @@ function mailSettingsError(): string | null {
   return missing.length
     ? `Required manager mail settings are missing: ${missing.join(", ")}.`
     : null;
-}
-
-async function getMailSendToken(tenantId: string): Promise<string> {
-  if (mailToken && Date.now() < mailToken.expiresAt - 120_000) return mailToken.value;
-  const body = new URLSearchParams({
-    client_id: config.geauxMailClientId,
-    client_secret: config.geauxMailClientSecret,
-    grant_type: "client_credentials",
-    scope: TOKEN_SCOPE,
-  });
-  const response = await fetch(
-    `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    }
-  );
-  if (!response.ok) throw new Error(`Manager mail authentication failed with HTTP ${response.status}.`);
-  const token = await response.json() as { access_token?: string; expires_in?: number };
-  if (!token.access_token) throw new Error("Manager mail authentication returned no access token.");
-  mailToken = {
-    value: token.access_token,
-    expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
-  };
-  return mailToken.value;
 }
 
 const DELIVERY_ATTEMPTS = 10;
@@ -201,7 +172,7 @@ export async function sendManagerCredentialEmail(
   const subject = `${config.geauxManagerMailSubject}: ${employeeDisplayName}`;
   try {
     if (submit) {
-      const token = await getMailSendToken(tenantId);
+      const token = await getAppToken(tenantId);
       const response = await fetch(`${GRAPH_BASE}/users/${encodeURIComponent(sender)}/sendMail`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
