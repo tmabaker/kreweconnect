@@ -70,3 +70,35 @@ export async function getVendorJobStatus(id: string): Promise<Record<string, unk
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
 }
+
+
+export type LifecycleFailureAlertJob = {
+  id: string;
+  kind: "failure_alert";
+  component: "callRail" | "managerEmail";
+  operation: "credential_delivery";
+  requestedBy: string;
+  submittedAt: string;
+  userName: string;
+  userUpn: string;
+  attempts: number;
+  diagnostics: string[];
+};
+
+export async function submitLifecycleFailureAlert(job: LifecycleFailureAlertJob): Promise<void> {
+  await initializeVendorStorage();
+  const initial = JSON.stringify({
+    id: job.id,
+    kind: job.kind,
+    component: job.component,
+    operation: job.operation,
+    state: "queued",
+    attempt: 0,
+    deliveryAttempts: job.attempts,
+    submittedAt: job.submittedAt,
+  });
+  await container().getBlockBlobClient(job.id + ".json").upload(initial, Buffer.byteLength(initial), {
+    blobHTTPHeaders: { blobContentType: "application/json" },
+  });
+  await queue().sendMessage(Buffer.from(JSON.stringify(job)).toString("base64"));
+}

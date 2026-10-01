@@ -25,6 +25,7 @@ test("CallRail delivery uses the approved sender, recipient, and fleet template"
     const result = await sendCallRailPassword("+12255550123", "Abcdef1!");
     assert.deepEqual(result, {
       status: "sent",
+      accepted: true,
       destinationLast4: "0123",
       messageId: "message-123",
     });

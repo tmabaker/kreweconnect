@@ -74,9 +74,13 @@ test('Geaux creation treats MFA registration as a credential-delivery gate', () 
 
 test('credential delivery executes CallRail before manager mail and returns metadata only', () => {
   const source = readFileSync(join(__dirname, '..', 'src', 'lib', 'credentialDelivery.ts'), 'utf8');
-  const text = source.indexOf('await sendCallRailPassword');
-  const mail = source.indexOf('await sendManagerCredentialEmail');
+  const text = source.indexOf('sendCallRailPassword(input.mobilePhone');
+  const mail = source.indexOf('sendManagerCredentialEmail(', text);
   assert.ok(text > -1 && mail > text);
+  assert.match(source, /DELIVERY_ATTEMPTS = 10/);
+  assert.match(source, /submitLifecycleFailureAlert/);
+  assert.match(source, /component: "callRail"/);
+  assert.match(source, /component: "managerEmail"/);
   assert.match(source, /destinationLast4/);
   assert.match(source, /messageId/);
   assert.doesNotMatch(source, /password:\s*input\.password/);

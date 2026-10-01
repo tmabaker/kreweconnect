@@ -16,6 +16,8 @@ test('vendor lifecycle jobs initialize both provider states before queueing', ()
   assert.match(source, /routeOne: \{ state: "queued" \}/);
   assert.match(source, /sendMessage\(Buffer\.from\(JSON\.stringify\(job\)\)\.toString\("base64"\)\)/);
   assert.match(source, /VENDOR_STORAGE_CONNECTION \|\| process\.env\.CDK_STORAGE_CONNECTION/);
+  assert.match(source, /submitLifecycleFailureAlert/);
+  assert.match(source, /kind: "failure_alert"/);
 });
 
 test('vendor lifecycle API exposes submit and authoritative status routes', () => {
