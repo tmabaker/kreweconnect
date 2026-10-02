@@ -9,28 +9,25 @@ const {
   validateManagerIdentity,
   normalizeEndpointName,
 } = require('../dist/src/lib/userAdmin.js');
-
-test('generated passwords satisfy the approved 10-character policy', () => {
+test('generated passwords satisfy the approved composition policy', () => {
   for (let i = 0; i < 100; i += 1) {
     const password = generatePassword();
-    assert.equal(password.length, 10);
+    assert.equal(password.length, 9);
+    assert.equal((password.match(/[a-zA-Z]/g) || []).length, 4);
+    assert.equal((password.match(/[1-9]/g) || []).length, 4);
+    assert.equal((password.match(/[?!@#$%&]/g) || []).length, 1);
     assert.doesNotThrow(() => validateApprovedPassword(password));
-    assert.match(password, /[a-zA-Z]/);
-    assert.match(password, /[1-9]/);
-    assert.match(password, /[?!@#$%&]/);
     assert.doesNotMatch(password, /[IlO0]/);
   }
 });
 
-test('approved passwords permit 8 to 10 characters and fail closed outside the contract', () => {
-  assert.doesNotThrow(() => validateApprovedPassword('Abcdef1!'));
-  assert.doesNotThrow(() => validateApprovedPassword('Abcdefg1!'));
-  assert.doesNotThrow(() => validateApprovedPassword('Abcdefgh1!'));
-  assert.throws(() => validateApprovedPassword('Abcde1!'), /8 to 10/);
-  assert.throws(() => validateApprovedPassword('Abcdefghi1!'), /8 to 10/);
-  assert.throws(() => validateApprovedPassword('Abcdefgh1*'), /8 to 10/);
-  assert.throws(() => generatePassword(7), /between 8 and 10/);
-  assert.throws(() => generatePassword(11), /between 8 and 10/);
+test('approved passwords require four letters, four numbers, and one symbol', () => {
+  assert.doesNotThrow(() => validateApprovedPassword('Abcd1234!'));
+  assert.throws(() => validateApprovedPassword('Abc12345!'), /exactly four letters/);
+  assert.throws(() => validateApprovedPassword('Abcde123!'), /exactly four letters/);
+  assert.throws(() => validateApprovedPassword('Abcd1234*'), /exactly four letters/);
+  assert.throws(() => generatePassword(8), /exactly 9/);
+  assert.throws(() => generatePassword(10), /exactly 9/);
 });
 
 test('phone values normalize to E.164 and invalid local values fail', () => {
