@@ -72,7 +72,7 @@ export const BILLING_FREQUENCIES: readonly BillingFrequency[] = [
   "Monthly", "Quarterly", "SemiAnnual", "Annual", "OneTime", "Usage", "Unknown",
 ] as const;
 
-/** The three fixed roles shown on the form come first, in the order Tammy named them. */
+/** The three roles shown on the form (ExternalServicer, Support, Payable) come first. */
 export const CONTACT_ROLES: readonly ContactRole[] = [
   "ExternalServicer", "Support", "Payable", "InternalOwner", "Broker", "Other",
 ] as const;
