@@ -94,9 +94,103 @@ export type ContractStatus =
   | "Draft"
   | "Active"
   | "UnderReview"
+  | "PendingRenewalDecision"
   | "Expired"
   | "Terminated"
-  | "Renewed";
+  | "Renewed"
+  | "Unknown";
+
+/** Primary classifier. `contractType` is kept for compatibility and maps onto this. */
+export type AgreementCategory =
+  | "VendorService"
+  | "MasterServices"
+  | "StatementOfWork"
+  | "SoftwareLicense"
+  | "SaaSSubscription"
+  | "InsurancePolicy"
+  | "CertificateOfInsurance"
+  | "Lease"
+  | "Maintenance"
+  | "Warranty"
+  | "ProfessionalServices"
+  | "Membership"
+  | "Certification"
+  | "Telecom"
+  | "Utility"
+  | "Financing"
+  | "FranchiseOrDealer"
+  | "PayerContract"
+  | "Confidentiality"
+  | "Other";
+
+export type RenewalType =
+  | "MonthToMonth"
+  | "AutoRenew"
+  | "ExpireUnlessRenewed"
+  | "Evergreen"
+  | "FixedTermNoRenewal"
+  | "Unknown";
+
+export type BillingFrequency =
+  | "Monthly"
+  | "Quarterly"
+  | "SemiAnnual"
+  | "Annual"
+  | "OneTime"
+  | "Usage"
+  | "Unknown";
+
+export type RiskClass = "Low" | "Medium" | "High" | "Critical";
+
+/** A = verified from the executed document, B = partly inferred, C = evidence only. */
+export type ConfidenceTier = "A" | "B" | "C";
+
+export type SourceSystem =
+  | "SharePoint"
+  | "OneDrive"
+  | "Mail"
+  | "FileServer"
+  | "Egnyte"
+  | "AccountingExport"
+  | "VendorPortal"
+  | "Manual"
+  | "M365Licensing"
+  | "EntraApps";
+
+export type ContactRole =
+  | "ExternalServicer"
+  | "Support"
+  | "Payable"
+  | "InternalOwner"
+  | "Broker"
+  | "Other";
+
+export interface ContractContactItem {
+  id: string;
+  contractId: string;
+  role: ContactRole;
+  name: string | null;
+  company: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  portalUrl: string | null;
+  notes: string | null;
+  /** Where the contact was found (document, page, email thread). */
+  sourceRef: string | null;
+}
+
+export type ObligationStatus = "Open" | "Done" | "Waived";
+
+export interface ContractObligationItem {
+  id: string;
+  contractId: string;
+  description: string;
+  dueDate: string | null;
+  recurrence: string | null;
+  owner: string | null;
+  status: ObligationStatus;
+}
 
 export interface TagItem {
   id: string;
@@ -120,6 +214,12 @@ export interface ContractListItem {
   status: ContractStatus;
   daysUntilExpiry: number | null;
   tags: string[];
+  agreementCategory: AgreementCategory | null;
+  renewalType: RenewalType | null;
+  latestRenewalDecisionDate: string | null;
+  earliestRenewalDecisionDate: string | null;
+  confidenceTier: ConfidenceTier | null;
+  needsReview: boolean;
 }
 
 export interface ContractVersionItem {
@@ -153,7 +253,12 @@ export interface ContractApprovalItem {
   comments: string | null;
 }
 
-export type RenewalAlertType = "ThirtyDay" | "SixtyDay" | "NinetyDay";
+export type RenewalAlertType =
+  | "ThirtyDay"
+  | "SixtyDay"
+  | "NinetyDay"
+  | "DecisionDeadline"
+  | "DecisionWindowOpens";
 
 export interface RenewalAlertItem {
   id: string;
@@ -180,6 +285,43 @@ export interface ContractDetail extends ContractListItem {
   documents: ContractDocumentItem[];
   approvals: ContractApprovalItem[];
   renewalAlerts: RenewalAlertItem[];
+
+  // Renewal terms
+  noticePeriodDays: number | null;
+  renewalTermMonths: number | null;
+  terminationTerms: string | null;
+
+  // Financial
+  totalValue: number | null;
+  recurringAmount: number | null;
+  billingFrequency: BillingFrequency | null;
+  /** Read only. recurringAmount x frequency, else totalValue / term years. */
+  annualizedValue: number | null;
+
+  // Parties and classification
+  /** The other party as written on the paper (may differ from the vendor brand). */
+  counterpartyName: string | null;
+  clientInternalOwner: string | null;
+  department: string | null;
+  riskClass: RiskClass | null;
+  policyOrAccountNumber: string | null;
+  coverageOrScopeSummary: string | null;
+  /** Questions for the client point of contact. */
+  reviewQuestions: string[];
+
+  // Provenance
+  sourceSystem: SourceSystem | null;
+  sourceTenantId: string | null;
+  sourceContainer: string | null;
+  sourcePath: string | null;
+  sourceItemId: string | null;
+  sourceWebUrl: string | null;
+  sourceFileHash: string | null;
+  extractedAt: string | null;
+  extractionModel: string | null;
+
+  contacts: ContractContactItem[];
+  obligations: ContractObligationItem[];
 }
 
 export interface ContractDashboard {
