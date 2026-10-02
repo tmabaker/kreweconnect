@@ -42,11 +42,15 @@ const useStyles = makeStyles({
   legendDot: { width: "12px", height: "12px", borderRadius: "50%" },
 });
 
+/** The date a renewal is acted on: the latest decision date when known, else the end date. */
+const actionDate = (c: ContractListItem): string | null => c.latestRenewalDecisionDate ?? c.endDate;
+
 function groupByMonth(contracts: ContractListItem[]): Map<string, ContractListItem[]> {
   const groups = new Map<string, ContractListItem[]>();
   for (const c of contracts) {
-    if (!c.endDate) continue;
-    const date = new Date(c.endDate);
+    const key = actionDate(c);
+    if (!key) continue;
+    const date = new Date(`${key.slice(0, 10)}T00:00:00`);
     const label = date.toLocaleDateString("en-US", { year: "numeric", month: "long" });
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label)!.push(c);
@@ -63,7 +67,10 @@ export function RenewalsPage() {
   const renewalContracts = useMemo(() =>
     contracts
       .filter((c) => c.endDate && c.daysUntilExpiry !== null && c.daysUntilExpiry > -30 && c.daysUntilExpiry <= 90 && c.status !== "Terminated")
-      .sort((a, b) => (a.daysUntilExpiry ?? 999) - (b.daysUntilExpiry ?? 999)),
+      .sort((a, b) => {
+        const cmp = (actionDate(a) ?? "9999-12-31").localeCompare(actionDate(b) ?? "9999-12-31");
+        return cmp !== 0 ? cmp : (a.daysUntilExpiry ?? 999) - (b.daysUntilExpiry ?? 999);
+      }),
     [contracts]
   );
 
@@ -78,7 +85,7 @@ export function RenewalsPage() {
             <Title2>Upcoming Renewals</Title2>
           </div>
           <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3, marginTop: "4px", marginLeft: "44px" }}>
-            Contracts expiring within the next 90 days
+            Contracts expiring within the next 90 days, ordered by renewal decision deadline
           </Text>
         </div>
       </div>
@@ -124,6 +131,11 @@ export function RenewalsPage() {
                     </Badge>
                     {c.autoRenew && (
                       <Badge appearance="outline" color="brand" size="small">Auto-Renew</Badge>
+                    )}
+                    {c.latestRenewalDecisionDate && (
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                        Decide by {c.latestRenewalDecisionDate}
+                      </Text>
                     )}
                   </div>
                 </div>
