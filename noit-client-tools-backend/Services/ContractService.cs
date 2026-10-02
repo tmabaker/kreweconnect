@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NOIT.ClientTools.Core.DTOs;
@@ -74,6 +75,14 @@ public class ContractService : IContractService
             ("enddate", _) => query.OrderBy(c => c.EndDate),
             ("status", "desc") => query.OrderByDescending(c => c.Status),
             ("status", _) => query.OrderBy(c => c.Status),
+            ("category", "desc") => query.OrderByDescending(c => c.AgreementCategory),
+            ("category", _) => query.OrderBy(c => c.AgreementCategory),
+            ("renewaltype", "desc") => query.OrderByDescending(c => c.RenewalType),
+            ("renewaltype", _) => query.OrderBy(c => c.RenewalType),
+            ("decisiondate", "desc") => query.OrderByDescending(c => c.LatestRenewalDecisionDate),
+            ("decisiondate", _) => query.OrderBy(c => c.LatestRenewalDecisionDate),
+            ("tier", "desc") => query.OrderByDescending(c => c.ConfidenceTier),
+            ("tier", _) => query.OrderBy(c => c.ConfidenceTier),
             (_, "desc") => query.OrderByDescending(c => c.Title),
             _ => query.OrderBy(c => c.Title),
         };
@@ -85,24 +94,7 @@ public class ContractService : IContractService
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var data = contracts.Select(c => new ContractListDto
-        {
-            Id = c.Id,
-            TenantId = c.TenantId,
-            TenantDisplayName = c.Tenant.DisplayName,
-            VendorName = c.VendorName,
-            ContractType = c.ContractType,
-            Title = c.Title,
-            StartDate = c.StartDate,
-            EndDate = c.EndDate,
-            RenewalDate = c.RenewalDate,
-            AutoRenew = c.AutoRenew,
-            Value = c.Value,
-            Currency = c.Currency,
-            Status = c.Status,
-            DaysUntilExpiry = c.EndDate.HasValue ? (c.EndDate.Value.DayNumber - today.DayNumber) : null,
-            Tags = c.ContractTags.Select(t => t.Tag.Name).ToList(),
-        }).ToList();
+        var data = contracts.Select(c => MapListItem(c, today)).ToList();
 
         return new PagedResult<ContractListDto>
         {
@@ -120,6 +112,8 @@ public class ContractService : IContractService
             .Include(c2 => c2.Approvals)
             .Include(c2 => c2.ContractTags).ThenInclude(ct2 => ct2.Tag)
             .Include(c2 => c2.RenewalAlerts)
+            .Include(c2 => c2.Contacts)
+            .Include(c2 => c2.Obligations)
             .AsNoTracking()
             .FirstOrDefaultAsync(c2 => c2.Id == id, ct);
 
@@ -198,6 +192,60 @@ public class ContractService : IContractService
                 IsSent = r.IsSent,
                 DaysRemaining = c.EndDate.HasValue ? (c.EndDate.Value.DayNumber - today.DayNumber) : null,
             }).ToList(),
+
+            // Schema v2
+            AgreementCategory = c.AgreementCategory,
+            RenewalType = c.RenewalType,
+            LatestRenewalDecisionDate = c.LatestRenewalDecisionDate,
+            EarliestRenewalDecisionDate = c.EarliestRenewalDecisionDate,
+            ConfidenceTier = c.ConfidenceTier,
+            NeedsReview = c.NeedsReview,
+            NoticePeriodDays = c.NoticePeriodDays,
+            RenewalTermMonths = c.RenewalTermMonths,
+            TerminationTerms = c.TerminationTerms,
+            // Value is the pre-v2 total; fall back to it for rows that predate TotalValue.
+            TotalValue = c.TotalValue ?? c.Value,
+            RecurringAmount = c.RecurringAmount,
+            BillingFrequency = c.BillingFrequency,
+            AnnualizedValue = AnnualizeValue(c.RecurringAmount, c.BillingFrequency, c.TotalValue ?? c.Value, c.StartDate, c.EndDate),
+            CounterpartyName = c.CounterpartyName ?? c.VendorName,
+            ClientInternalOwner = c.ClientInternalOwner,
+            Department = c.Department,
+            RiskClass = c.RiskClass,
+            PolicyOrAccountNumber = c.PolicyOrAccountNumber,
+            CoverageOrScopeSummary = c.CoverageOrScopeSummary,
+            ReviewQuestions = DeserializeQuestions(c.ReviewQuestions),
+            SourceSystem = c.SourceSystem,
+            SourceTenantId = c.SourceTenantId,
+            SourceContainer = c.SourceContainer,
+            SourcePath = c.SourcePath,
+            SourceItemId = c.SourceItemId,
+            SourceWebUrl = c.SourceWebUrl,
+            SourceFileHash = c.SourceFileHash,
+            ExtractedAt = c.ExtractedAt,
+            ExtractionModel = c.ExtractionModel,
+            Contacts = c.Contacts.OrderBy(x => x.Role).Select(x => new ContractContactDto
+            {
+                Id = x.Id,
+                Role = x.Role,
+                Name = x.Name,
+                Company = x.Company,
+                Title = x.Title,
+                Email = x.Email,
+                Phone = x.Phone,
+                PortalUrl = x.PortalUrl,
+                Notes = x.Notes,
+                SourceRef = x.SourceRef,
+            }).ToList(),
+            Obligations = c.Obligations.OrderBy(x => x.DueDate).Select(x => new ContractObligationDto
+            {
+                Id = x.Id,
+                Description = x.Description,
+                DueDate = x.DueDate,
+                Recurrence = x.Recurrence,
+                Owner = x.Owner,
+                Status = x.Status,
+            }).ToList(),
         };
     }
 
@@ -228,9 +276,45 @@ public class ContractService : IContractService
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
+
+            // Schema v2
+            AgreementCategory = request.AgreementCategory,
+            RenewalType = request.RenewalType,
+            RenewalTermMonths = request.RenewalTermMonths,
+            NoticePeriodDays = request.NoticePeriodDays,
+            EarliestRenewalDecisionDate = request.EarliestRenewalDecisionDate,
+            LatestRenewalDecisionDate = request.LatestRenewalDecisionDate,
+            TerminationTerms = request.TerminationTerms,
+            RecurringAmount = request.RecurringAmount,
+            BillingFrequency = request.BillingFrequency,
+            CounterpartyName = request.CounterpartyName,
+            ClientInternalOwner = request.ClientInternalOwner,
+            Department = request.Department,
+            RiskClass = request.RiskClass,
+            PolicyOrAccountNumber = request.PolicyOrAccountNumber,
+            CoverageOrScopeSummary = request.CoverageOrScopeSummary,
+            ConfidenceTier = request.ConfidenceTier,
+            NeedsReview = request.NeedsReview ?? false,
+            ReviewQuestions = SerializeQuestions(request.ReviewQuestions),
         };
 
+        // Value and TotalValue mirror each other; whichever the caller sent wins.
+        contract.TotalValue = request.TotalValue ?? request.Value;
+        contract.Value = request.Value ?? request.TotalValue;
+
+        // AutoRenew is derived from RenewalType when one is given.
+        if (request.RenewalType.HasValue)
+            contract.AutoRenew = request.RenewalType.Value == RenewalType.AutoRenew;
+
+        // Decision dates are computed when not stated.
+        ApplyComputedDecisionDates(contract);
+
         _db.Contracts.Add(contract);
+
+        if (request.Contacts != null)
+            _db.ContractContacts.AddRange(request.Contacts.Select(d => ToContactEntity(contract.Id, d)));
+        if (request.Obligations != null)
+            _db.ContractObligations.AddRange(request.Obligations.Select(d => ToObligationEntity(contract.Id, d)));
 
         // Create initial version
         _db.ContractVersions.Add(new ContractVersion
@@ -258,26 +342,8 @@ public class ContractService : IContractService
             }
         }
 
-        // Create renewal alerts if there's an end date
-        if (contract.EndDate.HasValue)
-        {
-            var endDate = contract.EndDate.Value;
-            var alertTypes = new[] { (AlertType.NinetyDay, 90), (AlertType.SixtyDay, 60), (AlertType.ThirtyDay, 30) };
-            foreach (var (alertType, days) in alertTypes)
-            {
-                var alertDate = endDate.AddDays(-days);
-                if (alertDate >= DateOnly.FromDateTime(DateTime.UtcNow))
-                {
-                    _db.RenewalAlerts.Add(new RenewalAlert
-                    {
-                        Id = Guid.NewGuid(),
-                        ContractId = contract.Id,
-                        AlertDate = alertDate,
-                        AlertType = alertType,
-                    });
-                }
-            }
-        }
+        // Create renewal alerts (30/60/90 from the end date, plus the two decision date alerts)
+        AddRenewalAlerts(contract);
 
         await _db.SaveChangesAsync(ct);
         return (await GetByIdAsync(contract.Id, ct))!;
@@ -287,6 +353,8 @@ public class ContractService : IContractService
     {
         var contract = await _db.Contracts
             .Include(c => c.ContractTags)
+            .Include(c => c.Contacts)
+            .Include(c => c.Obligations)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
         if (contract == null) return null;
 
@@ -309,6 +377,57 @@ public class ContractService : IContractService
         if (request.Status.HasValue) { contract.Status = request.Status.Value; changes.Add("Status"); }
         if (request.SLATerms != null) { contract.SLATerms = request.SLATerms; changes.Add("SLATerms"); }
         if (request.Notes != null) { contract.Notes = request.Notes; changes.Add("Notes"); }
+
+        // Schema v2
+        if (request.AgreementCategory.HasValue) { contract.AgreementCategory = request.AgreementCategory.Value; changes.Add("AgreementCategory"); }
+        if (request.RenewalType.HasValue)
+        {
+            contract.RenewalType = request.RenewalType.Value;
+            contract.AutoRenew = request.RenewalType.Value == RenewalType.AutoRenew; // derived
+            changes.Add("RenewalType");
+        }
+        if (request.RenewalTermMonths.HasValue) { contract.RenewalTermMonths = request.RenewalTermMonths.Value; changes.Add("RenewalTermMonths"); }
+        if (request.NoticePeriodDays.HasValue) { contract.NoticePeriodDays = request.NoticePeriodDays.Value; changes.Add("NoticePeriodDays"); }
+        if (request.EarliestRenewalDecisionDate.HasValue) { contract.EarliestRenewalDecisionDate = request.EarliestRenewalDecisionDate.Value; changes.Add("EarliestRenewalDecisionDate"); }
+        if (request.LatestRenewalDecisionDate.HasValue) { contract.LatestRenewalDecisionDate = request.LatestRenewalDecisionDate.Value; changes.Add("LatestRenewalDecisionDate"); }
+        if (request.TerminationTerms != null) { contract.TerminationTerms = request.TerminationTerms; changes.Add("TerminationTerms"); }
+        if (request.TotalValue.HasValue)
+        {
+            contract.TotalValue = request.TotalValue.Value;
+            contract.Value = request.TotalValue.Value; // Value mirrors TotalValue
+            changes.Add("TotalValue");
+        }
+        else if (request.Value.HasValue)
+        {
+            contract.TotalValue = request.Value.Value;
+        }
+        if (request.RecurringAmount.HasValue) { contract.RecurringAmount = request.RecurringAmount.Value; changes.Add("RecurringAmount"); }
+        if (request.BillingFrequency.HasValue) { contract.BillingFrequency = request.BillingFrequency.Value; changes.Add("BillingFrequency"); }
+        if (request.CounterpartyName != null) { contract.CounterpartyName = request.CounterpartyName; changes.Add("CounterpartyName"); }
+        if (request.ClientInternalOwner != null) { contract.ClientInternalOwner = request.ClientInternalOwner; changes.Add("ClientInternalOwner"); }
+        if (request.Department != null) { contract.Department = request.Department; changes.Add("Department"); }
+        if (request.RiskClass.HasValue) { contract.RiskClass = request.RiskClass.Value; changes.Add("RiskClass"); }
+        if (request.PolicyOrAccountNumber != null) { contract.PolicyOrAccountNumber = request.PolicyOrAccountNumber; changes.Add("PolicyOrAccountNumber"); }
+        if (request.CoverageOrScopeSummary != null) { contract.CoverageOrScopeSummary = request.CoverageOrScopeSummary; changes.Add("CoverageOrScopeSummary"); }
+        if (request.ConfidenceTier.HasValue) { contract.ConfidenceTier = request.ConfidenceTier.Value; changes.Add("ConfidenceTier"); }
+        if (request.NeedsReview.HasValue) { contract.NeedsReview = request.NeedsReview.Value; changes.Add("NeedsReview"); }
+        if (request.ReviewQuestions != null) { contract.ReviewQuestions = SerializeQuestions(request.ReviewQuestions); changes.Add("ReviewQuestions"); }
+
+        if (request.Contacts != null)
+        {
+            _db.ContractContacts.RemoveRange(contract.Contacts);
+            _db.ContractContacts.AddRange(request.Contacts.Select(d => ToContactEntity(contract.Id, d)));
+            changes.Add("Contacts");
+        }
+        if (request.Obligations != null)
+        {
+            _db.ContractObligations.RemoveRange(contract.Obligations);
+            _db.ContractObligations.AddRange(request.Obligations.Select(d => ToObligationEntity(contract.Id, d)));
+            changes.Add("Obligations");
+        }
+
+        // Fill the decision window if it is still empty and can now be computed.
+        ApplyComputedDecisionDates(contract);
 
         contract.UpdatedAt = DateTime.UtcNow;
 
@@ -443,24 +562,7 @@ public class ContractService : IContractService
 
         var expiringSoon = contracts.Where(c => c.EndDate.HasValue && c.EndDate.Value <= thirtyDays && c.EndDate.Value >= today).ToList();
 
-        var recentContracts = contracts.OrderByDescending(c => c.CreatedAt).Take(5).Select(c => new ContractListDto
-        {
-            Id = c.Id,
-            TenantId = c.TenantId,
-            TenantDisplayName = c.Tenant.DisplayName,
-            VendorName = c.VendorName,
-            ContractType = c.ContractType,
-            Title = c.Title,
-            StartDate = c.StartDate,
-            EndDate = c.EndDate,
-            RenewalDate = c.RenewalDate,
-            AutoRenew = c.AutoRenew,
-            Value = c.Value,
-            Currency = c.Currency,
-            Status = c.Status,
-            DaysUntilExpiry = c.EndDate.HasValue ? (c.EndDate.Value.DayNumber - today.DayNumber) : null,
-            Tags = c.ContractTags.Select(t => t.Tag.Name).ToList(),
-        }).ToList();
+        var recentContracts = contracts.OrderByDescending(c => c.CreatedAt).Take(5).Select(c => MapListItem(c, today)).ToList();
 
         // Get upcoming renewal alerts
         var renewalAlerts = await _db.RenewalAlerts
@@ -518,4 +620,549 @@ public class ContractService : IContractService
         await _db.SaveChangesAsync(ct);
         return new TagDto { Id = tag.Id, Name = tag.Name, Color = tag.Color };
     }
+
+    // ─── Schema v2: import ────────────────────────────────────────────
+
+    /// <summary>Days between the earliest and latest decision date when none is stated.</summary>
+    public const int DefaultDecisionWindowDays = 90;
+
+    /// <summary>Maximum SQL column lengths used when trimming imported text.</summary>
+    private const int MaxTitle = 500, MaxVendor = 300, MaxTag = 100, MaxFileName = 500, MaxStoragePath = 1000;
+
+    public async Task<ContractImportResult> ImportAsync(
+        int tenantId, IEnumerable<ContractImportRecord> records, string? importedById, CancellationToken ct = default)
+    {
+        var tenantExists = await _db.ClientTenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct);
+        if (!tenantExists)
+            throw new ArgumentException($"Unknown client tenant id {tenantId}.", nameof(tenantId));
+
+        var items = new List<ContractImportItemResult>();
+        var index = 0;
+
+        // One SaveChanges per record so a bad record fails alone and never poisons the batch.
+        foreach (var item in records)
+        {
+            ct.ThrowIfCancellationRequested();
+            var i = index++;
+
+            try
+            {
+                items.Add(await ImportOneAsync(tenantId, item, importedById, i, ct));
+            }
+            catch (ImportValidationException ex)
+            {
+                _db.ChangeTracker.Clear();
+                items.Add(new ContractImportItemResult
+                {
+                    Index = i,
+                    SourceItemId = item?.SourceItemId,
+                    Outcome = ContractImportOutcome.Failed,
+                    Message = ex.Message,
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Do not echo database or internal error text back to the caller.
+                _db.ChangeTracker.Clear();
+                _logger.LogError(ex, "Contract import failed for record {Index} (tenant {TenantId})", i, tenantId);
+                items.Add(new ContractImportItemResult
+                {
+                    Index = i,
+                    SourceItemId = item?.SourceItemId,
+                    Outcome = ContractImportOutcome.Failed,
+                    Message = "Unexpected error while saving this record. See server logs.",
+                });
+            }
+        }
+
+        return new ContractImportResult
+        {
+            Total = items.Count,
+            Created = items.Count(x => x.Outcome == ContractImportOutcome.Created),
+            Updated = items.Count(x => x.Outcome == ContractImportOutcome.Updated),
+            Skipped = items.Count(x => x.Outcome == ContractImportOutcome.Skipped),
+            Failed = items.Count(x => x.Outcome == ContractImportOutcome.Failed),
+            Items = items,
+        };
+    }
+
+    private async Task<ContractImportItemResult> ImportOneAsync(
+        int tenantId, ContractImportRecord rec, string? importedById, int index, CancellationToken ct)
+    {
+        if (rec == null)
+            throw new ImportValidationException("Record is null.");
+
+        // Required by import-schema.json. Validated here so one bad record cannot reject the batch.
+        var missing = new List<string>();
+        if (string.IsNullOrWhiteSpace(rec.SourceTenantId)) missing.Add("sourceTenantId");
+        if (!rec.SourceSystem.HasValue) missing.Add("sourceSystem");
+        if (string.IsNullOrWhiteSpace(rec.SourceItemId)) missing.Add("sourceItemId");
+        if (string.IsNullOrWhiteSpace(rec.CounterpartyName)) missing.Add("counterpartyName");
+        if (string.IsNullOrWhiteSpace(rec.Title)) missing.Add("title");
+        if (!rec.AgreementCategory.HasValue) missing.Add("agreementCategory");
+        if (!rec.ConfidenceTier.HasValue) missing.Add("confidenceTier");
+        if (missing.Count > 0)
+            throw new ImportValidationException($"Missing required field(s): {string.Join(", ", missing)}.");
+
+        var sourceItemId = rec.SourceItemId!.Trim();
+        var system = rec.SourceSystem!.Value;
+
+        // InScope "No" means found but out of scope. The pipeline keeps the location; we do not import it.
+        if (string.Equals(rec.InScope, "No", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ContractImportItemResult
+            {
+                Index = index, SourceItemId = sourceItemId, Outcome = ContractImportOutcome.Skipped,
+                Message = "Out of scope (inScope = No); not imported.",
+            };
+        }
+
+        var existing = await _db.Contracts
+            .Include(c => c.Contacts)
+            .Include(c => c.Obligations)
+            .Include(c => c.Documents)
+            .Include(c => c.ContractTags)
+            .Include(c => c.RenewalAlerts)
+            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.SourceSystem == system && c.SourceItemId == sourceItemId, ct);
+
+        if (existing != null && (existing.IsArchived || existing.Status != ContractStatus.Draft))
+        {
+            // A person has already worked this record. Never overwrite reviewed data with a re-extraction.
+            return new ContractImportItemResult
+            {
+                Index = index, SourceItemId = sourceItemId, ContractId = existing.Id, Outcome = ContractImportOutcome.Skipped,
+                Message = existing.IsArchived
+                    ? "Existing record is archived; left unchanged."
+                    : $"Existing record is {existing.Status}, no longer Draft; left unchanged.",
+            };
+        }
+
+        var isNew = existing == null;
+        var contract = existing ?? new Contract
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Status = ContractStatus.Draft,
+            CreatedById = importedById,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var reviewQuestions = rec.ReviewQuestions
+            .Where(q => !string.IsNullOrWhiteSpace(q))
+            .Select(q => q.Trim())
+            .ToList();
+        var needsReview = rec.NeedsReview || string.Equals(rec.InScope, "Unsure", StringComparison.OrdinalIgnoreCase);
+
+        // StartDate is required by the table. Never invent one silently: fall back, flag it, ask a question.
+        DateOnly startDate;
+        if (rec.StartDate.HasValue)
+        {
+            startDate = rec.StartDate.Value;
+        }
+        else if (rec.ExecutedDate.HasValue)
+        {
+            startDate = rec.ExecutedDate.Value;
+            needsReview = true;
+            reviewQuestions.Add("Start date was not stated. The executed date was used. What is the real start date?");
+        }
+        else
+        {
+            startDate = today;
+            needsReview = true;
+            reviewQuestions.Add("Start date was not found. The import date was used. What is the real start date?");
+        }
+
+        // Core
+        contract.VendorName = Trunc(string.IsNullOrWhiteSpace(rec.VendorName) ? rec.CounterpartyName!.Trim() : rec.VendorName.Trim(), MaxVendor)!;
+        contract.CounterpartyName = Trunc(rec.CounterpartyName!.Trim(), MaxVendor);
+        contract.Title = Trunc(rec.Title!.Trim(), MaxTitle)!;
+        contract.Description = rec.Description;
+        contract.Notes = rec.Notes;
+        contract.AgreementCategory = rec.AgreementCategory;
+        contract.ContractType = MapCategoryToContractType(rec.AgreementCategory!.Value);
+        contract.Department = rec.Department;
+        contract.ClientInternalOwner = rec.ClientInternalOwner;
+        contract.PolicyOrAccountNumber = rec.PolicyOrAccountNumber;
+        contract.CoverageOrScopeSummary = rec.CoverageOrScopeSummary;
+
+        // Dates and renewal terms
+        contract.StartDate = startDate;
+        contract.EndDate = rec.EndDate;
+        contract.RenewalType = rec.RenewalType;
+        contract.AutoRenew = rec.RenewalType == RenewalType.AutoRenew; // derived
+        contract.RenewalTermMonths = rec.RenewalTermMonths;
+        contract.NoticePeriodDays = rec.NoticePeriodDays;
+        contract.TerminationTerms = rec.TerminationTerms;
+        contract.EarliestRenewalDecisionDate = rec.EarliestRenewalDecisionDate;
+        contract.LatestRenewalDecisionDate = rec.LatestRenewalDecisionDate;
+        ApplyComputedDecisionDates(contract);
+        // RenewalDate is the "act by" date in the existing UI and seed data.
+        contract.RenewalDate ??= contract.LatestRenewalDecisionDate;
+
+        // Money
+        contract.TotalValue = rec.TotalValue;
+        contract.Value = rec.TotalValue; // Value mirrors TotalValue
+        contract.RecurringAmount = rec.RecurringAmount;
+        contract.BillingFrequency = rec.BillingFrequency;
+        var currency = string.IsNullOrWhiteSpace(rec.Currency) ? "USD" : rec.Currency.Trim().ToUpperInvariant();
+        contract.Currency = currency.Length == 3 ? currency : "USD";
+
+        // Review state and provenance
+        contract.ConfidenceTier = rec.ConfidenceTier;
+        contract.NeedsReview = needsReview;
+        contract.ReviewQuestions = SerializeQuestions(reviewQuestions);
+        contract.SourceSystem = system;
+        contract.SourceTenantId = Trunc(rec.SourceTenantId!.Trim(), 64);
+        contract.SourceContainer = Trunc(rec.SourceContainer, 500);
+        contract.SourcePath = Trunc(rec.SourcePath, 1000);
+        contract.SourceItemId = sourceItemId.Length > 400
+            ? throw new ImportValidationException("sourceItemId is longer than 400 characters.")
+            : sourceItemId;
+        contract.SourceWebUrl = Trunc(rec.SourceWebUrl, 2000);
+        contract.SourceFileHash = Trunc(rec.SourceFileHash, 64);
+        contract.ExtractedAt = rec.ExtractedAt?.ToUniversalTime();
+        contract.ExtractionModel = Trunc(rec.ExtractionModel, 100);
+        contract.UpdatedAt = DateTime.UtcNow;
+
+        if (isNew)
+            _db.Contracts.Add(contract);
+
+        // Child rows. On a Draft refresh the machine extracted children are replaced wholesale.
+        if (!isNew)
+        {
+            _db.ContractContacts.RemoveRange(contract.Contacts.ToList());
+            _db.ContractObligations.RemoveRange(contract.Obligations.ToList());
+            // Keep manually uploaded files (relative storage path); replace imported link rows.
+            _db.ContractDocuments.RemoveRange(contract.Documents.Where(IsImportedDocument).ToList());
+            // Unsent alerts are regenerated below from the refreshed dates.
+            _db.RenewalAlerts.RemoveRange(contract.RenewalAlerts.Where(a => !a.IsSent).ToList());
+        }
+
+        foreach (var c in rec.Contacts ?? new List<ContractImportContact>())
+        {
+            if (c == null) continue;
+            if (string.IsNullOrWhiteSpace(c.Name) && string.IsNullOrWhiteSpace(c.Company) &&
+                string.IsNullOrWhiteSpace(c.Email) && string.IsNullOrWhiteSpace(c.Phone) &&
+                string.IsNullOrWhiteSpace(c.PortalUrl))
+                continue; // nothing to store
+
+            _db.ContractContacts.Add(new ContractContact
+            {
+                Id = Guid.NewGuid(),
+                ContractId = contract.Id,
+                Role = c.Role,
+                Name = Trunc(c.Name, 200),
+                Company = Trunc(c.Company, 300),
+                Title = Trunc(c.Title, 200),
+                Email = Trunc(c.Email, 320),
+                Phone = Trunc(c.Phone, 50),
+                PortalUrl = Trunc(c.PortalUrl, 2000),
+                SourceRef = Trunc(c.SourceRef, 1000),
+            });
+        }
+
+        foreach (var o in rec.Obligations ?? new List<ContractImportObligation>())
+        {
+            if (o == null || string.IsNullOrWhiteSpace(o.Description)) continue;
+            _db.ContractObligations.Add(new ContractObligation
+            {
+                Id = Guid.NewGuid(),
+                ContractId = contract.Id,
+                Description = Trunc(o.Description.Trim(), 1000)!,
+                DueDate = o.DueDate,
+                Recurrence = Trunc(o.Recurrence, 200),
+                Status = ObligationStatus.Open,
+            });
+        }
+
+        // Documents are metadata rows only. StoragePath holds the link back to the original in place.
+        foreach (var d in rec.Documents ?? new List<ContractImportDocument>())
+        {
+            if (d == null) continue;
+            var fileName = !string.IsNullOrWhiteSpace(d.FileName) ? d.FileName.Trim() : FileNameFromUrl(d.SourceWebUrl);
+            if (string.IsNullOrWhiteSpace(fileName)) continue;
+
+            _db.ContractDocuments.Add(new ContractDocument
+            {
+                Id = Guid.NewGuid(),
+                ContractId = contract.Id,
+                FileName = Trunc(fileName, MaxFileName)!,
+                FileSize = 0, // not known at extraction time
+                ContentType = ContentTypeFromFileName(fileName),
+                // A link longer than the column is dropped rather than truncated into a broken URL.
+                StoragePath = d.SourceWebUrl is { Length: > 0 and <= MaxStoragePath } ? d.SourceWebUrl : string.Empty,
+                UploadedById = importedById,
+                UploadedAt = DateTime.UtcNow,
+            });
+        }
+
+        // Tags: add any that are missing; never remove tags a person may have added.
+        var tagNames = (rec.Tags ?? new List<string>())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => Trunc(t.Trim(), MaxTag)!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var tagName in tagNames)
+        {
+            var lower = tagName.ToLower();
+            var tag = await _db.Tags.FirstOrDefaultAsync(t => t.Name.ToLower() == lower, ct);
+            if (tag == null)
+            {
+                tag = new Tag { Id = Guid.NewGuid(), Name = tagName };
+                _db.Tags.Add(tag);
+            }
+            else if (!isNew && contract.ContractTags.Any(ct2 => ct2.TagId == tag.Id))
+            {
+                continue;
+            }
+            _db.ContractTags.Add(new ContractTag { Id = Guid.NewGuid(), ContractId = contract.Id, TagId = tag.Id });
+        }
+
+        // Version history
+        var nextVersion = isNew
+            ? 1
+            : (await _db.ContractVersions.Where(v => v.ContractId == contract.Id).MaxAsync(v => (int?)v.VersionNumber, ct) ?? 0) + 1;
+        _db.ContractVersions.Add(new ContractVersion
+        {
+            Id = Guid.NewGuid(),
+            ContractId = contract.Id,
+            VersionNumber = nextVersion,
+            Summary = isNew ? $"Imported from {system}" : $"Re-imported from {system}",
+            ChangedById = importedById,
+            ChangedAt = DateTime.UtcNow,
+            ChangeNotes = $"Draft import, confidence tier {rec.ConfidenceTier}, needs review: {needsReview}.",
+        });
+
+        AddRenewalAlerts(contract);
+
+        await _db.SaveChangesAsync(ct);
+
+        return new ContractImportItemResult
+        {
+            Index = index,
+            SourceItemId = sourceItemId,
+            ContractId = contract.Id,
+            Outcome = isNew ? ContractImportOutcome.Created : ContractImportOutcome.Updated,
+        };
+    }
+
+    // ─── Schema v2: helpers ───────────────────────────────────────────
+
+    private sealed class ImportValidationException : Exception
+    {
+        public ImportValidationException(string message) : base(message) { }
+    }
+
+    private static ContractListDto MapListItem(Contract c, DateOnly today) => new()
+    {
+        Id = c.Id,
+        TenantId = c.TenantId,
+        TenantDisplayName = c.Tenant.DisplayName,
+        VendorName = c.VendorName,
+        ContractType = c.ContractType,
+        Title = c.Title,
+        StartDate = c.StartDate,
+        EndDate = c.EndDate,
+        RenewalDate = c.RenewalDate,
+        AutoRenew = c.AutoRenew,
+        Value = c.Value,
+        Currency = c.Currency,
+        Status = c.Status,
+        DaysUntilExpiry = c.EndDate.HasValue ? (c.EndDate.Value.DayNumber - today.DayNumber) : null,
+        Tags = c.ContractTags.Select(t => t.Tag.Name).ToList(),
+        AgreementCategory = c.AgreementCategory,
+        RenewalType = c.RenewalType,
+        LatestRenewalDecisionDate = c.LatestRenewalDecisionDate,
+        EarliestRenewalDecisionDate = c.EarliestRenewalDecisionDate,
+        ConfidenceTier = c.ConfidenceTier,
+        NeedsReview = c.NeedsReview,
+    };
+
+    private static ContractContact ToContactEntity(Guid contractId, ContractContactDto d) => new()
+    {
+        Id = Guid.NewGuid(),
+        ContractId = contractId,
+        Role = d.Role,
+        Name = d.Name,
+        Company = d.Company,
+        Title = d.Title,
+        Email = d.Email,
+        Phone = d.Phone,
+        PortalUrl = d.PortalUrl,
+        Notes = d.Notes,
+        SourceRef = d.SourceRef,
+    };
+
+    private static ContractObligation ToObligationEntity(Guid contractId, ContractObligationDto d) => new()
+    {
+        Id = Guid.NewGuid(),
+        ContractId = contractId,
+        Description = d.Description,
+        DueDate = d.DueDate,
+        Recurrence = d.Recurrence,
+        Owner = d.Owner,
+        Status = d.Status,
+    };
+
+    /// <summary>Maps the new category onto the legacy ContractType kept for compatibility.</summary>
+    public static ContractType MapCategoryToContractType(AgreementCategory category) => category switch
+    {
+        AgreementCategory.SoftwareLicense => ContractType.Software,
+        AgreementCategory.SaaSSubscription => ContractType.Subscription,
+        AgreementCategory.Lease => ContractType.Lease,
+        AgreementCategory.VendorService => ContractType.Service,
+        AgreementCategory.MasterServices => ContractType.Service,
+        AgreementCategory.StatementOfWork => ContractType.Service,
+        AgreementCategory.Maintenance => ContractType.Hardware,
+        AgreementCategory.Warranty => ContractType.Hardware,
+        AgreementCategory.ProfessionalServices => ContractType.Consulting,
+        _ => ContractType.Other,
+    };
+
+    /// <summary>
+    /// Renewal decision window per schema v2. Latest = end date minus notice period (the end date itself
+    /// for ExpireUnlessRenewed). Earliest = latest minus 90 days. Both null without an end date.
+    /// </summary>
+    public static (DateOnly? Earliest, DateOnly? Latest) ComputeDecisionDates(
+        DateOnly? endDate, int? noticePeriodDays, RenewalType? renewalType)
+    {
+        if (!endDate.HasValue) return (null, null);
+
+        var notice = renewalType == RenewalType.ExpireUnlessRenewed ? 0 : Math.Max(0, noticePeriodDays ?? 0);
+        var latest = endDate.Value.AddDays(-notice);
+        return (latest.AddDays(-DefaultDecisionWindowDays), latest);
+    }
+
+    /// <summary>
+    /// Fills decision dates that are still null and can be computed. Stored dates are never overwritten.
+    /// Computing needs an end date and a known RenewalType, so legacy records with neither are untouched.
+    /// </summary>
+    private static void ApplyComputedDecisionDates(Contract contract)
+    {
+        if (contract.EndDate.HasValue && contract.RenewalType.HasValue)
+        {
+            var (_, latest) = ComputeDecisionDates(contract.EndDate, contract.NoticePeriodDays, contract.RenewalType);
+            contract.LatestRenewalDecisionDate ??= latest;
+        }
+
+        // The window opens 90 days before the latest date, whether that date was stated or computed.
+        if (contract.LatestRenewalDecisionDate.HasValue)
+            contract.EarliestRenewalDecisionDate ??= contract.LatestRenewalDecisionDate.Value.AddDays(-DefaultDecisionWindowDays);
+    }
+
+    /// <summary>
+    /// Annualized value: RecurringAmount x periods per year, else TotalValue / term in years.
+    /// OneTime, Usage and Unknown cannot be annualized from a recurring amount.
+    /// </summary>
+    public static decimal? AnnualizeValue(
+        decimal? recurringAmount, BillingFrequency? frequency, decimal? totalValue, DateOnly startDate, DateOnly? endDate)
+    {
+        var periods = frequency switch
+        {
+            BillingFrequency.Monthly => 12,
+            BillingFrequency.Quarterly => 4,
+            BillingFrequency.SemiAnnual => 2,
+            BillingFrequency.Annual => 1,
+            _ => 0,
+        };
+        if (recurringAmount.HasValue && periods > 0)
+            return Math.Round(recurringAmount.Value * periods, 2);
+
+        if (totalValue.HasValue && endDate.HasValue && endDate.Value > startDate)
+        {
+            var years = (decimal)(endDate.Value.DayNumber - startDate.DayNumber) / 365.25m;
+            return Math.Round(totalValue.Value / years, 2);
+        }
+        return null;
+    }
+
+    /// <summary>Adds 30/60/90 alerts from the end date plus the two decision date alerts, for future dates only.</summary>
+    private void AddRenewalAlerts(Contract contract)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        if (contract.EndDate.HasValue)
+        {
+            var alertTypes = new[] { (AlertType.NinetyDay, 90), (AlertType.SixtyDay, 60), (AlertType.ThirtyDay, 30) };
+            foreach (var (alertType, days) in alertTypes)
+            {
+                var alertDate = contract.EndDate.Value.AddDays(-days);
+                if (alertDate >= today)
+                    _db.RenewalAlerts.Add(new RenewalAlert { Id = Guid.NewGuid(), ContractId = contract.Id, AlertDate = alertDate, AlertType = alertType });
+            }
+        }
+
+        if (contract.LatestRenewalDecisionDate.HasValue && contract.LatestRenewalDecisionDate.Value >= today)
+        {
+            _db.RenewalAlerts.Add(new RenewalAlert
+            {
+                Id = Guid.NewGuid(), ContractId = contract.Id,
+                AlertDate = contract.LatestRenewalDecisionDate.Value, AlertType = AlertType.DecisionDeadline,
+            });
+        }
+
+        if (contract.EarliestRenewalDecisionDate.HasValue && contract.EarliestRenewalDecisionDate.Value >= today)
+        {
+            _db.RenewalAlerts.Add(new RenewalAlert
+            {
+                Id = Guid.NewGuid(), ContractId = contract.Id,
+                AlertDate = contract.EarliestRenewalDecisionDate.Value, AlertType = AlertType.DecisionWindowOpens,
+            });
+        }
+    }
+
+    private static string? SerializeQuestions(IEnumerable<string>? questions)
+    {
+        var list = questions?.Where(q => !string.IsNullOrWhiteSpace(q)).ToList();
+        return list == null || list.Count == 0 ? null : JsonSerializer.Serialize(list);
+    }
+
+    private static List<string> DeserializeQuestions(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
+    }
+
+    private static string? Trunc(string? value, int max) =>
+        value == null ? null : value.Length <= max ? value : value[..max];
+
+    /// <summary>Imported rows link out (absolute URL) or carry no path; uploaded files use a relative storage path.</summary>
+    private static bool IsImportedDocument(ContractDocument d) =>
+        string.IsNullOrEmpty(d.StoragePath) ||
+        d.StoragePath.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        d.StoragePath.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+    private static string? FileNameFromUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        var path = url.Split('?', '#')[0].TrimEnd('/');
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        return string.IsNullOrWhiteSpace(name) ? null : Uri.UnescapeDataString(name);
+    }
+
+    private static string ContentTypeFromFileName(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls" => "application/vnd.ms-excel",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".msg" => "application/vnd.ms-outlook",
+            ".eml" => "message/rfc822",
+            ".txt" => "text/plain",
+            _ => "application/octet-stream",
+        };
 }

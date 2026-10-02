@@ -36,4 +36,13 @@ public interface IContractService
     Task<List<TagDto>> GetTagsAsync(CancellationToken ct = default);
 
     Task<TagDto> CreateTagAsync(CreateTagRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk import from the ingestion pipeline (schema v2). Upserts on
+    /// (tenantId, SourceSystem, SourceItemId). New records are created as Draft with NeedsReview honored.
+    /// Existing records still in Draft are refreshed; records a person has moved past Draft are left alone.
+    /// Each record succeeds or fails on its own; the result reports every outcome.
+    /// </summary>
+    Task<ContractImportResult> ImportAsync(
+        int tenantId, IEnumerable<ContractImportRecord> records, string? importedById, CancellationToken ct = default);
 }

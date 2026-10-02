@@ -23,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<ContractTag> ContractTags => Set<ContractTag>();
     public DbSet<RenewalAlert> RenewalAlerts => Set<RenewalAlert>();
+    public DbSet<ContractContact> ContractContacts => Set<ContractContact>();
+    public DbSet<ContractObligation> ContractObligations => Set<ContractObligation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -167,6 +169,38 @@ public class AppDbContext : DbContext
             e.Property(c => c.Status).HasConversion<string>().HasMaxLength(50);
             e.Property(c => c.Value).HasColumnType("decimal(18,2)");
 
+            // Schema v2: enums persist as strings, like the existing ones.
+            e.Property(c => c.AgreementCategory).HasConversion<string>().HasMaxLength(50);
+            e.Property(c => c.RenewalType).HasConversion<string>().HasMaxLength(50);
+            e.Property(c => c.BillingFrequency).HasConversion<string>().HasMaxLength(50);
+            e.Property(c => c.RiskClass).HasConversion<string>().HasMaxLength(50);
+            e.Property(c => c.ConfidenceTier).HasConversion<string>().HasMaxLength(10);
+            e.Property(c => c.SourceSystem).HasConversion<string>().HasMaxLength(50);
+            e.Property(c => c.TotalValue).HasColumnType("decimal(18,2)");
+            e.Property(c => c.RecurringAmount).HasColumnType("decimal(18,2)");
+            e.Property(c => c.CounterpartyName).HasMaxLength(300);
+            e.Property(c => c.ClientInternalOwner).HasMaxLength(200);
+            e.Property(c => c.Department).HasMaxLength(200);
+            e.Property(c => c.PolicyOrAccountNumber).HasMaxLength(200);
+            e.Property(c => c.CoverageOrScopeSummary).HasMaxLength(2000);
+            e.Property(c => c.TerminationTerms).HasMaxLength(2000);
+            e.Property(c => c.SourceTenantId).HasMaxLength(64);
+            e.Property(c => c.SourceContainer).HasMaxLength(500);
+            e.Property(c => c.SourcePath).HasMaxLength(1000);
+            e.Property(c => c.SourceItemId).HasMaxLength(400);
+            e.Property(c => c.SourceWebUrl).HasMaxLength(2000);
+            e.Property(c => c.SourceFileHash).HasMaxLength(64);
+            e.Property(c => c.ExtractionModel).HasMaxLength(100);
+            // ReviewQuestions is a JSON array, left as nvarchar(max).
+
+            e.HasIndex(c => c.LatestRenewalDecisionDate);
+            e.HasIndex(c => c.NeedsReview);
+
+            // Import idempotency key. Filtered so manually entered contracts (no SourceItemId) are unaffected.
+            e.HasIndex(c => new { c.TenantId, c.SourceSystem, c.SourceItemId })
+                .IsUnique()
+                .HasFilter("[SourceItemId] IS NOT NULL");
+
             e.HasOne(c => c.Tenant)
                 .WithMany()
                 .HasForeignKey(c => c.TenantId)
@@ -243,6 +277,42 @@ public class AppDbContext : DbContext
             e.HasOne(r => r.Contract)
                 .WithMany(c => c.RenewalAlerts)
                 .HasForeignKey(r => r.ContractId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ContractContact
+        modelBuilder.Entity<ContractContact>(e =>
+        {
+            e.HasIndex(c => c.ContractId);
+            e.Property(c => c.Role).HasConversion<string>().HasMaxLength(50);
+            e.Property(c => c.Name).HasMaxLength(200);
+            e.Property(c => c.Company).HasMaxLength(300);
+            e.Property(c => c.Title).HasMaxLength(200);
+            e.Property(c => c.Email).HasMaxLength(320);
+            e.Property(c => c.Phone).HasMaxLength(50);
+            e.Property(c => c.PortalUrl).HasMaxLength(2000);
+            e.Property(c => c.Notes).HasMaxLength(2000);
+            e.Property(c => c.SourceRef).HasMaxLength(1000);
+
+            e.HasOne(c => c.Contract)
+                .WithMany(c => c.Contacts)
+                .HasForeignKey(c => c.ContractId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ContractObligation
+        modelBuilder.Entity<ContractObligation>(e =>
+        {
+            e.HasIndex(o => o.ContractId);
+            e.HasIndex(o => o.DueDate);
+            e.Property(o => o.Description).HasMaxLength(1000).IsRequired();
+            e.Property(o => o.Recurrence).HasMaxLength(200);
+            e.Property(o => o.Owner).HasMaxLength(200);
+            e.Property(o => o.Status).HasConversion<string>().HasMaxLength(50);
+
+            e.HasOne(o => o.Contract)
+                .WithMany(c => c.Obligations)
+                .HasForeignKey(o => o.ContractId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
