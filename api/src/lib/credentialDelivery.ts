@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config";
 import { submitLifecycleFailureAlert } from "./vendorQueue";
 import { graphRequest } from "./graphClient";
+import { validateApprovedPassword } from "./userAdmin";
 
 const CALLRAIL_BASE = "https://api.callrail.com/v3";
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
@@ -132,6 +133,7 @@ export async function sendCallRailPassword(
   const settingError = callRailSettingsError();
   if (settingError) return { status: "failed", destinationLast4: mobilePhone.slice(-4), error: settingError };
   try {
+    validateApprovedPassword(password);
     const response = await fetch(
       `${CALLRAIL_BASE}/a/${encodeURIComponent(config.callRailAccountId)}/text-messages.json`,
       {
