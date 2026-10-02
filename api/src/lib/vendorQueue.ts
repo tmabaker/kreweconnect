@@ -1,4 +1,5 @@
 import { BlobServiceClient } from "@azure/storage-blob";
+import { constants, publicEncrypt } from "node:crypto";
 import { QueueClient } from "@azure/storage-queue";
 import { ServiceUnavailableError } from "./http";
 
@@ -57,6 +58,53 @@ export async function submitVendorJob(job: VendorLifecycleJob): Promise<void> {
   await queue().sendMessage(Buffer.from(JSON.stringify(job)).toString("base64"));
 }
 
+
+export type CallRailDeliveryJob = {
+  id: string;
+  kind: "callrail_delivery";
+  encryptedPayload: string;
+  submittedAt: string;
+};
+
+export function encryptCallRailPayload(mobilePhone: string, password: string): string {
+  const encoded = process.env.CALLRAIL_WORKER_PUBLIC_KEY || "";
+  if (!encoded) {
+    throw new ServiceUnavailableError("CallRail worker encryption is unavailable. No password was queued.");
+  }
+  let publicKey: string;
+  try {
+    publicKey = Buffer.from(encoded, "base64").toString("utf8");
+  } catch {
+    throw new ServiceUnavailableError("CallRail worker encryption is invalid. No password was queued.");
+  }
+  const plaintext = Buffer.from(JSON.stringify({ mobilePhone, password }), "utf8");
+  try {
+    return publicEncrypt({
+      key: publicKey,
+      padding: constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: "sha256",
+    }, plaintext).toString("base64");
+  } catch {
+    throw new ServiceUnavailableError("CallRail worker encryption failed. No password was queued.");
+  } finally {
+    plaintext.fill(0);
+  }
+}
+
+export async function submitCallRailDelivery(job: CallRailDeliveryJob): Promise<void> {
+  await initializeVendorStorage();
+  const initial = JSON.stringify({
+    id: job.id,
+    kind: job.kind,
+    state: "queued",
+    attempt: 0,
+    submittedAt: job.submittedAt,
+  });
+  await container().getBlockBlobClient(job.id + ".json").upload(initial, Buffer.byteLength(initial), {
+    blobHTTPHeaders: { blobContentType: "application/json" },
+  });
+  await queue().sendMessage(Buffer.from(JSON.stringify(job)).toString("base64"));
+}
 export async function getVendorJobStatus(id: string): Promise<Record<string, unknown> | null> {
   await initializeVendorStorage();
   const blob = container().getBlobClient(id + ".json");
