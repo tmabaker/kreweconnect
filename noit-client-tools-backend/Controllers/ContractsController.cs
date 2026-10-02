@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using NOIT.ClientTools.Core.DTOs;
 using NOIT.ClientTools.Core.Enums;
 using NOIT.ClientTools.Core.Interfaces;
@@ -15,14 +16,19 @@ public class ContractsController : ControllerBase
     private readonly IContractService _contractService;
     private readonly IContractApprovalService _approvalService;
     private readonly IRenewalAlertService _renewalService;
+    private readonly IAuditService _audit;
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenantContext;
     private readonly ILogger<ContractsController> _logger;
+
+    /// <summary>Upper bound on records per import call. The pipeline sends larger sets in batches.</summary>
+    private const int MaxImportBatch = 500;
 
     public ContractsController(
         IContractService contractService,
         IContractApprovalService approvalService,
         IRenewalAlertService renewalService,
+        IAuditService audit,
         AppDbContext db,
         ITenantContext tenantContext,
         ILogger<ContractsController> logger)
@@ -30,6 +36,7 @@ public class ContractsController : ControllerBase
         _contractService = contractService;
         _approvalService = approvalService;
         _renewalService = renewalService;
+        _audit = audit;
         _db = db;
         _tenantContext = tenantContext;
         _logger = logger;
@@ -98,6 +105,39 @@ public class ContractsController : ControllerBase
         if (!result)
             return NotFound(new { error = new { code = "NOT_FOUND", message = "Contract not found." } });
         return Ok(new { message = "Contract archived." });
+    }
+
+    /// <summary>
+    /// Bulk import agreements from the ingestion pipeline (schema v2). MSP admin only.
+    /// Send one batch per client with the X-Tenant-Id header set to that client (a specific
+    /// tenant, not "all"). Idempotent on (tenant, sourceSystem, sourceItemId). New records are
+    /// created as Draft with needsReview honored. Always returns 200 with per-record outcomes
+    /// when the request itself is valid.
+    /// </summary>
+    [HttpPost("import")]
+    public async Task<IActionResult> ImportContracts([FromBody] List<ContractImportRecord> records, CancellationToken ct)
+    {
+        var (isAdmin, userId) = await GetMspAdminAsync(ct);
+        if (!isAdmin)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = new { code = "FORBIDDEN", message = "Contract import requires an MSP administrator." } });
+
+        var tenantId = ResolveTenantId();
+        if (!tenantId.HasValue)
+            return BadRequest(new { error = new { code = "TENANT_REQUIRED", message = "Set X-Tenant-Id to a specific client tenant. Import cannot run across all tenants." } });
+
+        if (records == null || records.Count == 0)
+            return BadRequest(new { error = new { code = "EMPTY_BATCH", message = "Body must be a non-empty JSON array of import records." } });
+
+        if (records.Count > MaxImportBatch)
+            return BadRequest(new { error = new { code = "BATCH_TOO_LARGE", message = $"At most {MaxImportBatch} records per call." } });
+
+        var result = await _contractService.ImportAsync(tenantId.Value, records, userId, ct);
+
+        await _audit.LogAsync("Contract.Import", "Contract", clientTenantId: tenantId.Value,
+            details: new { result.Total, result.Created, result.Updated, result.Skipped, result.Failed }, ct: ct);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -195,6 +235,22 @@ public class ContractsController : ControllerBase
     }
 
     // ─── Helpers ──────────────────────────────
+
+    /// <summary>
+    /// True when the caller maps to an active AppUser with the Admin role (NOIT MSP administrator).
+    /// The other write endpoints only require [Authorize]; import is stricter because it writes in bulk.
+    /// </summary>
+    private async Task<(bool IsAdmin, string? UserId)> GetMspAdminAsync(CancellationToken ct)
+    {
+        var oid = User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value
+            ?? User.FindFirst("oid")?.Value;
+        if (!Guid.TryParse(oid, out var entraId))
+            return (false, null);
+
+        var isAdmin = await _db.AppUsers.AsNoTracking()
+            .AnyAsync(u => u.EntraObjectId == entraId && u.IsActive && u.Role == AppUserRole.Admin, ct);
+        return (isAdmin, oid);
+    }
 
     // SECURITY: resolve the tenant filter from the middleware-authorized scope
     // (derived from the caller's token), NOT from the raw X-Tenant-Id header, so

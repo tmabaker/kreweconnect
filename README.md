@@ -25,7 +25,50 @@ Microsoft Graph. Deployed as part of KreweSuite at
 npm install
 cp .env.example .env   # fill in your Entra app registration
 npm run dev
+npm test        # unit tests (vitest) for the contract date and value helpers
 ```
+
+## KreweReview data model (schema v2)
+
+Full design: [`docs/krewereview-schema-v2.md`](docs/krewereview-schema-v2.md).
+Every addition is nullable or defaulted, so existing records stay valid.
+`contractType`, `autoRenew` and `value` are kept for compatibility
+(`autoRenew` is now derived from `renewalType`; `value` mirrors `totalValue`).
+
+**On `Contract`**
+
+- Classification: `agreementCategory` (20 values), `renewalType`
+  (MonthToMonth, AutoRenew, ExpireUnlessRenewed, Evergreen,
+  FixedTermNoRenewal, Unknown), `riskClass`, `department`,
+  `clientInternalOwner`, `counterpartyName`, `policyOrAccountNumber`,
+  `coverageOrScopeSummary`
+- Renewal terms: `renewalTermMonths`, `noticePeriodDays`,
+  `earliestRenewalDecisionDate`, `latestRenewalDecisionDate`,
+  `terminationTerms`
+- Money: `totalValue`, `recurringAmount`, `billingFrequency` (adds Usage and
+  Unknown), `annualizedValue` (computed, read only)
+- Review state: `confidenceTier` (A, B, C), `needsReview`, `reviewQuestions`
+- Provenance: `sourceSystem`, `sourceTenantId`, `sourceContainer`,
+  `sourcePath`, `sourceItemId`, `sourceWebUrl`, `sourceFileHash`,
+  `extractedAt`, `extractionModel`
+- Status adds `PendingRenewalDecision` and `Unknown`; renewal alerts add
+  `DecisionDeadline` and `DecisionWindowOpens`
+
+**New entities:** `ContractContact` (one row per role: ExternalServicer,
+Support, Payable, InternalOwner, Broker, Other) and `ContractObligation`
+(description, due date, recurrence, owner, Open/Done/Waived).
+
+**Decision window.** `latest = endDate - noticePeriodDays` (the end date
+itself for ExpireUnlessRenewed); `earliest = latest - 90 days`. The form's
+"Compute decision dates" button and the backend both use this rule.
+
+**Import.** `POST /api/v1/contracts/import` (MSP admin only, one batch per
+client via `X-Tenant-Id`) accepts an array of import records, creates them as
+Draft with `needsReview` honored, and is idempotent on
+`(tenant, sourceSystem, sourceItemId)`. The frontend mock data uses the same
+shape so the UI can be reviewed before the backend is deployed.
+Databases created by `EnsureCreated` before this change need a migration or
+re-seed to pick up the new columns and tables.
 
 ## Provenance note
 

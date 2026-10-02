@@ -11,6 +11,7 @@ import {
   Badge,
   Dropdown,
   Option,
+  Switch,
 } from "@fluentui/react-components";
 import {
   Search24Regular,
@@ -22,7 +23,10 @@ import {
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useMockContracts } from "../../shared/hooks/useMockContracts";
-import { getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_TYPES, CONTRACT_STATUSES } from "./contractUtils";
+import {
+  getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_TYPES, CONTRACT_STATUSES,
+  getCategoryLabel, getRenewalTypeLabel,
+} from "./contractUtils";
 import type { ContractStatus, ContractType } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -66,11 +70,12 @@ export function ContractListPage() {
     statusFilter, setStatusFilter,
     typeFilter, setTypeFilter,
     vendorFilter, setVendorFilter,
+    needsReviewOnly, setNeedsReviewOnly,
     sortBy, setSortBy,
     sortDir, setSortDir,
   } = useMockContracts(selectedTenant.tenantId);
 
-  const activeFilterCount = [statusFilter, typeFilter, vendorFilter].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, typeFilter, vendorFilter, needsReviewOnly].filter(Boolean).length;
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -150,9 +155,14 @@ export function ContractListPage() {
             <Option value="">All Vendors</Option>
             {vendors.map((v) => <Option key={v} value={v}>{v}</Option>)}
           </Dropdown>
+          <Switch
+            checked={needsReviewOnly}
+            onChange={(_, d) => setNeedsReviewOnly(d.checked)}
+            label="Needs review"
+          />
           {activeFilterCount > 0 && (
             <Button appearance="subtle" icon={<Dismiss24Regular />} size="small"
-              onClick={() => { setStatusFilter(null); setTypeFilter(null); setVendorFilter(null); }}>
+              onClick={() => { setStatusFilter(null); setTypeFilter(null); setVendorFilter(null); setNeedsReviewOnly(false); }}>
               Clear
             </Button>
           )}
@@ -161,16 +171,20 @@ export function ContractListPage() {
 
       {/* Table */}
       {contracts.length > 0 ? (
-        <Card>
+        <Card style={{ overflowX: "auto" }}>
           <table className={styles.table}>
             <thead>
               <tr>
                 <th className={styles.th} onClick={() => handleSort("title")}>Contract <SortIcon field="title" /></th>
                 <th className={styles.th} onClick={() => handleSort("vendor")}>Vendor <SortIcon field="vendor" /></th>
+                <th className={styles.th} onClick={() => handleSort("category")}>Category <SortIcon field="category" /></th>
+                <th className={styles.th} onClick={() => handleSort("renewalType")}>Renewal type <SortIcon field="renewalType" /></th>
                 <th className={styles.th}>Tenant</th>
                 <th className={styles.th} onClick={() => handleSort("value")}>Value <SortIcon field="value" /></th>
                 <th className={styles.th} onClick={() => handleSort("status")}>Status <SortIcon field="status" /></th>
                 <th className={styles.th} onClick={() => handleSort("endDate")}>Expires <SortIcon field="endDate" /></th>
+                <th className={styles.th} onClick={() => handleSort("decisionDate")}>Latest decision date <SortIcon field="decisionDate" /></th>
+                <th className={styles.th} onClick={() => handleSort("tier")}>Tier <SortIcon field="tier" /></th>
                 <th className={styles.th}>Tags</th>
               </tr>
             </thead>
@@ -184,6 +198,8 @@ export function ContractListPage() {
                     </Text>
                   </td>
                   <td className={styles.td}><Text>{c.vendorName}</Text></td>
+                  <td className={styles.td}><Text size={200}>{getCategoryLabel(c.agreementCategory)}</Text></td>
+                  <td className={styles.td}><Text size={200}>{getRenewalTypeLabel(c.renewalType)}</Text></td>
                   <td className={styles.td}>
                     <Badge appearance="outline" color="informative" size="small">{c.tenantDisplayName}</Badge>
                   </td>
@@ -202,6 +218,23 @@ export function ContractListPage() {
                         {formatDaysRemaining(c.daysUntilExpiry)}
                       </Text>
                     )}
+                  </td>
+                  <td className={styles.td}>
+                    <Text size={200}>{c.latestRenewalDecisionDate ?? "—"}</Text>
+                  </td>
+                  <td className={styles.td}>
+                    {c.confidenceTier ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <Badge
+                          appearance="tint"
+                          size="small"
+                          color={c.confidenceTier === "A" ? "success" : c.confidenceTier === "B" ? "warning" : "danger"}
+                        >
+                          {c.confidenceTier}
+                        </Badge>
+                        {c.needsReview && <Badge appearance="outline" color="severe" size="small">Review</Badge>}
+                      </div>
+                    ) : "—"}
                   </td>
                   <td className={styles.td}>
                     <div className={styles.tagsCell}>

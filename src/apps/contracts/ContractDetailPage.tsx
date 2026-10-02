@@ -30,10 +30,16 @@ import {
   Warning24Regular,
   Tag24Regular,
   History24Regular,
+  Person24Regular,
+  Link24Regular,
+  QuestionCircle24Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useMockContracts } from "../../shared/hooks/useMockContracts";
-import { getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, formatFileSize } from "./contractUtils";
+import {
+  getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, formatFileSize,
+  getCategoryLabel, getRenewalTypeLabel, getBillingFrequencyLabel, getContactRoleLabel,
+} from "./contractUtils";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "24px" },
@@ -77,6 +83,12 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2,
   },
   tagsRow: { display: "flex", flexWrap: "wrap", gap: "6px" },
+  contactItem: {
+    display: "flex", flexDirection: "column", gap: "2px",
+    padding: "10px 12px", borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  questionList: { margin: 0, paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "6px" },
   notFound: { display: "flex", flexDirection: "column", alignItems: "center", padding: "64px", gap: "12px" },
 });
 
@@ -131,6 +143,8 @@ export function ContractDetailPage() {
                   {getStatusLabel(contract.status)}
                 </Badge>
                 {contract.autoRenew && <Badge appearance="outline" color="brand" size="small">Auto-Renew</Badge>}
+                {contract.needsReview && <Badge appearance="filled" color="severe" size="small">Needs review</Badge>}
+                {contract.confidenceTier && <Badge appearance="tint" color="informative" size="small">Tier {contract.confidenceTier}</Badge>}
                 {contract.daysUntilExpiry !== null && contract.daysUntilExpiry <= 90 && contract.daysUntilExpiry > 0 && (
                   <Badge appearance="filled" color={contract.daysUntilExpiry <= 30 ? "danger" : "warning"} size="small">
                     <Warning24Regular style={{ fontSize: "14px", marginRight: "4px" }} />
@@ -161,6 +175,38 @@ export function ContractDetailPage() {
                 <Text weight="semibold">{contract.renewalDate ?? "—"}</Text>
               </div>
               <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Category</Text>
+                <Text weight="semibold">{getCategoryLabel(contract.agreementCategory)}</Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Renewal Type</Text>
+                <Text weight="semibold">{getRenewalTypeLabel(contract.renewalType)}</Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Notice Period</Text>
+                <Text weight="semibold">{contract.noticePeriodDays != null ? `${contract.noticePeriodDays} days` : "—"}</Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Decision Window Opens</Text>
+                <Text weight="semibold">{contract.earliestRenewalDecisionDate ?? "—"}</Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Decision Deadline</Text>
+                <Text weight="semibold">{contract.latestRenewalDecisionDate ?? "—"}</Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Billing</Text>
+                <Text weight="semibold">
+                  {contract.recurringAmount != null
+                    ? `${formatCurrency(contract.recurringAmount, contract.currency)} ${getBillingFrequencyLabel(contract.billingFrequency).toLowerCase()}`
+                    : getBillingFrequencyLabel(contract.billingFrequency)}
+                </Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Annualized Value</Text>
+                <Text weight="semibold">{contract.annualizedValue != null ? formatCurrency(contract.annualizedValue, contract.currency) : "—"}</Text>
+              </div>
+              <div className={styles.metaItem}>
                 <Text className={styles.metaLabel}>Currency</Text>
                 <Text weight="semibold">{contract.currency}</Text>
               </div>
@@ -189,6 +235,43 @@ export function ContractDetailPage() {
               )}
             </Card>
           )}
+
+          {/* Review questions */}
+          {contract.reviewQuestions.length > 0 && (
+            <Card className={styles.section}>
+              <div className={styles.sectionTitle}>
+                <QuestionCircle24Regular />
+                <Title3>Review Questions</Title3>
+              </div>
+              <ul className={styles.questionList}>
+                {contract.reviewQuestions.map((q, i) => (
+                  <li key={i}><Text>{q}</Text></li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {/* Contacts */}
+          <Card className={styles.section}>
+            <div className={styles.sectionTitle}>
+              <Person24Regular />
+              <Title3>Contacts</Title3>
+            </div>
+            {contract.contacts.length > 0 ? (
+              contract.contacts.map((c) => (
+                <div key={c.id} className={styles.contactItem}>
+                  <Text className={styles.metaLabel}>{getContactRoleLabel(c.role)}</Text>
+                  <Text weight="semibold">{c.name ?? "—"}{c.title ? `, ${c.title}` : ""}</Text>
+                  {c.company && <Text size={200}>{c.company}</Text>}
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                    {[c.email, c.phone].filter(Boolean).join(" · ") || "No email or phone on file"}
+                  </Text>
+                </div>
+              ))
+            ) : (
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>No contacts recorded.</Text>
+            )}
+          </Card>
 
           {/* Documents (Epic 10) */}
           <Card className={styles.section}>
@@ -303,6 +386,57 @@ export function ContractDetailPage() {
               >
                 Request Approval
               </Button>
+            )}
+          </Card>
+
+          {/* Provenance */}
+          <Card className={styles.section}>
+            <div className={styles.sectionTitle}>
+              <Link24Regular />
+              <Title3>Provenance</Title3>
+            </div>
+            {contract.sourceSystem ? (
+              <>
+                <div className={styles.metaItem}>
+                  <Text className={styles.metaLabel}>Source System</Text>
+                  <Text weight="semibold">{contract.sourceSystem}</Text>
+                </div>
+                {contract.sourceContainer && (
+                  <div className={styles.metaItem}>
+                    <Text className={styles.metaLabel}>Container</Text>
+                    <Text weight="semibold">{contract.sourceContainer}</Text>
+                  </div>
+                )}
+                {contract.sourcePath && (
+                  <div className={styles.metaItem}>
+                    <Text className={styles.metaLabel}>Path</Text>
+                    <Text style={{ wordBreak: "break-all" }}>{contract.sourcePath}</Text>
+                  </div>
+                )}
+                {contract.extractedAt && (
+                  <div className={styles.metaItem}>
+                    <Text className={styles.metaLabel}>Extracted</Text>
+                    <Text>
+                      {new Date(contract.extractedAt).toLocaleString()}
+                      {contract.extractionModel ? ` · ${contract.extractionModel}` : ""}
+                    </Text>
+                  </div>
+                )}
+                {contract.sourceWebUrl && /^https?:\/\//i.test(contract.sourceWebUrl) && (
+                  <Button
+                    as="a"
+                    appearance="outline"
+                    href={contract.sourceWebUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    icon={<Link24Regular />}
+                  >
+                    Open original
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Entered manually. No source document linked.</Text>
             )}
           </Card>
 
