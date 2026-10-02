@@ -22,8 +22,7 @@ const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGIT = "123456789";
 const SYMBOL = "?!@#$%&";
-const APPROVED_PASSWORD_LENGTH = 10;
-const MINIMUM_PASSWORD_LENGTH = 8;
+const APPROVED_PASSWORD_LENGTH = 9;
 const GEAUX_TENANT_ID = "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa";
 const ENDPOINT_NAME = /^[A-Z0-9][A-Z0-9-]{2,14}$/;
 
@@ -46,20 +45,21 @@ export function normalizeEndpointName(value: unknown, required = false): string 
 }
 
 export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
-  if (length < MINIMUM_PASSWORD_LENGTH || length > APPROVED_PASSWORD_LENGTH) {
-    throw new BadRequestError("Generated passwords must be between 8 and 10 characters.");
+  if (length !== APPROVED_PASSWORD_LENGTH) {
+    throw new BadRequestError("Generated passwords must be exactly 9 characters.");
   }
-  const all = LOWER + UPPER + DIGIT + SYMBOL;
+  const LETTER = LOWER + UPPER;
   const chars = [
-    LOWER[randomInt(LOWER.length)],
-    UPPER[randomInt(UPPER.length)],
+    LETTER[randomInt(LETTER.length)],
+    LETTER[randomInt(LETTER.length)],
+    LETTER[randomInt(LETTER.length)],
+    LETTER[randomInt(LETTER.length)],
+    DIGIT[randomInt(DIGIT.length)],
+    DIGIT[randomInt(DIGIT.length)],
+    DIGIT[randomInt(DIGIT.length)],
     DIGIT[randomInt(DIGIT.length)],
     SYMBOL[randomInt(SYMBOL.length)],
   ];
-  while (chars.length < length) {
-    chars.push(all[randomInt(all.length)]);
-  }
-  // Fisher–Yates so the guaranteed classes aren't always at the front
   for (let i = chars.length - 1; i > 0; i--) {
     const j = randomInt(i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];
@@ -68,17 +68,17 @@ export function generatePassword(length = APPROVED_PASSWORD_LENGTH): string {
 }
 
 export function validateApprovedPassword(password: string): void {
+  const letters = (password.match(/[a-zA-Z]/g) || []).length;
+  const digits = (password.match(/[1-9]/g) || []).length;
+  const symbols = (password.match(/[?!@#$%&]/g) || []).length;
   if (
-    password.length < MINIMUM_PASSWORD_LENGTH ||
-    password.length > APPROVED_PASSWORD_LENGTH ||
-    !/[a-zA-Z]/.test(password) ||
-    !/[1-9]/.test(password) ||
-    !/[?!@#$%&]/.test(password) ||
+    password.length !== APPROVED_PASSWORD_LENGTH ||
+    letters !== 4 || digits !== 4 || symbols !== 1 ||
     /[^a-zA-Z1-9?!@#$%&]/.test(password) ||
     /[IlO0]/.test(password)
   ) {
     throw new BadRequestError(
-      "Password must be 8 to 10 characters with letters, digits 1-9, and a symbol from ?!@#$%&, without I, l, O, or 0."
+      "Password must contain exactly four letters, four digits 1-9, and one symbol from ?!@#$%&, without I, l, O, or 0."
     );
   }
 }
