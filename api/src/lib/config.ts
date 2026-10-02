@@ -135,14 +135,8 @@ export const config = {
   },
 
   /* ── Geaux credential delivery (required in production) ─────────── */
-  get callRailApiKey(): string {
-    return process.env.CALLRAIL_API_KEY || "";
-  },
-  get callRailAccountId(): string {
-    return process.env.CALLRAIL_ACCOUNT_ID || "";
-  },
-  get callRailTrackingNumber(): string {
-    return process.env.CALLRAIL_TRACKING_NUMBER || "";
+  get callRailWorkerPublicKey(): string {
+    return process.env.CALLRAIL_WORKER_PUBLIC_KEY || "";
   },
   get geauxSupportMailbox(): string {
     return process.env.GEAUX_SUPPORT_MAILBOX || "support@geauxautomotive.com";

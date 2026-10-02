@@ -12,9 +12,7 @@ const complete = {
   CONSENT_REDIRECT_URI: "https://example.test/consent",
   CDK_STORAGE_CONNECTION: "storage",
   CDK_INITIAL_PASSWORD: "configured",
-  CALLRAIL_API_KEY: "callrail-secret",
-  CALLRAIL_ACCOUNT_ID: "account",
-  CALLRAIL_TRACKING_NUMBER: "+15045550100",
+  CALLRAIL_WORKER_PUBLIC_KEY: "base64-public-key",
   GEAUX_MANAGER_MAIL_SUBJECT: "established encrypted subject",
   GEAUX_MANAGER_MAIL_TRIGGER_HEADER: "X-NOIT-Credential-Delivery",
   GEAUX_MANAGER_MAIL_TRIGGER_VALUE: "geaux-manager-password",
@@ -28,7 +26,7 @@ test("deployment readiness includes every lifecycle dependency", () => {
   const settings = deploymentSettings(complete);
   assert.equal(settings.CDK_STORAGE_CONNECTION, true);
   assert.equal(settings.VENDOR_STORAGE_CONNECTION, true);
-  assert.equal(settings.CALLRAIL_API_KEY, true);
+  assert.equal(settings.CALLRAIL_WORKER_PUBLIC_KEY, true);
   assert.equal(deploymentReady(settings), true);
 });
 
@@ -57,8 +55,8 @@ test("deployment is not ready when shared lifecycle storage is absent", () => {
 });
 
 test("deployment is not ready when CallRail delivery is absent", () => {
-  const settings = deploymentSettings({ ...complete, CALLRAIL_API_KEY: "" });
-  assert.equal(settings.CALLRAIL_API_KEY, false);
+  const settings = deploymentSettings({ ...complete, CALLRAIL_WORKER_PUBLIC_KEY: "" });
+  assert.equal(settings.CALLRAIL_WORKER_PUBLIC_KEY, false);
   assert.equal(deploymentReady(settings), false);
 });
 

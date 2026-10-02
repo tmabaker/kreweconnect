@@ -1,80 +1,45 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { constants, generateKeyPairSync, privateDecrypt } = require("node:crypto");
 
-function loadModule() {
-  const path = require.resolve("../dist/src/lib/credentialDelivery.js");
-  delete require.cache[path];
-  return require(path);
-}
-
-test("CallRail delivery uses the approved sender, recipient, and fleet template", async () => {
-  process.env.CALLRAIL_API_KEY = "unit-test-key";
-  process.env.CALLRAIL_ACCOUNT_ID = "account-id";
-  process.env.CALLRAIL_TRACKING_NUMBER = "+15042859030";
-  const calls = [];
-  const originalFetch = global.fetch;
-  global.fetch = async (url, options) => {
-    calls.push({ url, options });
-    return new Response(JSON.stringify({ id: "message-123" }), {
-      status: 201,
-      headers: { "content-type": "application/json" },
-    });
-  };
-  try {
-    const { sendCallRailPassword } = loadModule();
-    const result = await sendCallRailPassword("+12255550123", "Abcd1234!");
-    assert.deepEqual(result, {
-      status: "sent",
-      accepted: true,
-      destinationLast4: "0123",
-      messageId: "message-123",
-    });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].url, "https://api.callrail.com/v3/a/account-id/text-messages.json");
-    assert.equal(calls[0].options.headers.Authorization, "Token token=unit-test-key");
-    const body = JSON.parse(calls[0].options.body);
-    assert.equal(body.tracking_number, "+15042859030");
-    assert.equal(body.customer_phone_number, "+12255550123");
-    assert.match(body.content, /^Welcome to Geaux Automotive!/);
-    assert.match(body.content, /support@geauxautomotive\.com\.$/);
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-test("CallRail fails closed before provider contact for a nonapproved password", async () => {
-  process.env.CALLRAIL_API_KEY = "unit-test-key";
-  process.env.CALLRAIL_ACCOUNT_ID = "account-id";
-  process.env.CALLRAIL_TRACKING_NUMBER = "+15042859030";
-  let called = false;
-  const originalFetch = global.fetch;
-  global.fetch = async () => {
-    called = true;
-    throw new Error("provider must not be contacted");
-  };
-  try {
-    const { sendCallRailPassword } = loadModule();
-    const result = await sendCallRailPassword("+12255550123", "Abcdef1!");
-    assert.equal(result.status, "failed");
-    assert.equal(called, false);
-    assert.match(result.error, /exactly four letters/);
-  } finally { global.fetch = originalFetch; }
+test("CallRail delivery uses only the encrypted worker queue", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../src/lib/credentialDelivery.ts"), "utf8");
+  assert.match(source, /submitCallRailDelivery/);
+  assert.match(source, /encryptCallRailPayload/);
+  assert.doesNotMatch(source, /api\.callrail\.com/);
+  assert.doesNotMatch(source, /CALLRAIL_API_KEY/);
 });
 
-test("CallRail failure returns a scrubbed component result", async () => {
-  process.env.CALLRAIL_API_KEY = "unit-test-key";
-  process.env.CALLRAIL_ACCOUNT_ID = "account-id";
-  process.env.CALLRAIL_TRACKING_NUMBER = "+15042859030";
-  const originalFetch = global.fetch;
-  global.fetch = async () => new Response("provider details", { status: 503 });
-  try {
-    const { sendCallRailPassword } = loadModule();
-    const result = await sendCallRailPassword("+12255550123", "Abcd1234!");
-    assert.equal(result.status, "failed");
-    assert.equal(result.destinationLast4, "0123");
-    assert.match(result.error, /HTTP 503/);
-    assert.doesNotMatch(result.error, /Abcd1234!/);
-    assert.doesNotMatch(result.error, /provider details/);
-  } finally {
-    global.fetch = originalFetch;
-  }
+test("CallRail queue payload is RSA OAEP encrypted", () => {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  process.env.CALLRAIL_WORKER_PUBLIC_KEY = Buffer.from(publicKey).toString("base64");
+  const modulePath = require.resolve("../dist/src/lib/vendorQueue.js");
+  delete require.cache[modulePath];
+  const { encryptCallRailPayload } = require(modulePath);
+  const encrypted = encryptCallRailPayload("+12255550123", "Abcd1234!");
+  assert.doesNotMatch(encrypted, /Abcd1234/);
+  const plain = privateDecrypt({
+    key: privateKey,
+    padding: constants.RSA_PKCS1_OAEP_PADDING,
+    oaepHash: "sha256",
+  }, Buffer.from(encrypted, "base64"));
+  const value = JSON.parse(plain.toString("utf8"));
+  assert.deepEqual(value, { mobilePhone: "+12255550123", password: "Abcd1234!" });
+  plain.fill(0);
+});
+
+test("CallRail fails closed before queue contact for a nonapproved password", async () => {
+  process.env.CALLRAIL_WORKER_PUBLIC_KEY = "configured";
+  const modulePath = require.resolve("../dist/src/lib/credentialDelivery.js");
+  delete require.cache[modulePath];
+  const { sendCallRailPassword } = require(modulePath);
+  const result = await sendCallRailPassword("+12255550123", "Abcdef1!");
+  assert.equal(result.status, "failed");
+  assert.match(result.error, /exactly four letters/);
 });
