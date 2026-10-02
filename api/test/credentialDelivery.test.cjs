@@ -22,7 +22,7 @@ test("CallRail delivery uses the approved sender, recipient, and fleet template"
   };
   try {
     const { sendCallRailPassword } = loadModule();
-    const result = await sendCallRailPassword("+12255550123", "Abcdef1!");
+    const result = await sendCallRailPassword("+12255550123", "Abcd1234!");
     assert.deepEqual(result, {
       status: "sent",
       accepted: true,
@@ -41,6 +41,24 @@ test("CallRail delivery uses the approved sender, recipient, and fleet template"
     global.fetch = originalFetch;
   }
 });
+test("CallRail fails closed before provider contact for a nonapproved password", async () => {
+  process.env.CALLRAIL_API_KEY = "unit-test-key";
+  process.env.CALLRAIL_ACCOUNT_ID = "account-id";
+  process.env.CALLRAIL_TRACKING_NUMBER = "+15042859030";
+  let called = false;
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    called = true;
+    throw new Error("provider must not be contacted");
+  };
+  try {
+    const { sendCallRailPassword } = loadModule();
+    const result = await sendCallRailPassword("+12255550123", "Abcdef1!");
+    assert.equal(result.status, "failed");
+    assert.equal(called, false);
+    assert.match(result.error, /exactly four letters/);
+  } finally { global.fetch = originalFetch; }
+});
 
 test("CallRail failure returns a scrubbed component result", async () => {
   process.env.CALLRAIL_API_KEY = "unit-test-key";
@@ -50,11 +68,11 @@ test("CallRail failure returns a scrubbed component result", async () => {
   global.fetch = async () => new Response("provider details", { status: 503 });
   try {
     const { sendCallRailPassword } = loadModule();
-    const result = await sendCallRailPassword("+12255550123", "Abcdef1!");
+    const result = await sendCallRailPassword("+12255550123", "Abcd1234!");
     assert.equal(result.status, "failed");
     assert.equal(result.destinationLast4, "0123");
     assert.match(result.error, /HTTP 503/);
-    assert.doesNotMatch(result.error, /Abcdef1!/);
+    assert.doesNotMatch(result.error, /Abcd1234!/);
     assert.doesNotMatch(result.error, /provider details/);
   } finally {
     global.fetch = originalFetch;
