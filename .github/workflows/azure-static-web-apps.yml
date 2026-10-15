@@ -23,6 +23,7 @@ on:
       - "docs/**"
       - "README.md"
       - "noit-client-tools-backend/**"
+      - "apps/kreweworks/**"
       # The governance .NET API deploys to App Service (krewe-governance-api),
       # not through this workflow.
       - "apps/**"

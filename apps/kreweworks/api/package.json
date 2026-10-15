@@ -1,0 +1,18 @@
+{
+  "name": "kreweworks-api",
+  "version": "1.0.0",
+  "description": "KreweWorks employee lifecycle portal: Azure Functions API (hire, change, terminate workflow, people registry, notifications).",
+  "private": true,
+  "main": "src/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "func start",
+    "test": "node --test test/*.test.js",
+    "dev": "node dev-server.js"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.0",
+    "@azure/functions": "^4.6.0",
+    "@azure/storage-blob": "^12.26.0"
+  }
+}

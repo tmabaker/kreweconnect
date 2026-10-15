@@ -1,0 +1,43 @@
+{
+  "platform": { "apiRuntime": "node:20" },
+  "auth": {
+    "rolesSource": "/api/roles",
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/common/v2.0",
+          "clientIdSettingName": "AZURE_CLIENT_ID",
+          "clientSecretSettingName": "AZURE_CLIENT_SECRET"
+        },
+        "login": { "loginParameters": ["prompt=select_account"] }
+      }
+    }
+  },
+  "routes": [
+    { "route": "/.auth/login/github", "statusCode": 404 },
+    { "route": "/.auth/login/twitter", "statusCode": 404 },
+    { "route": "/.auth/login/google", "statusCode": 404 },
+    { "route": "/api/health", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/api/roles", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/api/me", "allowedRoles": ["authenticated"] },
+    { "route": "/api/*", "allowedRoles": ["portal"] },
+    { "route": "/no-access.html", "allowedRoles": ["authenticated"] },
+    { "route": "/assets/*", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/styles.css", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/no-access.js", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/*", "allowedRoles": ["portal"] }
+  ],
+  "responseOverrides": {
+    "401": { "redirect": "/.auth/login/aad?post_login_redirect_uri=.referrer", "statusCode": 302 },
+    "403": { "rewrite": "/no-access.html", "statusCode": 403 }
+  },
+  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/assets/*", "/*.{css,js,svg,png,ico,json,html}"] },
+  "globalHeaders": {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Cache-Control": "no-store"
+  }
+}

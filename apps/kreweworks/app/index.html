@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employee Portal</title>
+<meta name="description" content="Hire, change and terminate employees. Routed to HR and IT, tracked from applicant to departure. Powered by KreweWorks.">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <a class="brand" href="#/">
+    <img src="/assets/kreweworks-logo.svg" alt="" class="brand-logo" id="brandLogo">
+    <span class="brand-text"><span class="brand-name" id="brandName">Employee Portal</span><span class="brand-sub" id="brandSub"></span></span>
+  </a>
+  <nav class="topnav" id="topnav" aria-label="Main">
+    <a href="#/" data-nav="home">Home</a>
+    <a href="#/requests" data-nav="requests">Requests</a>
+    <a href="#/people" data-nav="people">People</a>
+    <a href="#/admin" data-nav="admin" data-roles="hr,it,admin">Access</a>
+  </nav>
+  <div class="topbar-right">
+    <div class="newmenu">
+      <button class="btn btn-primary" id="newBtn" aria-haspopup="true" aria-expanded="false">+ New request</button>
+      <div class="menu" id="newMenu" hidden>
+        <a href="#/hire/new"><strong>Hire an employee</strong><span>Start the pre-employment packet and route to HR</span></a>
+        <a href="#/change/new"><strong>Change an employee</strong><span>Transfer, promotion, new position, manager, desk or access</span></a>
+        <a href="#/terminate/new"><strong>Terminate an employee</strong><span>Resignation or termination, with access end date</span></a>
+      </div>
+    </div>
+    <div class="user" id="userBox"><span class="user-name" id="userName">Signing in…</span><span class="user-role" id="userRole"></span></div>
+    <a class="signout" href="/.auth/logout?post_logout_redirect_uri=/" title="Sign out">Sign out</a>
+  </div>
+</header>
+<main id="main" class="main" aria-live="polite"></main>
+<footer class="footer">
+  <span id="footName">Employee Portal</span>
+  <span id="footHelp"></span>
+  <span id="footOps">Powered by KreweWorks</span>
+</footer>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body>
+</html>

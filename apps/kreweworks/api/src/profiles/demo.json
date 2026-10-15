@@ -1,0 +1,274 @@
+{
+  "_comment": "Fictional demo client for local development and tests. Real client profiles live in a private repository and are never committed here.",
+  "client": {
+    "slug": "demo",
+    "name": "Bayou Demo Company",
+    "tenantId": "00000000-0000-4000-8000-00000000d3e0",
+    "primaryDomain": "bayoudemo.example",
+    "helpdesk": {
+      "name": "Demo Help Desk",
+      "email": "support@bayoudemo.example",
+      "phone": "(504) 555-0100"
+    },
+    "hr": {
+      "email": "hr@bayoudemo.example"
+    },
+    "operatedBy": "NOIT Group"
+  },
+  "tenants": {
+    "allowed": [
+      "00000000-0000-4000-8000-00000000d3e0",
+      "00000000-0000-4000-8000-0000000a0017"
+    ]
+  },
+  "vocab": {
+    "location": "Office",
+    "locations": "Offices",
+    "hrSystem": "the payroll system",
+    "portalName": "Employee Portal"
+  },
+  "branding": {
+    "subtitle": "Bayou Demo Company"
+  },
+  "mail": {
+    "from": "support@bayoudemo.example",
+    "hr": "hr@bayoudemo.example",
+    "it": "support@bayoudemo.example"
+  },
+  "deploy": {
+    "baseUrl": "https://employees.bayoudemo.example",
+    "tablePrefix": "kwdemo",
+    "blobContainer": "kwdemo-attachments"
+  },
+  "stores": [
+    {
+      "id": "north",
+      "name": "Bayou Demo - North Shore",
+      "short": "North Shore",
+      "city": "Covington, LA",
+      "phone": "(985) 555-0101"
+    },
+    {
+      "id": "south",
+      "name": "Bayou Demo - South Shore",
+      "short": "South Shore",
+      "city": "New Orleans, LA",
+      "phone": "(504) 555-0102"
+    }
+  ],
+  "departments": [
+    "Administration",
+    "Field Operations",
+    "Finance",
+    "Sales"
+  ],
+  "jobTitles": [
+    "Accountant",
+    "Field Supervisor",
+    "Office Manager",
+    "Sales Associate",
+    "Technician"
+  ],
+  "applications": [
+    {
+      "key": "office",
+      "label": "Microsoft 365 (email, Teams)",
+      "always": true
+    },
+    {
+      "key": "erp",
+      "label": "ERP"
+    },
+    {
+      "key": "crm",
+      "label": "CRM"
+    },
+    {
+      "key": "payroll",
+      "label": "Payroll and HR system",
+      "always": true,
+      "owner": "hr"
+    },
+    {
+      "key": "other",
+      "label": "Other (describe in notes)"
+    }
+  ],
+  "equipment": [
+    {
+      "key": "laptop",
+      "label": "Laptop"
+    },
+    {
+      "key": "dock",
+      "label": "Docking station"
+    },
+    {
+      "key": "monitor2",
+      "label": "Two monitors"
+    },
+    {
+      "key": "phone",
+      "label": "Desk phone"
+    },
+    {
+      "key": "mobile",
+      "label": "Company mobile phone"
+    }
+  ],
+  "accessProfiles": {
+    "groups": {
+      "office": {
+        "titles": [
+          "Accountant",
+          "Office Manager"
+        ],
+        "apps": [
+          "office",
+          "erp"
+        ],
+        "device": "Laptop with dock and two monitors",
+        "license": "Microsoft 365 Business Premium"
+      },
+      "field": {
+        "titles": [
+          "Field Supervisor",
+          "Technician"
+        ],
+        "apps": [
+          "office"
+        ],
+        "device": "Tablet and mobile phone",
+        "license": "Microsoft 365 Business Premium"
+      },
+      "sales": {
+        "titles": [
+          "Sales Associate"
+        ],
+        "apps": [
+          "office",
+          "crm"
+        ],
+        "device": "Laptop and mobile phone",
+        "license": "Microsoft 365 Business Premium"
+      }
+    }
+  },
+  "packetItems": [
+    {
+      "key": "application",
+      "label": "Employment application"
+    },
+    {
+      "key": "backgroundConsent",
+      "label": "Background check consent"
+    },
+    {
+      "key": "identification",
+      "label": "Identification copies (collected on day one if not provided)"
+    }
+  ],
+  "screeningItems": [
+    {
+      "key": "background",
+      "label": "Background check"
+    },
+    {
+      "key": "references",
+      "label": "Reference check"
+    }
+  ],
+  "dayOneItems": [
+    {
+      "key": "payrollOnboarding",
+      "label": "New hire completed payroll onboarding"
+    },
+    {
+      "key": "taxForms",
+      "label": "Tax and I-9 forms completed"
+    },
+    {
+      "key": "policiesAcknowledged",
+      "label": "Handbook and policies acknowledged"
+    },
+    {
+      "key": "firstLogin",
+      "label": "First login appointment held"
+    }
+  ],
+  "terminationTypes": [
+    {
+      "key": "resignation",
+      "label": "Resignation (voluntary)"
+    },
+    {
+      "key": "termination",
+      "label": "Termination (involuntary)"
+    },
+    {
+      "key": "termination_cause",
+      "label": "Termination for cause"
+    },
+    {
+      "key": "no_show",
+      "label": "No show / never started"
+    },
+    {
+      "key": "layoff",
+      "label": "Layoff / position eliminated"
+    },
+    {
+      "key": "retirement",
+      "label": "Retirement"
+    },
+    {
+      "key": "other",
+      "label": "Other"
+    }
+  ],
+  "changeTypes": [
+    {
+      "key": "transfer",
+      "label": "Transfer to another office"
+    },
+    {
+      "key": "title",
+      "label": "Job title change (promotion, new position)"
+    },
+    {
+      "key": "department",
+      "label": "Department change"
+    },
+    {
+      "key": "manager",
+      "label": "Direct manager change"
+    },
+    {
+      "key": "workspace",
+      "label": "Desk, endpoint or phone extension change"
+    },
+    {
+      "key": "access",
+      "label": "Application or portal access change"
+    },
+    {
+      "key": "name",
+      "label": "Legal or preferred name change"
+    }
+  ],
+  "noticeStandards": [
+    {
+      "type": "Account only with an existing ready device",
+      "minimum": "Three business days"
+    },
+    {
+      "type": "New equipment, device reassignment, or custom applications",
+      "minimum": "Five business days"
+    }
+  ],
+  "techtools": {
+    "addUser": "usersetup.html",
+    "modifyUser": "usermodify.html",
+    "removeUser": "userremove.html"
+  }
+}
