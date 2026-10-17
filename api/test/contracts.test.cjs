@@ -58,13 +58,16 @@ function freePort() {
   });
 }
 
+// Azurite lives in the repo root's devDependencies so it never ships in the
+// deployed API bundle. Run `npm ci` at the repo root before `npm test` here.
+const AZURITE = join(__dirname, '..', '..', 'node_modules', '.bin', 'azurite-blob');
 let azurite;
 let dataDir;
 test.before(async () => {
   const port = await freePort();
   dataDir = mkdtempSync(join(tmpdir(), 'azurite-'));
   azurite = spawn(
-    join(__dirname, '..', 'node_modules', '.bin', 'azurite-blob'),
+    AZURITE,
     ['--blobHost', '127.0.0.1', '--blobPort', String(port), '--location', dataDir, '--silent', '--skipApiVersionCheck'],
     { stdio: 'ignore' }
   );
