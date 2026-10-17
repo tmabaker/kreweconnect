@@ -15,6 +15,21 @@ export class BadRequestError extends Error {
   }
 }
 
+export class NotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}
+
+/** A write lost a race with another write (stale ETag or duplicate id). */
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+
 export class ServiceUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -50,7 +65,7 @@ function corsHeaders(request: HttpRequest): Record<string, string> {
   if (!origin || !allowedOrigins().includes(origin.replace(/\/$/, ""))) return {};
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,X-KreweConnect-Auth,Content-Type",
     "Access-Control-Max-Age": "3600",
     Vary: "Origin",
@@ -95,6 +110,12 @@ function mapError(err: unknown, context: InvocationContext): HttpResponseInit {
   }
   if (err instanceof BadRequestError) {
     return { status: 400, jsonBody: { code: "bad_request", message: err.message } };
+  }
+  if (err instanceof NotFoundError) {
+    return { status: 404, jsonBody: { code: "not_found", message: err.message } };
+  }
+  if (err instanceof ConflictError) {
+    return { status: 409, jsonBody: { code: "conflict", message: err.message } };
   }
   if (err instanceof ServiceUnavailableError) {
     return {

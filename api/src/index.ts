@@ -6,3 +6,4 @@ import "./functions/me";
 
 import "./functions/cdkJobs";
 import "./functions/vendorJobs";
+import "./functions/contracts";

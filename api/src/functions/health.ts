@@ -5,8 +5,10 @@
 
 import { app } from "@azure/functions";
 import { deploymentReady, deploymentSettings } from "../lib/readiness";
+import { contractsConnection } from "../lib/contractStore";
+import { extractionConfigured } from "../lib/contractExtraction";
 
-const API_VERSION = "0.7.0"; // bump when API behavior changes
+const API_VERSION = "0.8.0"; // bump when API behavior changes
 
 app.http("health", {
   methods: ["GET"],
@@ -20,6 +22,11 @@ app.http("health", {
         ok: deploymentReady(settings),
         apiVersion: API_VERSION,
         settings,
+        // Reported separately so they never block the CDK deploy gate.
+        features: {
+          contractsStorage: Boolean(contractsConnection()),
+          contractExtraction: extractionConfigured(),
+        },
       },
     };
   },
