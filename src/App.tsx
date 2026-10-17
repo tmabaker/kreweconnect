@@ -37,6 +37,9 @@ const ContractFormPage = lazy(() =>
 const RenewalsPage = lazy(() =>
   import("./apps/contracts/RenewalsPage").then((m) => ({ default: m.RenewalsPage }))
 );
+const PicklistsPage = lazy(() =>
+  import("./apps/contracts/PicklistsPage").then((m) => ({ default: m.PicklistsPage }))
+);
 const SettingsPage = lazy(() =>
   import("./apps/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }))
 );
@@ -87,10 +90,12 @@ function App() {
                 {/* KreweReview / Contracts + Settings — MSP-admin only. */}
                 <Route path="/contracts" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
                 <Route path="/contracts/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
-                <Route path="/contracts/new" element={<MspAdminRoute><ContractFormPage /></MspAdminRoute>} />
+                <Route path="/contracts/new" element={<MspAdminRoute><ContractFormPage mode="new" /></MspAdminRoute>} />
                 <Route path="/contracts/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
-                <Route path="/contracts/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
-                <Route path="/contracts/:id/edit" element={<MspAdminRoute><ContractFormPage /></MspAdminRoute>} />
+                <Route path="/contracts/lists" element={<MspAdminRoute><PicklistsPage /></MspAdminRoute>} />
+                <Route path="/contracts/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
+                <Route path="/contracts/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
+                <Route path="/contracts/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
                 <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
                 {/* KREWE Governance — library management is MSP-only; the wizard,
                     client profile, and assembled viewer are client-reachable

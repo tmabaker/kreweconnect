@@ -200,10 +200,12 @@ export interface TagItem {
 
 export interface ContractListItem {
   id: string;
-  tenantId: number;
+  /** Entra tenant GUID the agreement belongs to. */
+  tenantId: string;
   tenantDisplayName: string;
   vendorName: string;
-  contractType: ContractType;
+  /** Legacy classifier, sample data only. `agreementCategory` is the classifier. */
+  contractType?: ContractType;
   title: string;
   startDate: string;
   endDate: string;
@@ -220,6 +222,11 @@ export interface ContractListItem {
   earliestRenewalDecisionDate: string | null;
   confidenceTier: ConfidenceTier | null;
   needsReview: boolean;
+  /** From the tenant's location pick list. */
+  location: string | null;
+  /** From the tenant's department pick list. */
+  department: string | null;
+  isArchived?: boolean;
 }
 
 export interface ContractVersionItem {
@@ -238,6 +245,7 @@ export interface ContractDocumentItem {
   contentType: string;
   uploadedById: string | null;
   uploadedAt: string;
+  kind?: "original" | "renewal" | "supporting";
 }
 
 export type ApprovalStatus = "Pending" | "Approved" | "Rejected";
@@ -263,6 +271,8 @@ export type RenewalAlertType =
 export interface RenewalAlertItem {
   id: string;
   contractId: string;
+  /** Tenant of the agreement; needed to open it from an "All Tenants" view. */
+  tenantId?: string;
   contractTitle: string;
   vendorName: string;
   tenantDisplayName: string;
@@ -329,7 +339,7 @@ export interface ContractDashboard {
   activeContracts: number;
   expiringSoon: number;
   totalValue: number;
-  byType: Record<string, number>;
+  byCategory: Record<string, number>;
   byStatus: Record<string, number>;
   recentContracts: ContractListItem[];
   upcomingRenewals: RenewalAlertItem[];

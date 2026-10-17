@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   makeStyles,
@@ -10,7 +10,9 @@ import {
   Button,
   Badge,
   Divider,
-  Textarea,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
   Dialog,
   DialogSurface,
   DialogTitle,
@@ -24,9 +26,9 @@ import {
   Edit24Regular,
   Archive24Regular,
   DocumentText24Regular,
-  ArrowUpload24Regular,
-  CheckmarkCircle24Regular,
-  DismissCircle24Regular,
+  ArrowDownload24Regular,
+  ArrowSync24Regular,
+  Delete24Regular,
   Warning24Regular,
   Tag24Regular,
   History24Regular,
@@ -34,11 +36,19 @@ import {
   Link24Regular,
   QuestionCircle24Regular,
 } from "@fluentui/react-icons";
-import { useTenantContext } from "../../shared/hooks/useTenantContext";
-import { useMockContracts } from "../../shared/hooks/useMockContracts";
+import { isDemoMode } from "../../shared/auth/demoMode";
+import { getMockDetail } from "../../shared/mockContracts";
+import { isGraphError } from "../../services/graphService";
+import {
+  deleteContractPermanently,
+  downloadContractDocument,
+  getContract,
+  setArchived,
+} from "../../services/contractService";
+import type { ContractDetail } from "../../shared/types";
 import {
   getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, formatFileSize,
-  getCategoryLabel, getRenewalTypeLabel, getBillingFrequencyLabel, getContactRoleLabel,
+  getCategoryLabel, getRenewalTypeLabel, getBillingFrequencyLabel, getContactRoleLabel, contractPath,
 } from "./contractUtils";
 
 const useStyles = makeStyles({
@@ -94,21 +104,75 @@ const useStyles = makeStyles({
 
 export function ContractDetailPage() {
   const styles = useStyles();
-  const { id } = useParams<{ id: string }>();
+  const { tenantId = "", id = "" } = useParams<{ tenantId: string; id: string }>();
   const navigate = useNavigate();
-  const { selectedTenant } = useTenantContext();
-  const { getDetail } = useMockContracts(selectedTenant.tenantId);
-  const [approvalComment, setApprovalComment] = useState("");
-  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [contract, setContract] = useState<ContractDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [showDelete, setShowDelete] = useState(false);
 
-  const contract = useMemo(() => (id ? getDetail(id) : null), [id, getDetail]);
+  useEffect(() => {
+    if (isDemoMode) {
+      setContract(getMockDetail(id));
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    getContract(tenantId, id)
+      .then(({ contract }) => !cancelled && setContract(contract))
+      .catch((err) => {
+        if (cancelled) return;
+        if (isGraphError(err) && err.statusCode === 404) setContract(null);
+        else setError(isGraphError(err) ? err.message : "Could not load this agreement.");
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, id]);
 
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await action();
+    } catch (err) {
+      setActionError(isGraphError(err) ? err.message : "That did not work. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleArchive = () =>
+    run(async () => {
+      const result = await setArchived(tenantId, id, !contract?.isArchived);
+      setContract(result.contract);
+    });
+
+  const remove = () =>
+    run(async () => {
+      await deleteContractPermanently(tenantId, id);
+      setShowDelete(false);
+      navigate("/contracts/all");
+    });
+
+  if (loading) return <Spinner label="Loading agreement…" />;
+  if (error) {
+    return (
+      <MessageBar intent="error">
+        <MessageBarBody>{error}</MessageBarBody>
+      </MessageBar>
+    );
+  }
   if (!contract) {
     return (
       <div className={styles.notFound}>
         <DocumentText24Regular style={{ fontSize: "48px", color: tokens.colorNeutralForeground3 }} />
-        <Title2>Contract Not Found</Title2>
-        <Button appearance="primary" onClick={() => navigate("/contracts/all")}>Back to Contracts</Button>
+        <Title2>Agreement Not Found</Title2>
+        <Button appearance="primary" onClick={() => navigate("/contracts/all")}>Back to Agreements</Button>
       </div>
     );
   }
@@ -118,19 +182,37 @@ export function ContractDetailPage() {
       {/* Top Bar */}
       <div className={styles.topBar}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate(-1)} />
+          <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate(-1)} aria-label="Back" />
           <div>
             <Title2>{contract.title}</Title2>
             <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>
               {contract.vendorName} · {contract.tenantDisplayName}
+              {contract.location ? ` · ${contract.location}` : ""}
             </Text>
           </div>
         </div>
         <div className={styles.actions}>
-          <Button icon={<Edit24Regular />} onClick={() => navigate(`/contracts/${id}/edit`)}>Edit</Button>
-          <Button icon={<Archive24Regular />} appearance="subtle">Archive</Button>
+          <Button icon={<Edit24Regular />} disabled={isDemoMode || busy} onClick={() => navigate(contractPath(tenantId, id, "edit"))}>Edit</Button>
+          <Button icon={<ArrowSync24Regular />} disabled={isDemoMode || busy} onClick={() => navigate(contractPath(tenantId, id, "renew"))}>Renew</Button>
+          <Button icon={<Archive24Regular />} appearance="subtle" disabled={isDemoMode || busy} onClick={toggleArchive}>
+            {contract.isArchived ? "Restore" : "Archive"}
+          </Button>
+          <Button icon={<Delete24Regular />} appearance="subtle" disabled={isDemoMode || busy} onClick={() => setShowDelete(true)}>
+            Delete
+          </Button>
         </div>
       </div>
+
+      {contract.isArchived && (
+        <MessageBar intent="warning">
+          <MessageBarBody>This agreement is archived. It is hidden from lists and the dashboard until restored.</MessageBarBody>
+        </MessageBar>
+      )}
+      {actionError && (
+        <MessageBar intent="error">
+          <MessageBarBody>{actionError}</MessageBarBody>
+        </MessageBar>
+      )}
 
       <div className={styles.grid}>
         {/* Main Column */}
@@ -159,16 +241,20 @@ export function ContractDetailPage() {
             <Divider />
             <div className={styles.metaGrid}>
               <div className={styles.metaItem}>
-                <Text className={styles.metaLabel}>Contract Type</Text>
-                <Text weight="semibold">{contract.contractType}</Text>
+                <Text className={styles.metaLabel}>Location</Text>
+                <Text weight="semibold">{contract.location ?? "—"}</Text>
+              </div>
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Department</Text>
+                <Text weight="semibold">{contract.department ?? "—"}</Text>
               </div>
               <div className={styles.metaItem}>
                 <Text className={styles.metaLabel}>Start Date</Text>
-                <Text weight="semibold">{contract.startDate}</Text>
+                <Text weight="semibold">{contract.startDate || "—"}</Text>
               </div>
               <div className={styles.metaItem}>
                 <Text className={styles.metaLabel}>End Date</Text>
-                <Text weight="semibold">{contract.endDate ?? "—"}</Text>
+                <Text weight="semibold">{contract.endDate || "—"}</Text>
               </div>
               <div className={styles.metaItem}>
                 <Text className={styles.metaLabel}>Renewal Date</Text>
@@ -285,24 +371,26 @@ export function ContractDetailPage() {
                   <div className={styles.docInfo}>
                     <Text weight="semibold">{doc.fileName}</Text>
                     <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                      {formatFileSize(doc.fileSize)} · {doc.contentType} · {new Date(doc.uploadedAt).toLocaleDateString()}
+                      {doc.kind === "renewal" ? "Renewal · " : ""}{formatFileSize(doc.fileSize)} · {new Date(doc.uploadedAt).toLocaleDateString()}
                     </Text>
                   </div>
-                  <Button appearance="subtle" size="small">Download</Button>
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    icon={<ArrowDownload24Regular />}
+                    disabled={isDemoMode || busy}
+                    onClick={() => run(() => downloadContractDocument(tenantId, id, doc))}
+                  >
+                    Download
+                  </Button>
                 </div>
               ))
             ) : (
               <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>No documents uploaded yet.</Text>
             )}
-            <div className={styles.dropZone}>
-              <ArrowUpload24Regular style={{ fontSize: "32px", marginBottom: "8px" }} />
-              <Text size={200} style={{ display: "block" }}>
-                Drag & drop files here or click to upload
-              </Text>
-              <Text size={100} style={{ display: "block", marginTop: "4px", color: tokens.colorNeutralForeground3 }}>
-                PDF, DOC, XLSX up to 25 MB · File storage coming in Phase 4
-              </Text>
-            </div>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+              To add a renewed agreement, use Renew. It reads the new document and keeps the earlier one here.
+            </Text>
           </Card>
 
           {/* Version History */}
@@ -342,60 +430,21 @@ export function ContractDetailPage() {
             </div>
           </Card>
 
-          {/* Approvals (Epic 12) */}
-          <Card className={styles.section}>
-            <div className={styles.sectionTitle}>
-              <CheckmarkCircle24Regular />
-              <Title3>Approvals</Title3>
-            </div>
-            {contract.approvals.length > 0 ? (
-              contract.approvals.map((a) => (
-                <div key={a.id} className={styles.approvalItem}>
-                  <div>
-                    <Badge
-                      appearance="filled"
-                      color={a.status === "Approved" ? "success" : a.status === "Rejected" ? "danger" : "warning"}
-                      size="small"
-                    >
-                      {a.status}
-                    </Badge>
-                    <Text size={200} style={{ display: "block", marginTop: "4px", color: tokens.colorNeutralForeground3 }}>
-                      {new Date(a.requestedAt).toLocaleDateString()}
-                    </Text>
-                    {a.comments && (
-                      <Text size={200} style={{ display: "block", marginTop: "2px" }}>{a.comments}</Text>
-                    )}
-                  </div>
-                  {a.status === "Pending" && (
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <Button icon={<CheckmarkCircle24Regular />} appearance="primary" size="small">Approve</Button>
-                      <Button icon={<DismissCircle24Regular />} appearance="subtle" size="small">Reject</Button>
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>No approval requests.</Text>
-            )}
-            {contract.status !== "UnderReview" && (
-              <Button
-                appearance="outline"
-                icon={<CheckmarkCircle24Regular />}
-                onClick={() => setShowApprovalDialog(true)}
-                style={{ marginTop: "8px" }}
-              >
-                Request Approval
-              </Button>
-            )}
-          </Card>
-
           {/* Provenance */}
           <Card className={styles.section}>
             <div className={styles.sectionTitle}>
               <Link24Regular />
               <Title3>Provenance</Title3>
             </div>
-            {contract.sourceSystem ? (
+            {!contract.sourceSystem && contract.extractedAt ? (
+              <div className={styles.metaItem}>
+                <Text className={styles.metaLabel}>Filled in from the uploaded document</Text>
+                <Text>
+                  {new Date(contract.extractedAt).toLocaleString()}
+                  {contract.extractionModel ? ` · ${contract.extractionModel}` : ""}
+                </Text>
+              </div>
+            ) : contract.sourceSystem ? (
               <>
                 <div className={styles.metaItem}>
                   <Text className={styles.metaLabel}>Source System</Text>
@@ -436,7 +485,7 @@ export function ContractDetailPage() {
                 )}
               </>
             ) : (
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Entered manually. No source document linked.</Text>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Entered by hand.</Text>
             )}
           </Card>
 
@@ -459,29 +508,23 @@ export function ContractDetailPage() {
         </div>
       </div>
 
-      {/* Approval Dialog */}
-      <Dialog open={showApprovalDialog} onOpenChange={(_, d) => setShowApprovalDialog(d.open)}>
+      {/* Permanent delete */}
+      <Dialog open={showDelete} onOpenChange={(_, d) => setShowDelete(d.open)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>Request Approval</DialogTitle>
+            <DialogTitle>Delete this agreement permanently?</DialogTitle>
             <DialogContent>
-              <Text style={{ display: "block", marginBottom: "12px" }}>
-                Submit this contract for review and approval.
+              <Text style={{ display: "block" }}>
+                “{contract.title}” and its {contract.documents.length} uploaded document{contract.documents.length === 1 ? "" : "s"} will be removed and cannot be recovered.
+                To keep it on file but out of view, use Archive instead.
               </Text>
-              <Textarea
-                placeholder="Add notes for the reviewer..."
-                value={approvalComment}
-                onChange={(_, d) => setApprovalComment(d.value)}
-                style={{ width: "100%" }}
-                rows={3}
-              />
             </DialogContent>
             <DialogActions>
               <DialogTrigger disableButtonEnhancement>
                 <Button appearance="secondary">Cancel</Button>
               </DialogTrigger>
-              <Button appearance="primary" onClick={() => setShowApprovalDialog(false)}>
-                Submit for Review
+              <Button appearance="primary" disabled={busy} onClick={remove} style={{ backgroundColor: tokens.colorPaletteRedBackground3 }}>
+                Delete permanently
               </Button>
             </DialogActions>
           </DialogBody>

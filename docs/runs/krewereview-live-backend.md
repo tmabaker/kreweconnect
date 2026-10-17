@@ -38,15 +38,15 @@ fixed lists for category, location, department and tags.
   removes the record and its files).
 - Demo mode keeps the mock data; production never shows it.
 
-## Acceptance criteria
+## Acceptance criteria (status 2026-10-17)
 
-- [ ] `cd api && npm test` passes, including new contract store, validation, pick list,
+- [x] `cd api && npm test` passes, including new contract store, validation, pick list,
       and isolation tests run against Azurite.
-- [ ] `npm run build` and `npm test` (frontend) pass.
-- [ ] No production page imports `useMockContracts` outside demo mode.
-- [ ] A value outside the category, location, department, or tag lists is rejected with 400.
-- [ ] A client caller cannot read another tenant's contracts or files (403).
-- [ ] `/api/health` reports `features.contractsStorage` and `features.contractExtraction`
+- [x] `npm run build` and `npm test` (frontend) pass.
+- [x] No production page imports `useMockContracts` outside demo mode.
+- [x] A value outside the category, location, department, or tag lists is rejected with 400.
+- [x] A client caller cannot read another tenant's contracts or files (403).
+- [x] `/api/health` reports `features.contractsStorage` and `features.contractExtraction`
       without making either a deploy gate.
 
 ## Non-goals
@@ -63,3 +63,18 @@ fixed lists for category, location, department and tags.
 ## Rollback
 
 Revert the merge commit on `main`; stored blobs are inert without the routes.
+
+## Not verifiable from the build session
+
+- The deployed site, Azure app settings, and Graph are outside the session's
+  network allowlist, so the live deploy is verified by the SWA workflow's
+  health check and by signing in, not from here.
+- A real Claude API call was not made. The request shape is covered by a
+  stubbed test; the first real upload after `ANTHROPIC_API_KEY` is set is the
+  live check.
+
+## Settings to add in Azure (krewesuite SWA → Environment variables)
+
+- `ANTHROPIC_API_KEY` (required for automatic reading of uploads)
+- `CONTRACTS_STORAGE_CONNECTION` (optional; falls back to `CDK_STORAGE_CONNECTION`)
+- `CONTRACT_EXTRACTION_MODEL` (optional; defaults to `claude-opus-5-5`)
