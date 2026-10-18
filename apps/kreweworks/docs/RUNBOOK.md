@@ -17,6 +17,10 @@ cd apps/kreweworks/infra && ./provision.sh
 It creates (idempotently) `kreweworks-<slug>-rg`, a storage account, the `kreweworks-<slug>` Static
 Web App (Standard), all app settings with **mail disabled**, and the sign-in redirect URIs.
 
+No Azure CLI (cloud sessions): `infra/provision.py` does the same through ARM and Graph as Taila,
+dry run by default, `--apply` to change anything. It merges app settings with what the site already
+has, never replaces `PORTAL_PII_KEY`, and uses the custom domain for links only once it is bound.
+
 ## B. Deploys
 
 Deploys run from the private repo (`noit-client-tools`, workflow "KreweWorks deploy"). The workflow
