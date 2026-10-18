@@ -1,6 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
+// Tests always run against the fictional demo profile, even inside a client package.
+process.env.KREWEWORKS_PROFILE_PATH = require('path').join(__dirname, '../src/profiles/demo.json');
 process.env.PORTAL_MAIL_ENABLED = 'false';
 process.env.PORTAL_BOOTSTRAP_ADMINS = 'tammy@noitgroup.com';
 const { resetStore, MemoryStore } = require('../src/lib/store');
