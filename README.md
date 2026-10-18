@@ -14,8 +14,11 @@ Microsoft Graph. Deployed as part of KreweSuite at
 - **Multi-tenant** — tenant switcher with per-tenant branding config,
   designed for GDAP delegated access to client tenants
 - **Custom fields** — per-tenant custom field definitions (settings UI)
-- **KreweReview (CLM)** — contract list/detail/form, renewals dashboard,
-  approvals, versions, documents (currently mock-data backed)
+- **KreweReview (CLM)** — agreements stored in Azure Blob storage through the
+  Functions API (`api/src/functions/contracts.ts`): upload a new or renewed
+  agreement and the fields are filled in from the document (Claude API), with
+  category, tags, location, and department locked to fixed lists. Archive or
+  permanently delete. Demo mode keeps the sample agreements.
 - **Demo mode** — `VITE_DEMO_MODE=true` runs the full UI on realistic mock
   data with no login
 
@@ -84,4 +87,5 @@ versions are best-effort, not the original lockfile.
 - GDAP tenant switching: `fetchUsers()` ignores the tenant ID — tokens are
   only acquired from the home tenant authority (NOC-40)
 - Tenant GUIDs in `src/config/tenantConfig.ts` are placeholders (NOC-52)
-- CLM pages are mock-backed; persistence layer not yet built
+- KreweReview needs the `ANTHROPIC_API_KEY` app setting for automatic reading
+  of uploads; without it, uploads are saved and the fields are entered by hand

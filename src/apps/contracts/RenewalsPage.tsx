@@ -9,6 +9,7 @@ import {
   Card,
   Badge,
   Button,
+  Spinner,
 } from "@fluentui/react-components";
 import {
   Clock24Regular,
@@ -16,8 +17,8 @@ import {
   CheckmarkCircle24Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
-import { useMockContracts } from "../../shared/hooks/useMockContracts";
-import { getUrgencyColor, formatCurrency, formatDaysRemaining } from "./contractUtils";
+import { useContracts } from "../../shared/hooks/useContracts";
+import { getUrgencyColor, formatCurrency, formatDaysRemaining, contractPath } from "./contractUtils";
 import type { ContractListItem } from "../../shared/types";
 
 const useStyles = makeStyles({
@@ -62,7 +63,7 @@ export function RenewalsPage() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
-  const { contracts } = useMockContracts(selectedTenant.tenantId);
+  const { contracts, loading } = useContracts(selectedTenant.tenantId);
 
   const renewalContracts = useMemo(() =>
     contracts
@@ -106,7 +107,9 @@ export function RenewalsPage() {
         </div>
       </div>
 
-      {renewalContracts.length > 0 ? (
+      {loading ? (
+        <Spinner label="Loading agreements…" />
+      ) : renewalContracts.length > 0 ? (
         Array.from(monthGroups.entries()).map(([month, items]) => (
           <div key={month} className={styles.monthGroup}>
             <div className={styles.monthLabel}>
@@ -118,7 +121,7 @@ export function RenewalsPage() {
               <Card
                 key={c.id}
                 className={styles.renewalCard}
-                onClick={() => navigate(`/contracts/${c.id}`)}
+                onClick={() => navigate(contractPath(c.tenantId, c.id))}
               >
                 <div className={styles.renewalLeft}>
                   <Text weight="semibold" size={400}>{c.title}</Text>

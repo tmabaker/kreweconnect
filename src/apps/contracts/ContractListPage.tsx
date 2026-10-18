@@ -12,6 +12,10 @@ import {
   Dropdown,
   Option,
   Switch,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  MessageBarActions,
 } from "@fluentui/react-components";
 import {
   Search24Regular,
@@ -22,12 +26,12 @@ import {
   ArrowDown16Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
-import { useMockContracts } from "../../shared/hooks/useMockContracts";
+import { useContracts } from "../../shared/hooks/useContracts";
 import {
-  getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_TYPES, CONTRACT_STATUSES,
-  getCategoryLabel, getRenewalTypeLabel,
+  getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_STATUSES, AGREEMENT_CATEGORIES,
+  getCategoryLabel, getRenewalTypeLabel, contractPath,
 } from "./contractUtils";
-import type { ContractStatus, ContractType } from "../../shared/types";
+import type { AgreementCategory, ContractStatus } from "../../shared/types";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px" },
@@ -64,18 +68,20 @@ export function ContractListPage() {
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
   const [showFilters, setShowFilters] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const {
-    contracts, totalCount, vendors,
+    contracts, totalCount, vendors, locations, allContracts, loading, error, reload,
     searchQuery, setSearchQuery,
     statusFilter, setStatusFilter,
-    typeFilter, setTypeFilter,
+    categoryFilter, setCategoryFilter,
     vendorFilter, setVendorFilter,
+    locationFilter, setLocationFilter,
     needsReviewOnly, setNeedsReviewOnly,
     sortBy, setSortBy,
     sortDir, setSortDir,
-  } = useMockContracts(selectedTenant.tenantId);
+  } = useContracts(selectedTenant.tenantId, { includeArchived: showArchived });
 
-  const activeFilterCount = [statusFilter, typeFilter, vendorFilter, needsReviewOnly].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, showArchived].filter(Boolean).length;
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -95,13 +101,13 @@ export function ContractListPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <Title2>All Contracts</Title2>
+          <Title2>All Agreements</Title2>
           <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3, marginTop: "4px" }}>
-            Manage vendor contracts across all client organizations
+            {selectedTenant.tenantId === "all" ? "Agreements across every client" : `Agreements for ${selectedTenant.displayName}`}
           </Text>
         </div>
         <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/contracts/new")}>
-          New Contract
+          Upload Agreement
         </Button>
       </div>
 
@@ -139,13 +145,24 @@ export function ContractListPage() {
           </Dropdown>
           <Dropdown
             className={styles.filterDropdown}
-            placeholder="Type"
-            value={typeFilter ?? ""}
-            onOptionSelect={(_, d) => setTypeFilter((d.optionValue === "" ? null : d.optionValue) as ContractType | null)}
+            placeholder="Category"
+            value={categoryFilter ? getCategoryLabel(categoryFilter) : ""}
+            onOptionSelect={(_, d) => setCategoryFilter((d.optionValue === "" ? null : d.optionValue) as AgreementCategory | null)}
           >
-            <Option value="">All Types</Option>
-            {CONTRACT_TYPES.map((t) => <Option key={t} value={t}>{t}</Option>)}
+            <Option value="">All Categories</Option>
+            {AGREEMENT_CATEGORIES.map((c) => <Option key={c} value={c}>{getCategoryLabel(c)}</Option>)}
           </Dropdown>
+          {locations.length > 0 && (
+            <Dropdown
+              className={styles.filterDropdown}
+              placeholder="Location"
+              value={locationFilter ?? ""}
+              onOptionSelect={(_, d) => setLocationFilter(d.optionValue === "" ? null : (d.optionValue ?? null))}
+            >
+              <Option value="">All Locations</Option>
+              {locations.map((l) => <Option key={l} value={l}>{l}</Option>)}
+            </Dropdown>
+          )}
           <Dropdown
             className={styles.filterDropdown}
             placeholder="Vendor"
@@ -160,17 +177,33 @@ export function ContractListPage() {
             onChange={(_, d) => setNeedsReviewOnly(d.checked)}
             label="Needs review"
           />
+          <Switch
+            checked={showArchived}
+            onChange={(_, d) => setShowArchived(d.checked)}
+            label="Show archived"
+          />
           {activeFilterCount > 0 && (
             <Button appearance="subtle" icon={<Dismiss24Regular />} size="small"
-              onClick={() => { setStatusFilter(null); setTypeFilter(null); setVendorFilter(null); setNeedsReviewOnly(false); }}>
+              onClick={() => { setStatusFilter(null); setCategoryFilter(null); setVendorFilter(null); setLocationFilter(null); setNeedsReviewOnly(false); setShowArchived(false); }}>
               Clear
             </Button>
           )}
         </div>
       )}
 
+      {error && (
+        <MessageBar intent="error">
+          <MessageBarBody>{error}</MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={reload}>Try again</Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
+
       {/* Table */}
-      {contracts.length > 0 ? (
+      {loading ? (
+        <Spinner label="Loading agreements…" />
+      ) : contracts.length > 0 ? (
         <Card style={{ overflowX: "auto" }}>
           <table className={styles.table}>
             <thead>
@@ -180,6 +213,7 @@ export function ContractListPage() {
                 <th className={styles.th} onClick={() => handleSort("category")}>Category <SortIcon field="category" /></th>
                 <th className={styles.th} onClick={() => handleSort("renewalType")}>Renewal type <SortIcon field="renewalType" /></th>
                 <th className={styles.th}>Tenant</th>
+                <th className={styles.th} onClick={() => handleSort("location")}>Location <SortIcon field="location" /></th>
                 <th className={styles.th} onClick={() => handleSort("value")}>Value <SortIcon field="value" /></th>
                 <th className={styles.th} onClick={() => handleSort("status")}>Status <SortIcon field="status" /></th>
                 <th className={styles.th} onClick={() => handleSort("endDate")}>Expires <SortIcon field="endDate" /></th>
@@ -190,11 +224,11 @@ export function ContractListPage() {
             </thead>
             <tbody>
               {contracts.map((c) => (
-                <tr key={c.id} className={styles.row} onClick={() => navigate(`/contracts/${c.id}`)}>
+                <tr key={c.id} className={styles.row} onClick={() => navigate(contractPath(c.tenantId, c.id))}>
                   <td className={styles.td}>
                     <Text weight="semibold">{c.title}</Text>
                     <Text size={200} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>
-                      {c.contractType}{c.autoRenew ? " · Auto-renew" : ""}
+                      {[c.department, c.autoRenew ? "Auto-renew" : null, c.isArchived ? "Archived" : null].filter(Boolean).join(" · ")}
                     </Text>
                   </td>
                   <td className={styles.td}><Text>{c.vendorName}</Text></td>
@@ -203,6 +237,7 @@ export function ContractListPage() {
                   <td className={styles.td}>
                     <Badge appearance="outline" color="informative" size="small">{c.tenantDisplayName}</Badge>
                   </td>
+                  <td className={styles.td}><Text size={200}>{c.location ?? "—"}</Text></td>
                   <td className={styles.td}>
                     <Text weight="semibold">{c.value ? formatCurrency(c.value) : "—"}</Text>
                   </td>
@@ -212,7 +247,7 @@ export function ContractListPage() {
                     </Badge>
                   </td>
                   <td className={styles.td}>
-                    <Text size={200}>{c.endDate ?? "—"}</Text>
+                    <Text size={200}>{c.endDate || "—"}</Text>
                     {c.daysUntilExpiry !== null && c.daysUntilExpiry <= 90 && c.daysUntilExpiry > 0 && (
                       <Text size={200} style={{ display: "block", color: c.daysUntilExpiry <= 30 ? "#D13438" : "#FF8C00" }}>
                         {formatDaysRemaining(c.daysUntilExpiry)}
@@ -252,9 +287,11 @@ export function ContractListPage() {
       ) : (
         <div className={styles.emptyState}>
           <Search24Regular style={{ fontSize: "48px", color: tokens.colorNeutralForeground3 }} />
-          <Title2>No contracts found</Title2>
+          <Title2>{allContracts.length === 0 && !error ? "No agreements yet" : "No agreements found"}</Title2>
           <Text style={{ color: tokens.colorNeutralForeground3 }}>
-            {searchQuery ? `No results for "${searchQuery}".` : "No contracts match the current filters."}
+            {allContracts.length === 0 && !error
+              ? "Upload a signed agreement to add the first one."
+              : searchQuery ? `No results for "${searchQuery}".` : "No agreements match the current filters."}
           </Text>
         </div>
       )}

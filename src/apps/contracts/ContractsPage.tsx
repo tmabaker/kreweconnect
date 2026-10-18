@@ -9,6 +9,10 @@ import {
   Badge,
   Button,
   Divider,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  MessageBarActions,
 } from "@fluentui/react-components";
 import {
   DocumentText24Regular,
@@ -19,8 +23,8 @@ import {
   CheckmarkCircle24Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
-import { useMockContracts } from "../../shared/hooks/useMockContracts";
-import { getStatusColor, getUrgencyColor, formatCurrency, formatDaysRemaining } from "./contractUtils";
+import { useContracts } from "../../shared/hooks/useContracts";
+import { getStatusColor, getStatusLabel, getUrgencyColor, formatCurrency, formatDaysRemaining, contractPath } from "./contractUtils";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "24px" },
@@ -52,7 +56,7 @@ export function ContractsPage() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
-  const { dashboard } = useMockContracts(selectedTenant.tenantId);
+  const { dashboard, loading, error, reload } = useContracts(selectedTenant.tenantId);
 
   return (
     <div className={styles.page}>
@@ -65,10 +69,28 @@ export function ContractsPage() {
             you've agreed to, with whom, and what comes next.
           </Text>
         </div>
-        <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/contracts/new")}>
-          New Contract
-        </Button>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Button appearance="subtle" onClick={() => navigate("/contracts/lists")}>Locations & Departments</Button>
+          <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/contracts/new")}>
+            Upload Agreement
+          </Button>
+        </div>
       </div>
+
+      {error && (
+        <MessageBar intent="error">
+          <MessageBarBody>{error}</MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={reload}>Try again</Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
+      {loading && <Spinner size="small" label="Loading agreements…" />}
+      {!loading && !error && dashboard.totalContracts === 0 && (
+        <MessageBar intent="info">
+          <MessageBarBody>No agreements yet. Use Upload Agreement to add the first one.</MessageBarBody>
+        </MessageBar>
+      )}
 
       {/* Stats Row */}
       <div className={styles.statsRow}>
@@ -121,7 +143,7 @@ export function ContractsPage() {
               <Card
                 key={alert.id}
                 className={styles.alertCard}
-                onClick={() => navigate(`/contracts/${alert.contractId}`)}
+                onClick={() => navigate(contractPath(alert.tenantId ?? selectedTenant.tenantId, alert.contractId))}
               >
                 <div className={styles.alertHeader}>
                   <div>
@@ -167,7 +189,7 @@ export function ContractsPage() {
             <div
               key={contract.id}
               className={styles.recentItem}
-              onClick={() => navigate(`/contracts/${contract.id}`)}
+              onClick={() => navigate(contractPath(contract.tenantId, contract.id))}
             >
               <div className={styles.recentLeft}>
                 <Text weight="semibold">{contract.title}</Text>
@@ -180,7 +202,7 @@ export function ContractsPage() {
                   <Text size={200} weight="semibold">{formatCurrency(contract.value)}</Text>
                 )}
                 <Badge appearance="filled" color={getStatusColor(contract.status)} size="small">
-                  {contract.status}
+                  {getStatusLabel(contract.status)}
                 </Badge>
               </div>
             </div>

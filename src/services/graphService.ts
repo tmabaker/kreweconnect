@@ -162,11 +162,13 @@ async function getApiToken(): Promise<string> {
   }
 }
 
-async function apiRequest(path: string): Promise<Response> {
+async function apiRequest(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await getApiToken();
   try {
     return await fetch(`${API_BASE}${path}`, {
+      ...init,
       headers: {
+        ...(init.headers as Record<string, string> | undefined),
         // Static Web Apps overwrites Authorization en route to managed
         // functions, so the API reads X-KreweConnect-Auth first.
         Authorization: `Bearer ${token}`,
@@ -180,6 +182,24 @@ async function apiRequest(path: string): Promise<Response> {
     }
     throw createGraphError("network_error", "Could not reach the directory service.", 0);
   }
+}
+
+/**
+ * Authenticated call to the KreweConnect API with any method and body.
+ * Non-2xx responses throw a GraphError carrying the API's code and message.
+ */
+export async function apiSend(path: string, init: RequestInit = {}): Promise<Response> {
+  const response = await apiRequest(path, init);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const error: GraphError = {
+      code: body?.code || "api_error",
+      message: body?.message || `API error: ${response.status} ${response.statusText}`,
+      statusCode: response.status,
+    };
+    throw error;
+  }
+  return response;
 }
 
 async function apiFetch<T>(path: string): Promise<T> {

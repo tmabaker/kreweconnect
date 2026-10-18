@@ -55,6 +55,23 @@ export function formatFileSize(bytes: number): string {
 export const CONTRACT_TYPES = ["Software", "Hardware", "Service", "Lease", "Subscription", "Consulting", "Other"] as const;
 export const CONTRACT_STATUSES = ["Draft", "Active", "UnderReview", "PendingRenewalDecision", "Expired", "Terminated", "Renewed", "Unknown"] as const;
 
+/** The only tags an agreement can carry. The API enforces the same list. */
+export const CONTRACT_TAGS: readonly { name: string; color: string }[] = [
+  { name: "Critical", color: "#D13438" },
+  { name: "Security", color: "#0078D4" },
+  { name: "Productivity", color: "#107C10" },
+  { name: "Backup", color: "#8764B8" },
+  { name: "Monitoring", color: "#FF8C00" },
+  { name: "Infrastructure", color: "#004E8C" },
+  { name: "Compliance", color: "#C239B3" },
+  { name: "Cloud", color: "#00BCF2" },
+];
+
+/** Where an agreement lives in the app. Tenant is part of the path so "All Tenants" links resolve. */
+export function contractPath(tenantId: string, id: string, action?: "edit" | "renew"): string {
+  return `/contracts/${encodeURIComponent(tenantId)}/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+}
+
 // ─── Schema v2 (KreweReview) ──────────────────────────────────────
 
 export const AGREEMENT_CATEGORIES: readonly AgreementCategory[] = [
