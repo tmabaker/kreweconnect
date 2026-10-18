@@ -11,17 +11,24 @@ const HIRE = {
     packet_pending: { label: 'Pre-employment packet in progress', owner: 'manager', step: 1,
       help: 'The candidate completes the application, background, driving record and drug screen consents. Mark the packet as sent to HR once HR has it.',
       actions: {
-        packet_sent: { label: 'Packet sent to HR', to: 'packet_sent', roles: ['manager'], requires: [] }
+        packet_invite: { label: 'Send the candidate a link to the packet', to: null, roles: ['manager'] },
+        manager_section: { label: 'Manager section (pay, hours, uniforms)', to: null, roles: ['manager'] },
+        packet_sent: { label: 'Paper packet sent to HR', to: 'packet_sent', roles: ['manager'], requires: [] }
       } },
     packet_sent: { label: 'Packet with HR', owner: 'hr', step: 2,
       help: 'HR confirms the packet arrived and starts the background check, driving record and drug screen.',
       actions: {
-        acknowledge: { label: 'Packet received, screening started', to: 'screening', roles: ['hr'] }
+        acknowledge: { label: 'Packet received, screening started', to: 'screening', roles: ['hr'] },
+        manager_section: { label: 'Manager section (pay, hours, uniforms)', to: null, roles: ['manager'] },
+        cole_called: { label: 'Record the background screen call', to: null, roles: ['manager'] },
+        packet_reopen: { label: 'Reopen the online packet for the candidate', to: 'packet_pending', roles: ['hr'], requires: ['note'] }
       } },
     screening: { label: 'HR screening', owner: 'hr', step: 3,
       help: 'HR records each result as it returns, then approves or declines the hire.',
       actions: {
         record_screening: { label: 'Record screening results', to: null, roles: ['hr'] },
+        manager_section: { label: 'Manager section (pay, hours, uniforms)', to: null, roles: ['manager'] },
+        cole_called: { label: 'Record the background screen call', to: null, roles: ['manager'] },
         approve: { label: 'Approved for hire', to: 'approved', roles: ['hr'] },
         decline: { label: 'Not approved for hire', to: 'not_approved', roles: ['hr'] }
       } },
@@ -149,6 +156,16 @@ const TYPES = { hire: HIRE, change: CHANGE, termination: TERMINATION };
   const profile = require('./profile');
   const vocab = profile.vocab || {};
   const fill = (t) => String(t).replace(/\{(\w+)\}/g, (m, k) => (vocab[k] !== undefined ? vocab[k] : m));
+  // Online packet actions exist only when the profile defines a packet (and its optional parts).
+  const pk = profile.packet || null;
+  const vendor = pk && pk.backgroundScreen && pk.backgroundScreen.vendor;
+  for (const st of Object.values(HIRE.stages)) {
+    const acts = st.actions || {};
+    if (!pk) { delete acts.packet_invite; delete acts.packet_reopen; }
+    if (!pk || !pk.managerSection) delete acts.manager_section;
+    if (!vendor) delete acts.cole_called; else if (acts.cole_called) acts.cole_called.label = `Record the ${vendor} call`;
+    if (!pk && acts.packet_sent) acts.packet_sent.label = 'Packet sent to HR';
+  }
   for (const [type, def] of Object.entries(TYPES)) {
     for (const [stage, s] of Object.entries(def.stages)) {
       const override = (profile.workflowHelp || {})[`${type}.${stage}`];

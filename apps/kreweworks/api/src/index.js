@@ -4,3 +4,4 @@ require('./functions/core');
 require('./functions/people');
 require('./functions/requests');
 require('./functions/admin');
+require('./functions/apply');

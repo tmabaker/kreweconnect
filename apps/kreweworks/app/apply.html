@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pre-Employment Packet</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .packet-wrap { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
+  .packet-head { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid var(--accent); padding-bottom: 14px; margin-bottom: 18px; }
+  .packet-head img { height: 52px; }
+  .packet-head h1 { margin: 0; font-size: 22px; overflow-wrap: anywhere; } .packet-head .sub { color: var(--muted); font-size: 14px; }
+  .packet-head > div { min-width: 0; flex: 1; }
+  @media (max-width: 520px) { .packet-head { flex-wrap: wrap; } .packet-head img { height: 40px; } .packet-head h1 { font-size: 19px; } }
+  .legal { font-size: 13px; line-height: 1.5; color: #333; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 8px 0 12px; white-space: pre-line; }
+  .sig { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 8px; background: #fff; }
+  .sig .row { align-items: flex-end; }
+  .yn { display: flex; gap: 16px; align-items: center; margin: 4px 0 6px; }
+  .yn label { font-weight: 400; display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+  .emp-row { border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .progress { position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 5; font-size: 13px; color: var(--muted); }
+  .err-list { background: var(--danger-bg); border: 1px solid #f1b8b3; color: var(--danger); padding: 10px 14px; border-radius: 8px; margin: 12px 0; }
+  .invalid { outline: 2px solid var(--danger); }
+  .done { text-align: center; padding: 40px 16px; }
+  .done h1 { color: var(--success); }
+  .pv { white-space: pre-wrap; }
+  /* Print: the same page is the paper packet. Blank mode shows write-in lines; view mode shows the answers. */
+  .line { display: inline-block; min-width: 260px; border-bottom: 1px solid #333; height: 18px; vertical-align: bottom; }
+  @media print {
+    body { background: #fff; font-size: 12px; } .packet-wrap { max-width: none; padding: 0; } .progress, .no-print, .btn, .sticky-actions, .hint { display: none !important; }
+    .card { box-shadow: none; border: none; padding: 0; margin: 0 0 10px; break-inside: avoid; } fieldset { break-inside: avoid; border-color: #999; }
+    .legal { background: #fff; border-color: #999; } input, textarea, select { border: none; border-bottom: 1px solid #333; border-radius: 0; padding: 2px 0; background: #fff; }
+    section.sheet { break-before: page; } section.sheet:first-of-type { break-before: auto; }
+    h2 { font-size: 15px; } .sig { border-color: #999; }
+  }
+</style>
+</head>
+<body>
+<div class="packet-wrap" id="root"><div class="loading">Loading your packet…</div></div>
+<script src="/apply.js"></script>
+</body>
+</html>

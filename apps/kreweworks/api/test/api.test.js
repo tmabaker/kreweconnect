@@ -49,7 +49,7 @@ test('access management and scoped request flow over HTTP', async () => {
   const id = r.body.request.id;
   r = await call('GET', `requests/${id}`, null, 'mgr1@bayoudemo.example');
   assert.equal(r.status, 200); assert.ok(r.body.links.addUser.includes('usersetup.html?'));
-  assert.deepEqual(r.body.actions.map(a => a.key).sort(), ['packet_sent', 'withdraw']);
+  assert.deepEqual(r.body.actions.map(a => a.key).sort(), ['manager_section', 'packet_invite', 'packet_sent', 'withdraw']);
   r = await call('POST', `requests/${id}/actions/packet_sent`, {}, 'mgr1@bayoudemo.example');
   assert.equal(r.status, 200); assert.equal(r.body.request.stage, 'packet_sent'); assert.equal(r.body.notification.sent, false);
   r = await call('GET', 'dashboard', null, 'hrlead@bayoudemo.example');

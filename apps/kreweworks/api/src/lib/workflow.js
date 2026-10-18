@@ -6,6 +6,7 @@ const { HttpError } = require('./http');
 const model = require('./model');
 const people = require('./people');
 const data = require('./profile');
+const packet = require('./packet');
 
 const PK = 'requests';
 const nowIso = () => new Date().toISOString();
@@ -122,7 +123,8 @@ async function createHire(input, actor) {
     confidential: data.features.confidentialHires ? bool(input.confidential) : false,
     isRehire,
     hire: {
-      packet: { items: {}, sentAt: '', sentBy: '', note: clean(input.packetNote, 1000) },
+      packet: { items: {}, sentAt: '', sentBy: '', note: clean(input.packetNote, 1000), invite: null, submission: null, coleCall: null },
+      managerSection: {},
       screening: { background: 'pending', mvr: 'pending', drug: 'pending', notes: '', updatedAt: '' },
       decision: { outcome: '', by: '', at: '', reason: '' },
       startDate: '', startTime: '', offerAcceptedAt: '', employeeNumber: '',
@@ -241,6 +243,23 @@ async function applyAction(r, action, payload, actor) {
   if (r.type === 'hire') {
     const h = r.hire;
     switch (action) {
+      case 'packet_invite': {
+        const inv = packet.createInvite(r, actor, { candidateEmail: payload.candidateEmail });
+        if (bool(payload.sendEmail) && !inv.candidateEmail) throw new HttpError(400, 'Enter the candidate\'s email address to send the link.');
+        if (bool(payload.sendEmail)) { inv.sentTo = inv.candidateEmail; inv.sentAt = nowIso(); effects.notify = 'packet_invite'; } else effects.notify = null;
+        note = note || (inv.sentTo ? `Packet link emailed to ${inv.sentTo}.` : 'Packet link created.');
+        break; }
+      case 'packet_reopen': {
+        if (h.packet.submission) { h.packet.previousSubmissions = (h.packet.previousSubmissions || []).concat([{ submittedAt: h.packet.submission.submittedAt, reopenedAt: nowIso(), by: actor.upn }]); packet.purge(r); h.packet.submission = null; }
+        packet.createInvite(r, actor, { candidateEmail: (h.packet.invite || {}).candidateEmail });
+        break; }
+      case 'manager_section':
+        for (const f of packet.def.managerSection.fields) if (payload[f.key] !== undefined) h.managerSection[f.key] = f.type === 'yesno' ? (bool(payload[f.key]) ? 'yes' : 'no') : clean(payload[f.key], 200);
+        h.managerSection.approvedBy = actor.upn; h.managerSection.approvedAt = nowIso(); h.managerSection.approvedName = actor.name;
+        break;
+      case 'cole_called':
+        h.packet.coleCall = { calledAt: clean(payload.calledAt, 40) || nowIso(), managerName: clean(payload.managerName, 120) || actor.name, by: actor.upn, note: clean(payload.coleNote, 500) };
+        break;
       case 'packet_sent':
         for (const item of data.packetItems) if (payload.packetItems && payload.packetItems[item.key] !== undefined) h.packet.items[item.key] = bool(payload.packetItems[item.key]);
         h.packet.sentAt = nowIso(); h.packet.sentBy = actor.upn; break;
@@ -386,18 +405,43 @@ async function applyAction(r, action, payload, actor) {
   }
 
   if (toStage) r.stage = toStage;
+  if (r.type === 'hire' && model.isTerminal(r.stage) && packet.purge(r)) await addEvent(r, { upn: 'system', name: 'Portal', role: 'system' }, 'pii_purged', 'Encrypted identifiers removed from the packet at close.');
   await save(r);
   const ev = await addEvent(r, actor, action, note, { fromStage, toStage: r.stage });
   return { request: r, event: ev, effects, person: person ? await people.get(person.id) : null };
 }
 
+// The candidate submits the online packet. Validated and encrypted in packet.normalizeSubmission.
+async function submitPacket(r, body, meta) {
+  const h = r.hire;
+  const status = packet.inviteStatus(r);
+  if (status !== 'active') throw new HttpError(410, status === 'submitted' ? 'This packet has already been submitted.' : 'This link has expired. Ask your hiring manager for a new one.');
+  h.packet.submission = packet.normalizeSubmission(body, meta);
+  for (const item of data.packetItems) h.packet.items[item.key] = true;
+  h.packet.sentAt = nowIso(); h.packet.sentBy = 'candidate';
+  const fromStage = r.stage;
+  if (r.stage === 'packet_pending') r.stage = 'packet_sent';
+  await save(r);
+  const sys = { upn: 'candidate', name: `${h.packet.submission.values.firstName || ''} ${h.packet.submission.values.lastName || ''}`.trim() || 'Candidate', role: 'candidate' };
+  await addEvent(r, sys, 'packet_submitted', 'Pre-employment packet submitted online.', { fromStage, toStage: r.stage });
+  return r;
+}
+
 // Redact HR-only fields for non-HR callers.
 function redact(r, caller) {
-  if (!r || caller.can('hr')) return r;
+  if (!r) return r;
+  if (caller.can('hr')) {
+    if (r.hire && r.hire.packet && r.hire.packet.submission) { const copy = JSON.parse(JSON.stringify(r)); copy.hire.packet.submission = packet.viewSubmission(copy.hire.packet.submission, caller, false); return copy; }
+    return r;
+  }
   const copy = JSON.parse(JSON.stringify(r));
-  if (copy.hire) { copy.hire.screening = Object.assign({}, copy.hire.screening, { notes: undefined }); if (copy.hire.decision) copy.hire.decision.reason = undefined; }
+  if (copy.hire) {
+    copy.hire.screening = Object.assign({}, copy.hire.screening, { notes: undefined }); if (copy.hire.decision) copy.hire.decision.reason = undefined;
+    if (copy.hire.packet && copy.hire.packet.submission) copy.hire.packet.submission = packet.viewSubmission(copy.hire.packet.submission, caller, false);
+    if (copy.hire.managerSection && !caller.can('manager')) delete copy.hire.managerSection.rateOfPay;
+  }
   if (copy.termination) { delete copy.termination.reasonNotes; delete copy.termination.rehireEligible; }
   return copy;
 }
 
-module.exports = { IT_STAGES, listAll, get, save, events, addEvent, visibleTo, createHire, createChange, createTermination, allowedActions, applyAction, redact, normalizeChecklist, checklistComplete, PK };
+module.exports = { IT_STAGES, submitPacket, listAll, get, save, events, addEvent, visibleTo, createHire, createChange, createTermination, allowedActions, applyAction, redact, normalizeChecklist, checklistComplete, PK };

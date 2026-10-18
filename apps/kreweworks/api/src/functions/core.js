@@ -37,6 +37,7 @@ app.http('config', { methods: ['GET'], authLevel: 'anonymous', route: 'config', 
     workflow: stageMeta, personStatus: model.PERSON_STATUS, roles: access.ROLES,
     // Optional NOIT Tech Tools deep links for the IT lane, per client (profile.techtools: page names under techtoolsBase).
     techtools: data.techtools ? Object.assign({ base: config.techtoolsBase }, Object.fromEntries(Object.entries(data.techtools).map(([k, v]) => [k, `${config.techtoolsBase}/${v}`]))) : null,
+    packetEnabled: !!data.packet, packetVendor: (data.packet && data.packet.backgroundScreen && data.packet.backgroundScreen.vendor) || '', packetVendorPhone: (data.packet && data.packet.backgroundScreen && data.packet.backgroundScreen.phone) || '',
     vocab: data.vocab, branding: data.branding, features: data.features, itPartner: data.itPartner,
     termination: { hrChecks: data.termination.hrChecks, itChecks: data.termination.itChecks },
     directoryAvailable: graph.configured(), mailEnabled: config.mail.enabled,

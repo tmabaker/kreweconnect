@@ -44,6 +44,10 @@ az staticwebapp create -n "$SWA_NAME" -g "$RG" -l "$LOCATION" --sku Standard -o 
 HOST=$(az staticwebapp show -n "$SWA_NAME" -g "$RG" --query defaultHostname -o tsv)
 echo "   default host: https://$HOST"
 
+# The packet encryption key is created once and never replaced: rotating it makes stored identifiers unreadable.
+PII_KEY=$(az staticwebapp appsettings list -n "$SWA_NAME" -g "$RG" --query "properties.PORTAL_PII_KEY" -o tsv 2>/dev/null || true)
+[ -z "$PII_KEY" ] && PII_KEY=$(openssl rand -base64 32) && echo "   new PORTAL_PII_KEY generated (first run)"
+
 echo "== app settings (secret values are passed through, never printed)"
 az staticwebapp appsettings set -n "$SWA_NAME" -g "$RG" --setting-names \
   "AZURE_CLIENT_ID=$CLIENT_ID" \
@@ -61,6 +65,7 @@ az staticwebapp appsettings set -n "$SWA_NAME" -g "$RG" --setting-names \
   "PORTAL_IT_EMAIL=$MAIL_IT" \
   "PORTAL_IT_CC=$MAIL_ITCC" \
   "PORTAL_BASE_URL=$BASE_URL" \
+  "PORTAL_PII_KEY=$PII_KEY" \
   "TECHTOOLS_BASE_URL=https://techtools.noitgroup.com" \
   -o none
 echo "   mail starts DISABLED. Set MAIL_ENABLED=true (or flip PORTAL_MAIL_ENABLED) once the pilot is approved."

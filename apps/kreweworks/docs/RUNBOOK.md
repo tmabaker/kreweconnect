@@ -36,6 +36,20 @@ against that profile, then uploads `app/` and `api/` with the client's SWA deplo
 1. At the client's DNS: `employees.<domain>  CNAME  <name>.azurestaticapps.net` (Tammy approves every DNS change).
 2. Re-run `provision.sh`. Azure may ask for a TXT validation record. The certificate is automatic.
 
+## D2. Online candidate packet (when the profile has a `packet`)
+
+Hiring managers create a personal link from the request page, or email it from the portal. The candidate fills the client's packet online at `/apply.html?t=<token>`: application, previous employment and every consent and signature the profile defines. Submission moves the request to "Packet with HR" and emails HR and the manager. Social Security number, date of birth and license number are encrypted with `PORTAL_PII_KEY`; only HR can reveal them (each reveal is logged), and they are erased when the request closes. HR prints the completed packet, including the manager section, the background screen call record and any Medical Authorization, from "View and print the completed packet". A blank packet prints from the same page for candidates who prefer paper. Links expire after `PORTAL_PACKET_INVITE_DAYS` (21 by default); HR can reopen a packet, which discards the submission and issues a fresh link. A profile without `packet` hides all of this and keeps the paper checklist.
+
+**Never change `PORTAL_PII_KEY` on a live site** without decrypting and re-encrypting open packets first; a changed key makes existing identifiers unreadable. `provision.sh` reuses the existing key on every run.
+
+## D3. Lessons from the first deployment
+
+- Taila Agent holds only Reader at subscription scope. Each client gets a dedicated resource group that Tammy creates, with Taila as Contributor on it; that is enough for a cloud session to provision and deploy.
+- A cloud session cannot write GitHub Actions secrets (the GitHub proxy blocks those paths). Either add `KREWEWORKS_SWA_TOKEN_<SLUG>` by hand once, or deploy from the session with the SWA CLI.
+- `swa deploy` from the CLI skips the API build: run `npm ci --omit=dev` inside `api/` first so dependencies ship in the zip. The GitHub workflow builds with Oryx and does not need this.
+- `/api/roles` answers 404 to outside callers. Static Web Apps calls the roles source internally after sign-in; that 404 is expected.
+- A custom domain cannot be pre-registered: Azure rejects it until the client's CNAME exists.
+
 ## E. Settings reference
 
 See `infra/app-settings.example.json`. Toggles worth knowing:

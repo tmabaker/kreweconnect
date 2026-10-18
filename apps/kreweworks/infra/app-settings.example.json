@@ -16,5 +16,7 @@
   "PORTAL_IT_CC": "<optional: co-managed IT partner mailbox>",
   "PORTAL_BASE_URL": "https://employees.<client domain>",
   "TECHTOOLS_BASE_URL": "https://techtools.noitgroup.com",
-  "KREWEWORKS_PROFILE_PATH": "<optional: absolute path to the profile; normally the deploy writes api/src/profiles/active.json>"
+  "KREWEWORKS_PROFILE_PATH": "<optional: absolute path to the profile; normally the deploy writes api/src/profiles/active.json>",
+  "PORTAL_PII_KEY": "<32 random bytes, base64; encrypts SSN, date of birth and license numbers in the online packet. Created once by provision.sh; never rotate without re-encrypting.>",
+  "PORTAL_PACKET_INVITE_DAYS": "21"
 }
