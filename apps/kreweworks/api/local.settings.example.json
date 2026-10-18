@@ -1,0 +1,14 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "PORTAL_STORAGE_CONNECTION": "",
+    "PORTAL_GRAPH_TENANT_ID": "<client tenant id>",
+    "PORTAL_GRAPH_CLIENT_ID": "<app registration id>",
+    "PORTAL_GRAPH_CLIENT_SECRET": "",
+    "PORTAL_MAIL_ENABLED": "false",
+    "PORTAL_BOOTSTRAP_ADMINS": "you@bayoudemo.example",
+    "PORTAL_DEV_PRINCIPAL": "{\"upn\":\"you@bayoudemo.example\",\"name\":\"You\",\"tid\":\"00000000-0000-4000-8000-00000000d3e0\"}"
+  }
+}

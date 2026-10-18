@@ -1,0 +1,20 @@
+{
+  "_comment": "Setting NAMES a KreweWorks Static Web App needs. provision.sh fills them from the private client profile. Values live only in the SWA configuration. Never commit values.",
+  "AZURE_CLIENT_ID": "<sign-in app registration id (multi-tenant, consented in the client tenant)>",
+  "AZURE_CLIENT_SECRET": "<its client secret, from AWS Secrets Manager>",
+  "PORTAL_GRAPH_TENANT_ID": "<client tenant id>",
+  "PORTAL_GRAPH_CLIENT_ID": "<app id used for Graph directory reads and Mail.Send>",
+  "PORTAL_GRAPH_CLIENT_SECRET": "<its secret>",
+  "PORTAL_TENANT_ID": "<client tenant id>",
+  "PORTAL_ALLOWED_TENANTS": "<client tenant id>,<MSP tenant id>",
+  "PORTAL_BOOTSTRAP_ADMINS": "<comma-separated MSP admin UPNs>",
+  "PORTAL_STORAGE_CONNECTION": "<connection string of this client's own storage account>",
+  "PORTAL_MAIL_ENABLED": "false until the pilot is approved",
+  "PORTAL_MAIL_FROM": "<client support mailbox>",
+  "PORTAL_HR_EMAIL": "<client HR mailbox>",
+  "PORTAL_IT_EMAIL": "<IT intake mailbox (opens the ticket)>",
+  "PORTAL_IT_CC": "<optional: co-managed IT partner mailbox>",
+  "PORTAL_BASE_URL": "https://employees.<client domain>",
+  "TECHTOOLS_BASE_URL": "https://techtools.noitgroup.com",
+  "KREWEWORKS_PROFILE_PATH": "<optional: absolute path to the profile; normally the deploy writes api/src/profiles/active.json>"
+}
