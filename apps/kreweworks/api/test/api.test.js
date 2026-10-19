@@ -79,3 +79,26 @@ test('attachments round-trip through the store', async () => {
   const res = await routes.dispatch('GET', new URL(`http://x/api/requests/${id}/attachments/0`), null, { 'x-ms-client-principal': principal('hrlead@bayoudemo.example') });
   assert.equal(res.status, 200); assert.equal(res.body.toString(), '%PDF-1.4 test');
 });
+
+test('initialAccess in the profile seeds an empty access table once, then the portal owns the list', async () => {
+  const profile = require('../src/lib/profile');
+  const saved = profile.load();
+  const raw = JSON.parse(JSON.stringify(saved));
+  raw.initialAccess = [
+    { upn: 'HRLead@bayoudemo.example', displayName: 'Pat Hebert', role: 'hr' },
+    { upn: 'helpdesk@bayoudemo.example', displayName: 'Help Desk', role: 'it' }
+  ];
+  try {
+    profile.use(raw);
+    let r = await call('POST', 'roles', { userDetails: 'hrlead@bayoudemo.example', claims: [{ typ: 'preferred_username', val: 'hrlead@bayoudemo.example' }, { typ: 'tid', val: '00000000-0000-4000-8000-00000000d3e0' }] });
+    assert.deepEqual(r.body.roles, ['portal', 'hr']);
+    r = await call('GET', 'access', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
+    assert.deepEqual(r.body.value.map(e => [e.upn, e.role]), [['helpdesk@bayoudemo.example', 'it'], ['hrlead@bayoudemo.example', 'hr']]);
+    // a removal in the portal sticks: the table is no longer empty, so nothing is re-seeded
+    assert.equal((await call('DELETE', 'access/helpdesk%40bayoudemo.example', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017')).status, 200);
+    r = await call('GET', 'access', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
+    assert.deepEqual(r.body.value.map(e => e.upn), ['hrlead@bayoudemo.example']);
+  } finally {
+    profile.use(JSON.parse(JSON.stringify(saved)));
+  }
+});
