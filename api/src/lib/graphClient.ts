@@ -228,6 +228,21 @@ export interface GraphUser {
   tenantDisplayName?: string;
 }
 
+/**
+ * True when Graph rejected the extended $select rather than the caller's
+ * access. birthday is served from SharePoint profiles: on a collection query
+ * it fails with 400 in small tenants and with 403 "UnknownError" in larger
+ * ones (Geaux, Level, Fishman, Provident), even though the base fields read
+ * fine. A genuine access problem still surfaces, because the base-field retry
+ * gets the same 401/403.
+ */
+function isOptionalFieldRejection(err: unknown): boolean {
+  return (
+    err instanceof GraphRequestError &&
+    (err.status === 400 || err.status === 403 || err.status === 404)
+  );
+}
+
 async function fetchUsersWithSelect(tenantId: string, select: string): Promise<GraphUser[]> {
   const users: GraphUser[] = [];
   let url = `${GRAPH_BASE}/users?$select=${select}&$expand=${MANAGER_EXPAND}&$top=999&$filter=accountEnabled eq true&$count=true`;
@@ -247,7 +262,7 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
     // An optional $select field (e.g. birthday) may be unsupported for this
     // app/tenant — retry with only the always-safe base fields rather than
     // letting one optional column take down the whole directory.
-    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
+    if (isOptionalFieldRejection(err)) {
       allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS_BASE);
     } else {
       throw err;
@@ -326,7 +341,7 @@ export async function fetchUserById(tenantId: string, userId: string): Promise<G
   try {
     user = await graphFetch<GraphUser>(tenantId, path(buildExtendedSelect()));
   } catch (err) {
-    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
+    if (isOptionalFieldRejection(err)) {
       user = await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
     } else {
       throw err;
