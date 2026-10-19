@@ -29,6 +29,7 @@ import {
   CalendarClock24Regular,
   ShieldTask24Regular,
   Building24Regular,
+  PeopleTeam24Regular,
 } from "@fluentui/react-icons";
 import { TenantSwitcher } from "../../components/TenantSwitcher";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -133,6 +134,8 @@ const navItems = [
   // their own company (wizard answers + assembled policies).
   { path: "/governance", label: "Policy Library", icon: <ShieldTask24Regular />, section: "KREWE Governance", mspOnly: true },
   { path: "/governance/clients", label: "Clients", icon: <Building24Regular />, section: null, indent: true },
+  // KreweWorks: each client's portal is its own site; clients see only theirs.
+  { path: "/kreweworks", label: "Employee Portal", icon: <PeopleTeam24Regular />, section: "KreweWorks" },
   { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null, mspOnly: true },
 ];
 
@@ -173,7 +176,7 @@ export function AppShell() {
               NOIT Client Tools
             </Text>
             <Text size={200} style={{ display: "block", marginTop: "-2px" }}>
-              KreweConnect · KreweReview
+              KreweConnect · KreweReview · KreweWorks
             </Text>
           </div>
         </div>
