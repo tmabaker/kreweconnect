@@ -42,6 +42,7 @@
 | `workflowHelp` | optional per-stage help text, keyed `"hire.started"` etc.; `{hrSystem}` and `{location}` are filled in |
 | `features.confidentialHires` | default `true` |
 | `itPartner` | optional co-managed partner description shown to IT |
+| `initialAccess` | optional first access list (`upn`, `displayName`, `role`, optional `stores`); fills the access table only while it is empty, so later changes made in the portal stand |
 
 ## Data compatibility with the pilot deployment
 

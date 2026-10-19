@@ -4,6 +4,7 @@
 // Access entries live in the "access" table; bootstrap admins come from PORTAL_BOOTSTRAP_ADMINS.
 const config = require('./config');
 const principal = require('./principal');
+const data = require('./profile');
 const { getStore } = require('./store');
 
 const ROLES = ['manager', 'hr', 'it', 'admin'];
@@ -38,9 +39,27 @@ async function lookup(upn) {
   return getStore().get('access', PK, upn.toLowerCase());
 }
 
+// A new deployment starts with the profile's initialAccess list. It fills the access table only
+// while that table is empty, so access granted or removed later in the portal is never overwritten.
+let seeded = null;
+function seedFromProfile() {
+  const store = getStore();
+  if (!seeded || seeded.store !== store) {
+    const promise = (async () => {
+      const list = data.initialAccess || [];
+      if (!list.length || (await store.list('access', PK)).length) return;
+      for (const e of list) await saveAccess(e, { upn: 'initial-access' });
+    })();
+    promise.catch(() => { seeded = null; });
+    seeded = { store, promise };
+  }
+  return seeded.promise;
+}
+
 async function resolveCaller(request) {
   const p = principal.fromRequest(request);
   if (!p || !p.upn) return null;
+  await seedFromProfile();
   if (p.tid && !config.allowedTenantIds.includes(p.tid)) return makeCaller(p, null, false);
   const bootstrap = config.bootstrapAdmins.includes(p.upn);
   const entry = await lookup(p.upn);
@@ -60,6 +79,7 @@ async function rolesForLogin(swaPrincipal) {
   const p = principal.fromSwaPrincipal(swaPrincipal);
   if (!p || !p.upn) return [];
   if (p.tid && !config.allowedTenantIds.includes(p.tid)) return [];
+  await seedFromProfile();
   const bootstrap = config.bootstrapAdmins.includes(p.upn);
   const entry = await lookup(p.upn);
   const caller = makeCaller(p, entry, bootstrap);
@@ -90,4 +110,4 @@ async function saveAccess(entry, actor) {
 
 async function removeAccess(upn) { await getStore().remove('access', PK, String(upn).toLowerCase()); }
 
-module.exports = { ROLES, resolveCaller, rolesForLogin, listAccess, saveAccess, removeAccess, lookup, makeCaller };
+module.exports = { ROLES, seedFromProfile, resolveCaller, rolesForLogin, listAccess, saveAccess, removeAccess, lookup, makeCaller };

@@ -270,5 +270,389 @@
     "addUser": "usersetup.html",
     "modifyUser": "usermodify.html",
     "removeUser": "userremove.html"
+  },
+  "packet": {
+    "_comment": "Fictional demo packet. Real client packets (with their legal wording) live in the private client profile.",
+    "version": "Demo 1",
+    "title": "Bayou Demo Company Pre-Employment Packet",
+    "intro": "Please complete every section. Fields marked with a star are required. Your Social Security number, date of birth and driver's license number are encrypted and visible only to Human Resources.",
+    "sections": [
+      {
+        "key": "applicant",
+        "title": "Pre-employment Form: Applicant Information",
+        "fields": [
+          {
+            "key": "firstName",
+            "label": "First name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "middleName",
+            "label": "Middle name",
+            "type": "text"
+          },
+          {
+            "key": "lastName",
+            "label": "Last name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "otherNames",
+            "label": "Any other last names you have ever used (maiden or former married) and the years used",
+            "type": "text"
+          },
+          {
+            "key": "address",
+            "label": "Street address",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "city",
+            "label": "City",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "state",
+            "label": "State",
+            "type": "text",
+            "required": true,
+            "width": "short"
+          },
+          {
+            "key": "zip",
+            "label": "ZIP code",
+            "type": "text",
+            "required": true,
+            "width": "short"
+          },
+          {
+            "key": "phone",
+            "label": "Phone number",
+            "type": "tel",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "Email",
+            "type": "email",
+            "required": true
+          },
+          {
+            "key": "ssn",
+            "label": "Social Security number",
+            "type": "ssn",
+            "required": true,
+            "pii": true,
+            "hint": "Encrypted. Used for the background check and drug screen only."
+          },
+          {
+            "key": "dob",
+            "label": "Date of birth",
+            "type": "date",
+            "required": true,
+            "pii": true,
+            "hint": "Required for the motor vehicle report."
+          },
+          {
+            "key": "driversLicense",
+            "label": "Driver's license number",
+            "type": "text",
+            "required": true,
+            "pii": true
+          },
+          {
+            "key": "licenseState",
+            "label": "State of license",
+            "type": "text",
+            "required": true,
+            "width": "short"
+          },
+          {
+            "key": "emergencyContact",
+            "label": "Emergency contact person and telephone number",
+            "type": "text",
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "application",
+        "title": "Application for Employment",
+        "notice": "Demo wording. The client's own text for this section lives in its private profile.",
+        "fields": [
+          {
+            "key": "positionApplied",
+            "label": "Position applied for",
+            "type": "text",
+            "required": true,
+            "prefill": "position"
+          },
+          {
+            "key": "dealership",
+            "label": "Location",
+            "type": "text",
+            "required": true,
+            "prefill": "store"
+          },
+          {
+            "key": "previouslyEmployed",
+            "label": "Have you ever been employed by or applied for work at this company?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If yes, when and where"
+          },
+          {
+            "key": "familyAtDealership",
+            "label": "Do any of your family members currently work at this location?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If yes, list"
+          },
+          {
+            "key": "referredBy",
+            "label": "Were you referred by a current the company employee?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If so, please give his or her name"
+          },
+          {
+            "key": "education",
+            "label": "Highest level of education completed",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "educationWhere",
+            "label": "Where",
+            "type": "text"
+          },
+          {
+            "key": "convicted",
+            "label": "Have you ever been convicted of any criminal offense (misdemeanor or felony)?",
+            "type": "yesno",
+            "required": true,
+            "detail": "List year, charge and outcome of each offense"
+          },
+          {
+            "key": "deferredAdjudication",
+            "label": "Have you ever plead guilty or nolo contendere (no contest) to a criminal charge in order to qualify for deferred adjudication?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If yes, list"
+          },
+          {
+            "key": "licenseSuspended",
+            "label": "Has your driver's license ever been suspended?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If yes, list"
+          },
+          {
+            "key": "dwi",
+            "label": "Have you ever been charged with DWI or DUI?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If yes, list"
+          },
+          {
+            "key": "tickets",
+            "label": "List tickets (moving violations) received in the past 3 years",
+            "type": "textarea",
+            "placeholder": "None, or list each"
+          },
+          {
+            "key": "accidents",
+            "label": "List all vehicular accidents in the last 3 years",
+            "type": "textarea",
+            "placeholder": "None, or list each"
+          },
+          {
+            "key": "attorneyClaims",
+            "label": "Have you ever used an attorney to handle a claim, seek monetary damages or file a lawsuit?",
+            "type": "yesno",
+            "required": true,
+            "detail": "If yes, list all such occasions and explain"
+          }
+        ]
+      },
+      {
+        "key": "employment",
+        "title": "List of Previous Employment",
+        "notice": "Demo wording. The client's own text for this section lives in its private profile.",
+        "repeat": {
+          "key": "employers",
+          "min": 1,
+          "max": 8,
+          "label": "Employer",
+          "fields": [
+            {
+              "key": "employer",
+              "label": "Employer",
+              "type": "text",
+              "required": true
+            },
+            {
+              "key": "position",
+              "label": "Position",
+              "type": "text"
+            },
+            {
+              "key": "startDate",
+              "label": "Start date",
+              "type": "month"
+            },
+            {
+              "key": "endDate",
+              "label": "End date",
+              "type": "month"
+            },
+            {
+              "key": "contact",
+              "label": "Contact name, phone number and email",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      {
+        "key": "agreement",
+        "title": "Applicant Agreement",
+        "consent": "Demo wording. The client's own text for this section lives in its private profile.",
+        "signature": "agreementSignature"
+      },
+      {
+        "key": "drug",
+        "title": "Employee/Applicant Drug and Alcohol Consent Form",
+        "consent": "Demo wording. The client's own text for this section lives in its private profile.",
+        "signature": "drugSignature"
+      },
+      {
+        "key": "statement",
+        "title": "Pre-Employment Statement",
+        "consent": "Demo wording. The client's own text for this section lives in its private profile.",
+        "signature": "statementSignature"
+      },
+      {
+        "key": "mvr",
+        "title": "Motor Vehicle Report (MVR) Authorization",
+        "consent": "Demo wording. The client's own text for this section lives in its private profile.",
+        "signature": "mvrSignature"
+      },
+      {
+        "key": "screening",
+        "title": "Background Screening: Consent, Release and Authorization",
+        "notice": "Demo wording. The client's own text for this section lives in its private profile.",
+        "consents": [
+          {
+            "key": "screeningConsentSignature",
+            "title": "Consent Form",
+            "text": "Demo wording for consent form."
+          },
+          {
+            "key": "screeningReleaseSignature",
+            "title": "Release of Liability",
+            "text": "Demo wording for release of liability."
+          },
+          {
+            "key": "screeningEmployerSignature",
+            "title": "Authorization for Former Employers to Provide Information",
+            "text": "Demo wording for authorization for former employers to provide information."
+          }
+        ]
+      }
+    ],
+    "afterSubmit": {
+      "title": "Thank you. Your packet has been sent to Human Resources.",
+      "steps": [
+        "Human Resources will contact you about the background check.",
+        "Your hiring manager will reach out once the checks are complete."
+      ]
+    },
+    "managerSection": {
+      "title": "Pre-employment Form: To be completed by Manager",
+      "fields": [
+        {
+          "key": "rateOfPay",
+          "label": "Rate of pay (draw)",
+          "type": "text",
+          "sensitive": true
+        },
+        {
+          "key": "uniforms",
+          "label": "Uniforms",
+          "type": "yesno"
+        },
+        {
+          "key": "departmentsCharged",
+          "label": "Department(s) to be charged",
+          "type": "text"
+        },
+        {
+          "key": "employmentType",
+          "label": "Full-time or part-time",
+          "type": "choice",
+          "options": [
+            "Full-time",
+            "Part-time"
+          ]
+        },
+        {
+          "key": "workHours",
+          "label": "Work hours",
+          "type": "text"
+        },
+        {
+          "key": "workDays",
+          "label": "Work days",
+          "type": "text"
+        },
+        {
+          "key": "lunchDeductions",
+          "label": "Automatic lunch deductions",
+          "type": "yesno"
+        }
+      ]
+    },
+    "backgroundScreen": {
+      "title": "Background Screen",
+      "instruction": "Call Example Screening Co. at (504) 555-0199 to proceed with your background check.",
+      "phone": "(504) 555-0199",
+      "vendor": "Example Screening Co."
+    },
+    "medicalAuthorization": {
+      "title": "Medical Authorization Form",
+      "reason": "PRE-EMPLOYMENT",
+      "company": "Bayou Demo Company",
+      "tests": [
+        {
+          "key": "fitForDuty",
+          "label": "Fit for Duty",
+          "note": "Required for applicants applying for positions such as Drivers, Parts Drivers, Shuttle Drivers, Porters, Runners. Not needed for other positions.",
+          "titles": [
+            "Porter",
+            "Runner",
+            "Shuttle Driver",
+            "Parts Driver",
+            "Detailer"
+          ]
+        },
+        {
+          "key": "drugScreen",
+          "label": "Drug Screen",
+          "note": "Non-DOT required for all applicants",
+          "always": true
+        },
+        {
+          "key": "breathAlcohol",
+          "label": "Breath Alcohol",
+          "note": ""
+        }
+      ],
+      "questions": "Any questions should be directed to Al Perret"
+    }
   }
 }

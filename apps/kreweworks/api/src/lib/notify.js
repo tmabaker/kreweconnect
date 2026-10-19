@@ -26,8 +26,11 @@ function personBlock(p, r) {
   return `<table>${row('Name', people.fullName(p))}${row('Preferred name', p.preferredName)}${row(data.vocab.location, storeName(r.storeId))}${row('Department', r.department)}${row('Job title', r.title)}${row('Direct manager', r.managerName ? `${r.managerName} (${r.managerUpn})` : r.managerUpn)}${row('Mobile', p.mobile)}${row('Employee number', p.employeeNumber || (r.hire && r.hire.employeeNumber))}</table>`;
 }
 
-function wrap(title, body, r) {
-  return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;max-width:720px"><h2 style="color:${data.branding.primary};margin:0 0 8px">${esc(title)}</h2>${body}<p style="margin-top:18px"><a href="${link(r)}" style="background:${data.branding.primary};color:#fff;padding:9px 16px;border-radius:6px;text-decoration:none">Open request ${esc(r.id)}</a></p><p style="color:#777;font-size:12px">${esc(data.client.name)} ${esc(data.vocab.portalName)}. Temporary passwords are never sent by email. Reply to this message to reach the support desk.</p></div>`;
+function wrap(title, body, r, noButton) {
+  const c = data.branding.primary;
+  const button = noButton ? '' : `<p style="margin-top:18px"><a href="${link(r)}" style="background:${c};color:#fff;padding:9px 16px;border-radius:6px;text-decoration:none">Open request ${esc(r.id)}</a></p>`;
+  const foot = noButton ? `${esc(data.client.name)}. Please do not reply with personal identifiers by email; the secure form handles them.` : `${esc(data.client.name)} ${esc(data.vocab.portalName)}. Temporary passwords are never sent by email. Reply to this message to reach the support desk.`;
+  return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;max-width:720px"><h2 style="color:${c};margin:0 0 8px">${esc(title)}</h2>${body}${button}<p style="color:#777;font-size:12px">${foot}</p></div>`;
 }
 
 // Decide recipients and content for a transition. Returns null when nothing should be sent.
@@ -44,6 +47,10 @@ function compose(r, action, person, actor) {
 
   if (r.type === 'hire') {
     switch (action) {
+      case 'packet_invite': { const inv = r.hire.packet.invite || {}; if (!inv.sentTo) return null; const url = `${config.baseUrl}/apply.html?t=${inv.token}`;
+        const pk = data.packet || {}; const what = pk.inviteSummary || 'contact details, employment history and the consents the position requires';
+        return { to: [inv.sentTo], cc: [], subject: `Your ${data.client.name} pre-employment packet`, title: `Welcome from ${storeName(r.storeId)}`, noButton: true, body: `<p>Hello ${esc(p.firstName || '')},</p><p>${esc(r.managerName || 'Your hiring manager')} has asked you to complete the ${esc(data.client.name)} pre-employment packet online for the <b>${esc(r.title)}</b> position at <b>${esc(storeName(r.storeId))}</b>.</p><p><a href="${url}" style="background:${data.branding.primary};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open your packet</a></p><p>The link is personal to you and works until ${esc(fmtDate((inv.expiresAt || '').slice(0, 10)))}. It covers ${esc(what)}. Your Social Security number and date of birth are encrypted and seen only by Human Resources.</p><p>Questions? Contact ${esc(r.managerName || 'your hiring manager')}.</p>` }; }
+      case 'packet_submitted': return { to: hr, cc: mgr.concat(creator), subject: `Packet submitted online: ${subjectBase}`, title: 'Pre-employment packet submitted', body: `<p><b>${esc(name)}</b> completed the online pre-employment packet for ${esc(r.title)} at ${esc(storeName(r.storeId))}. All consents are signed. HR can review it, print it for the screening providers${(data.packet && data.packet.backgroundScreen && data.packet.backgroundScreen.vendor) ? ` (${esc(data.packet.backgroundScreen.vendor)})` : ''}, and record the results on the request.</p>${personBlock(p, r)}` };
       case 'packet_sent': return { to: hr, cc: mgr, subject: `New hire packet submitted: ${subjectBase}`, title: 'A pre-employment packet is on its way to HR', body: `<p>${esc(actor.name)} marked the packet for <b>${esc(name)}</b> as sent to HR. Please acknowledge it in the portal to start screening.</p>${personBlock(p, r)}` };
       case 'approve': return { to: mgr.concat(creator), cc: hr, subject: `Approved for hire: ${subjectBase}`, title: 'Approved for hire', body: `<p><b>${esc(name)}</b> is approved for hire. Next steps for the hiring manager:</p><ol><li>Extend the offer and record the accepted start date in the portal.</li><li>Complete the IT checklist (desk, endpoint name, extension, applications, equipment).</li></ol><p>HR sends the New Hire Notice to IT as soon as both are done. Minimum notice: ${esc(data.noticeStandards[0].minimum.toLowerCase())} for an account with an existing device, ${esc(data.noticeStandards[1].minimum.toLowerCase())} when equipment or custom applications are needed.</p>${personBlock(p, r)}` };
       case 'decline': return { to: mgr.concat(creator), cc: hr, subject: `Not approved for hire: ${subjectBase}`, title: 'Not approved for hire', body: `<p>HR has marked <b>${esc(name)}</b> as not approved for hire. Contact HR with any questions.</p>` };
@@ -95,7 +102,7 @@ async function send(r, action, person, actor, context) {
   if (!config.mail.enabled) { if (context) context.log('notify (disabled):', JSON.stringify(summary)); return Object.assign({ sent: false, reason: 'mail disabled' }, summary); }
   const message = {
     subject: msg.subject,
-    body: { contentType: 'HTML', content: wrap(msg.title, msg.body, r) },
+    body: { contentType: 'HTML', content: wrap(msg.title, msg.body, r, msg.noButton) },
     toRecipients: to.map(a => ({ emailAddress: { address: a } })),
     ccRecipients: cc.map(a => ({ emailAddress: { address: a } })),
     bccRecipients: config.mail.bcc.map(a => ({ emailAddress: { address: a } })),

@@ -1,6 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
+// Tests always run against the fictional demo profile, even inside a client package.
+process.env.KREWEWORKS_PROFILE_PATH = require('path').join(__dirname, '../src/profiles/demo.json');
 process.env.PORTAL_MAIL_ENABLED = 'false';
 process.env.PORTAL_BOOTSTRAP_ADMINS = 'tammy@noitgroup.com';
 process.env.PORTAL_DEV_PRINCIPAL = '';
@@ -49,7 +51,7 @@ test('access management and scoped request flow over HTTP', async () => {
   const id = r.body.request.id;
   r = await call('GET', `requests/${id}`, null, 'mgr1@bayoudemo.example');
   assert.equal(r.status, 200); assert.ok(r.body.links.addUser.includes('usersetup.html?'));
-  assert.deepEqual(r.body.actions.map(a => a.key).sort(), ['packet_sent', 'withdraw']);
+  assert.deepEqual(r.body.actions.map(a => a.key).sort(), ['manager_section', 'packet_invite', 'packet_sent', 'withdraw']);
   r = await call('POST', `requests/${id}/actions/packet_sent`, {}, 'mgr1@bayoudemo.example');
   assert.equal(r.status, 200); assert.equal(r.body.request.stage, 'packet_sent'); assert.equal(r.body.notification.sent, false);
   r = await call('GET', 'dashboard', null, 'hrlead@bayoudemo.example');
@@ -76,4 +78,27 @@ test('attachments round-trip through the store', async () => {
   assert.equal(r.status, 201);
   const res = await routes.dispatch('GET', new URL(`http://x/api/requests/${id}/attachments/0`), null, { 'x-ms-client-principal': principal('hrlead@bayoudemo.example') });
   assert.equal(res.status, 200); assert.equal(res.body.toString(), '%PDF-1.4 test');
+});
+
+test('initialAccess in the profile seeds an empty access table once, then the portal owns the list', async () => {
+  const profile = require('../src/lib/profile');
+  const saved = profile.load();
+  const raw = JSON.parse(JSON.stringify(saved));
+  raw.initialAccess = [
+    { upn: 'HRLead@bayoudemo.example', displayName: 'Pat Hebert', role: 'hr' },
+    { upn: 'helpdesk@bayoudemo.example', displayName: 'Help Desk', role: 'it' }
+  ];
+  try {
+    profile.use(raw);
+    let r = await call('POST', 'roles', { userDetails: 'hrlead@bayoudemo.example', claims: [{ typ: 'preferred_username', val: 'hrlead@bayoudemo.example' }, { typ: 'tid', val: '00000000-0000-4000-8000-00000000d3e0' }] });
+    assert.deepEqual(r.body.roles, ['portal', 'hr']);
+    r = await call('GET', 'access', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
+    assert.deepEqual(r.body.value.map(e => [e.upn, e.role]), [['helpdesk@bayoudemo.example', 'it'], ['hrlead@bayoudemo.example', 'hr']]);
+    // a removal in the portal sticks: the table is no longer empty, so nothing is re-seeded
+    assert.equal((await call('DELETE', 'access/helpdesk%40bayoudemo.example', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017')).status, 200);
+    r = await call('GET', 'access', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
+    assert.deepEqual(r.body.value.map(e => e.upn), ['hrlead@bayoudemo.example']);
+  } finally {
+    profile.use(JSON.parse(JSON.stringify(saved)));
+  }
 });

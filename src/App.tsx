@@ -64,6 +64,9 @@ const GovClientsPage = lazy(() =>
 const GovClientDetailPage = lazy(() =>
   import("./apps/governance/ClientDetailPage").then((m) => ({ default: m.ClientDetailPage }))
 );
+const KreweWorksPage = lazy(() =>
+  import("./apps/kreweworks/KreweWorksPage").then((m) => ({ default: m.KreweWorksPage }))
+);
 const AssembledPolicyPage = lazy(() =>
   import("./apps/governance/AssembledPolicyPage").then((m) => ({ default: m.AssembledPolicyPage }))
 );
@@ -109,6 +112,7 @@ function App() {
                 <Route path="/governance/clients" element={<GovClientsPage />} />
                 <Route path="/governance/clients/:id" element={<GovClientDetailPage />} />
                 <Route path="/governance/assembled/:id" element={<AssembledPolicyPage />} />
+                <Route path="/kreweworks" element={<KreweWorksPage />} />
               </Route>
             </Routes>
           </BrowserRouter>

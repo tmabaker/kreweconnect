@@ -89,6 +89,29 @@ export const config = {
   },
 
   /**
+   * KreweWorks employee portals, one per client (each client runs its own site).
+   * KREWEWORKS_PORTALS app setting: JSON object of tenant id -> portal https URL.
+   * Defaults to the pilot tenant's portal, which is already public elsewhere.
+   */
+  get kreweworksPortals(): Array<{ tenantId: string; url: string }> {
+    let map: Record<string, unknown> = {
+      "4ceb1a80-7fd3-4760-a827-aedf07b8d4fa": "https://yellow-mud-05c042d10.4.azurestaticapps.net",
+    };
+    const raw = process.env.KREWEWORKS_PORTALS;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) map = parsed;
+      } catch {
+        // malformed setting: keep the default
+      }
+    }
+    return Object.entries(map)
+      .filter(([, url]) => typeof url === "string" && /^https:\/\//.test(url))
+      .map(([tenantId, url]) => ({ tenantId: tenantId.toLowerCase(), url: (url as string).replace(/\/$/, "") }));
+  },
+
+  /**
    * Accounts to hide from the directory that no automatic rule can catch —
    * named utility accounts that hold a license and person-like attributes but
    * aren't people (integration accounts, licensed shared mailboxes, vendor

@@ -53,6 +53,7 @@ function normalize(raw, source) {
   p.accessProfiles = raw.accessProfiles || { groups: {} };
   p.itPartner = raw.itPartner || null;
   p.techtools = raw.techtools || null;
+  p.initialAccess = Array.isArray(raw.initialAccess) ? raw.initialAccess : [];
   return p;
 }
 

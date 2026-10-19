@@ -1,6 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
+// Tests always run against the fictional demo profile, even inside a client package.
+process.env.KREWEWORKS_PROFILE_PATH = require('path').join(__dirname, '../src/profiles/demo.json');
 process.env.PORTAL_MAIL_ENABLED = 'false';
 process.env.PORTAL_BOOTSTRAP_ADMINS = 'tammy@noitgroup.com';
 const { resetStore, MemoryStore } = require('../src/lib/store');
@@ -130,8 +132,8 @@ test('visibility: managers only see their stores; HR and IT see everything', asy
   assert.equal(workflow.visibleTo(r, hr), true);
   assert.equal(workflow.visibleTo(r, it), true);
   assert.deepEqual(workflow.allowedActions(r, it), []);
-  assert.deepEqual(workflow.allowedActions(r, manager).map(a => a.key).sort(), ['packet_sent', 'withdraw']);
-  assert.deepEqual(workflow.allowedActions(r, hr).map(a => a.key).sort(), ['packet_sent', 'reassign_manager', 'set_confidential', 'withdraw']);
+  assert.deepEqual(workflow.allowedActions(r, manager).map(a => a.key).sort(), ['manager_section', 'packet_invite', 'packet_sent', 'withdraw']);
+  assert.deepEqual(workflow.allowedActions(r, hr).map(a => a.key).sort(), ['manager_section', 'packet_invite', 'packet_sent', 'reassign_manager', 'set_confidential', 'withdraw']);
 });
 
 test('every stage action references a real target stage', () => {
@@ -178,4 +180,25 @@ test('termination checklists come from the profile', async () => {
   assert.deepEqual(Object.keys(t.termination.hr).filter(k => k !== 'notes').sort(), profile.termination.hrChecks.map(c => c.key).sort());
   assert.ok(profile.termination.itChecks.every(c => t.termination.it[c.key] === false));
   assert.deepEqual(t.termination.deactivateApps.sort(), ['crm', 'erp', 'other']);
+});
+
+test('a profile without a packet hides the online packet actions', () => {
+  const profile = require('../src/lib/profile');
+  const raw = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../src/profiles/demo.json'), 'utf8'));
+  delete raw.packet;
+  // model applies profile wording at load; re-evaluate it against a packet-less profile in a fresh module scope
+  const saved = profile.load();
+  try {
+    profile.use(raw);
+    delete require.cache[require.resolve('../src/lib/model')];
+    const m = require('../src/lib/model');
+    const acts = Object.keys(m.HIRE.stages.packet_pending.actions);
+    assert.ok(!acts.includes('packet_invite'));
+    assert.ok(!acts.includes('manager_section'));
+    assert.ok(!Object.keys(m.HIRE.stages.packet_sent.actions).includes('cole_called'));
+    assert.equal(m.HIRE.stages.packet_pending.actions.packet_sent.label, 'Packet sent to HR');
+  } finally {
+    profile.use(JSON.parse(JSON.stringify(saved)));
+    delete require.cache[require.resolve('../src/lib/model')];
+  }
 });
