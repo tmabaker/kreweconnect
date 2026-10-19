@@ -36,9 +36,20 @@ const USER_SELECT_BASE = [
 ];
 
 // Optional fields may be unreadable/unselectable depending on tenant + the
-// app's permissions (e.g. birthday). If selecting them 400s, we fall back to
-// the base list so the directory never breaks because of an optional field.
+// app's permissions (e.g. birthday). If selecting them is rejected, we fall
+// back to the base list so the directory never breaks because of an optional
+// field.
 const USER_SELECT_OPTIONAL = ["employeeHireDate", "birthday"];
+
+/**
+ * True when Graph rejected the extended $select rather than the request. Graph
+ * answers an unreadable optional field with 400 or 404, and since 2026-10 with
+ * a bare 403 UnknownError for birthday (Geaux). A genuine permission problem
+ * still surfaces: the base-field retry fails with the same 403 and throws.
+ */
+function isOptionalFieldRejection(err: unknown): boolean {
+  return err instanceof GraphRequestError && [400, 403, 404].includes(err.status);
+}
 
 const USER_SELECT_FIELDS_BASE = USER_SELECT_BASE.join(",");
 
@@ -247,7 +258,7 @@ export async function fetchUsers(tenantId: string): Promise<GraphUser[]> {
     // An optional $select field (e.g. birthday) may be unsupported for this
     // app/tenant — retry with only the always-safe base fields rather than
     // letting one optional column take down the whole directory.
-    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
+    if (isOptionalFieldRejection(err)) {
       allUsers = await fetchUsersWithSelect(tenantId, USER_SELECT_FIELDS_BASE);
     } else {
       throw err;
@@ -326,7 +337,7 @@ export async function fetchUserById(tenantId: string, userId: string): Promise<G
   try {
     user = await graphFetch<GraphUser>(tenantId, path(buildExtendedSelect()));
   } catch (err) {
-    if (err instanceof GraphRequestError && (err.status === 400 || err.status === 404)) {
+    if (isOptionalFieldRejection(err)) {
       user = await graphFetch<GraphUser>(tenantId, path(USER_SELECT_FIELDS_BASE));
     } else {
       throw err;
