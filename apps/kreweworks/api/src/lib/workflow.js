@@ -7,6 +7,7 @@ const model = require('./model');
 const people = require('./people');
 const data = require('./profile');
 const packet = require('./packet');
+const config = require('./config');
 
 const PK = 'requests';
 const nowIso = () => new Date().toISOString();
@@ -246,8 +247,10 @@ async function applyAction(r, action, payload, actor) {
       case 'packet_invite': {
         const inv = packet.createInvite(r, actor, { candidateEmail: payload.candidateEmail });
         if (bool(payload.sendEmail) && !inv.candidateEmail) throw new HttpError(400, 'Enter the candidate\'s email address to send the link.');
-        if (bool(payload.sendEmail)) { inv.sentTo = inv.candidateEmail; inv.sentAt = nowIso(); effects.notify = 'packet_invite'; } else effects.notify = null;
-        note = note || (inv.sentTo ? `Packet link emailed to ${inv.sentTo}.` : 'Packet link created.');
+        // Only record a send when the portal can actually email; otherwise HR copies the link.
+        const emailing = bool(payload.sendEmail) && config.mail.enabled;
+        if (emailing) { inv.sentTo = inv.candidateEmail; inv.sentAt = nowIso(); effects.notify = 'packet_invite'; } else effects.notify = null;
+        note = note || (emailing ? `Packet link emailed to ${inv.sentTo}.` : bool(payload.sendEmail) ? 'Packet link created. Portal email is off, so the link was not emailed; copy it and send it to the candidate.' : 'Packet link created.');
         break; }
       case 'packet_reopen': {
         if (h.packet.submission) { h.packet.previousSubmissions = (h.packet.previousSubmissions || []).concat([{ submittedAt: h.packet.submission.submittedAt, reopenedAt: nowIso(), by: actor.upn }]); packet.purge(r); h.packet.submission = null; }

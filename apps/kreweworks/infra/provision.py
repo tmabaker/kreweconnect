@@ -65,6 +65,7 @@ def main():
     ap.add_argument("--admins", required=True, help="comma-separated bootstrap admin UPNs")
     ap.add_argument("--swa-name")
     ap.add_argument("--storage-name")
+    ap.add_argument("--mail", choices=["on", "off"], help="turn portal email on or off (otherwise left as it is)")
     ap.add_argument("--apply", action="store_true")
     a = ap.parse_args()
 
@@ -135,11 +136,13 @@ def main():
     if code == 200:
         _, cur = call(arm, "POST", f"{rg}/providers/Microsoft.Web/staticSites/{swa}/listAppSettings?api-version=2022-09-01")
         existing = cur.get("properties", {}) or {}
+    if a.mail == "on" and not (mail.get("from") and mail.get("hr") and mail.get("it")):
+        raise SystemExit("Refusing to turn mail on: the profile's mail.from, mail.hr and mail.it must all be set.")
     want = {
         "AZURE_CLIENT_ID": client_id, "AZURE_CLIENT_SECRET": secret,
         "PORTAL_GRAPH_TENANT_ID": tenant, "PORTAL_GRAPH_CLIENT_ID": client_id, "PORTAL_GRAPH_CLIENT_SECRET": secret,
         "PORTAL_TENANT_ID": tenant, "PORTAL_ALLOWED_TENANTS": allowed, "PORTAL_BOOTSTRAP_ADMINS": a.admins.lower(),
-        "PORTAL_MAIL_ENABLED": existing.get("PORTAL_MAIL_ENABLED", "false"),
+        "PORTAL_MAIL_ENABLED": {"on": "true", "off": "false"}.get(a.mail) or existing.get("PORTAL_MAIL_ENABLED", "false"),
         "PORTAL_MAIL_FROM": mail.get("from", ""), "PORTAL_HR_EMAIL": mail.get("hr", ""), "PORTAL_IT_EMAIL": mail.get("it", ""),
         "PORTAL_IT_CC": ",".join(mail.get("itCc") or []), "PORTAL_BASE_URL": base_url,
         "TECHTOOLS_BASE_URL": "https://techtools.noitgroup.com",

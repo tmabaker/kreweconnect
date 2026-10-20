@@ -44,6 +44,10 @@ test('invite, candidate submission, masking, HR reveal, purge at close', async (
   let out = await workflow.applyAction(r, 'packet_invite', { candidateEmail: 'jane@example.com', sendEmail: true }, manager);
   const token = out.request.hire.packet.invite.token;
   assert.equal(packet.inviteStatus(out.request), 'active');
+  // portal email is off in tests: no send is recorded, and the note tells HR to send the link
+  assert.equal(out.request.hire.packet.invite.sentTo, '');
+  assert.ok(/email is off/i.test(JSON.stringify(out)));
+  out.request.hire.packet.invite.sentTo = 'jane@example.com';
   const mail = notify.compose(out.request, 'packet_invite', out.person, manager);
   assert.equal(mail.to[0], 'jane@example.com'); assert.ok(mail.body.includes(token));
 
