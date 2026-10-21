@@ -16,11 +16,16 @@
   function head(h, title, sub) { return '<div class="packet-head"><img src="' + esc(brand.logo) + '" alt="' + esc(brand.name) + '"><div><h1>' + esc(title) + '</h1><div class="sub">' + esc(sub) + '</div></div></div>'; }
   function headerBlock(h) { return '<table class="kv">' + [['Candidate', h.candidateName], ['Position', h.position], ['Location', h.store], ['Department', h.department], ['Hiring manager', h.managerName]].filter(function (x) { return x[1]; }).map(function (x) { return '<tr><td>' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td></tr>'; }).join('') + '</table>'; }
 
+  var SCREEN_LABELS = { drug: 'Drug test', background: 'Background', mvr: 'MVR' };
+  function screeningChecks(ms) { return (ms && ms.screeningChecks) || ['drug', 'background', 'mvr']; }
+  function screeningBy(ms) { return (ms && ms.screeningBy) || 'Human Resources'; }
+
   // ---------- form rendering ----------
   function fieldHtml(f, value, readonly) {
     var id = 'f_' + f.key; var v = value == null ? '' : value; var req = f.required ? ' <span class="req">*</span>' : '';
     if (readonly) { if (f.type === 'yesno') { var yn = v || {}; return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv">' + esc(yn.answer ? yn.answer.toUpperCase() : '') + (yn.detail ? '. ' + esc(yn.detail) : '') + '</div></div>'; } return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv">' + (v ? esc(v) : '<span class="line"></span>') + '</div></div>'; }
     if (f.type === 'yesno') return '<div class="field"><label>' + esc(f.label) + req + '</label><div class="yn"><label><input type="radio" name="' + id + '" value="yes"> Yes</label><label><input type="radio" name="' + id + '" value="no"> No</label></div>' + (f.detail ? '<input type="text" id="' + id + '_detail" placeholder="' + esc(f.detail) + '">' : '') + '</div>';
+    if (f.type === 'choice') return '<div class="field"><label>' + esc(f.label) + req + '</label><div class="yn">' + (f.options || []).map(function (o) { return '<label><input type="radio" name="' + id + '" value="' + esc(o) + '"> ' + esc(o) + '</label>'; }).join('') + '</div>' + (f.hint ? '<div class="hint">' + esc(f.hint) + '</div>' : '') + '</div>';
     if (f.type === 'textarea') return '<div class="field"><label for="' + id + '">' + esc(f.label) + req + '</label><textarea id="' + id + '" placeholder="' + esc(f.placeholder || '') + '"></textarea></div>';
     var type = { ssn: 'text', month: 'month', date: 'date', tel: 'tel', email: 'email' }[f.type] || 'text';
     var extra = f.type === 'ssn' ? ' inputmode="numeric" autocomplete="off" placeholder="___-__-____" maxlength="11"' : (f.type === 'tel' ? ' autocomplete="tel"' : '');
@@ -55,8 +60,8 @@
     html += '</form>';
     root.innerHTML = html;
     if (readonly) return;
-    var rep = def.sections.find(function (s) { return s.repeat; }).repeat;
-    document.getElementById('addEmp').addEventListener('click', function () { var c = document.getElementById('employers'); var n = c.children.length; if (n >= rep.max) return; var w = document.createElement('div'); w.innerHTML = empRow(rep, n, {}, false); c.appendChild(w.firstChild); });
+    var repSection = def.sections.find(function (s) { return s.repeat; }); var rep = repSection && repSection.repeat;
+    if (rep) document.getElementById('addEmp').addEventListener('click', function () { var c = document.getElementById('employers'); var n = c.children.length; if (n >= rep.max) return; var w = document.createElement('div'); w.innerHTML = empRow(rep, n, {}, false); c.appendChild(w.firstChild); });
     var ssn = document.getElementById('f_ssn'); if (ssn) ssn.addEventListener('input', function () { var dgt = ssn.value.replace(/\D/g, '').slice(0, 9); ssn.value = dgt.length > 5 ? dgt.slice(0, 3) + '-' + dgt.slice(3, 5) + '-' + dgt.slice(5) : (dgt.length > 3 ? dgt.slice(0, 3) + '-' + dgt.slice(3) : dgt); });
     document.getElementById('packetForm').addEventListener('submit', function (e) { e.preventDefault(); submit(def); });
   }
@@ -65,6 +70,7 @@
     def.sections.forEach(function (s) {
       (s.fields || []).forEach(function (f) {
         if (f.type === 'yesno') { var r = document.querySelector('input[name="f_' + f.key + '"]:checked'); var dt = document.getElementById('f_' + f.key + '_detail'); body[f.key] = { answer: r ? r.value : '', detail: dt ? dt.value : '' }; }
+        else if (f.type === 'choice') { var c = document.querySelector('input[name="f_' + f.key + '"]:checked'); body[f.key] = c ? c.value : ''; }
         else { var el = document.getElementById('f_' + f.key); body[f.key] = el ? el.value : ''; }
       });
       if (s.signature) body.signatures[s.signature] = { name: document.getElementById('sig_' + s.signature + '_name').value, agreed: document.getElementById('sig_' + s.signature + '_agreed').checked };
@@ -106,22 +112,23 @@
       root.insertAdjacentHTML('afterbegin', top);
       // Manager and HR sheets
       var ms = def.managerSection; var m = d.managerSection || {};
-      var mhtml = '<section class="sheet card"><h2>' + esc(ms.title) + '</h2><div class="grid-3">' + ms.fields.map(function (f) { var v = m[f.key]; return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv">' + (v ? esc(v) : '<span class="line" style="min-width:120px"></span>') + '</div></div>'; }).join('') + '</div><p>Approved: ' + (m.approvedName ? esc(m.approvedName) + ', ' + esc(fmt(m.approvedAt)) : '<span class="line"></span>') + '</p>' +
-        '<h3>To be completed by Al Perret or Human Resources</h3><div class="grid-3">' + ['Drug test', 'Background', 'MVR'].map(function (l, i) { var k = ['drug', 'background', 'mvr'][i]; var v = (d.screening || {})[k]; return '<div class="field"><label>' + l + '</label><div class="pv">' + (v && v !== 'pending' ? esc(v === 'clear' ? 'Clear' : 'Needs attention') : '<span class="line" style="min-width:120px"></span>') + '</div></div>'; }).join('') + '</div></section>';
+      var mhtml = !ms ? '' : '<section class="sheet card"><h2>' + esc(ms.title) + '</h2><div class="grid-3">' + ms.fields.map(function (f) { var v = m[f.key]; return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv">' + (v ? esc(v) : '<span class="line" style="min-width:120px"></span>') + '</div></div>'; }).join('') + '</div><p>Approved: ' + (m.approvedName ? esc(m.approvedName) + ', ' + esc(fmt(m.approvedAt)) : '<span class="line"></span>') + '</p>' +
+        '<h3>To be completed by ' + esc(screeningBy(ms)) + '</h3><div class="grid-3">' + screeningChecks(ms).map(function (k) { var l = SCREEN_LABELS[k] || k; var v = (d.screening || {})[k]; return '<div class="field"><label>' + l + '</label><div class="pv">' + (v && v !== 'pending' ? esc(v === 'clear' ? 'Clear' : 'Needs attention') : '<span class="line" style="min-width:120px"></span>') + '</div></div>'; }).join('') + '</div></section>';
       var bs = def.backgroundScreen; var cc = d.coleCall || {};
-      mhtml += '<section class="sheet card"><h2>' + esc(bs.title) + '</h2><p>' + esc(bs.instruction) + '</p><div class="grid-3"><div class="field"><label>Manager\'s name</label><div class="pv">' + (cc.managerName ? esc(cc.managerName) : '<span class="line"></span>') + '</div></div><div class="field"><label>Date and time called</label><div class="pv">' + (cc.calledAt ? esc(new Date(cc.calledAt).toLocaleString('en-US')) : '<span class="line"></span>') + '</div></div></div></section>';
+      if (bs) mhtml += '<section class="sheet card"><h2>' + esc(bs.title) + '</h2><p>' + esc(bs.instruction) + '</p><div class="grid-3"><div class="field"><label>Manager\'s name</label><div class="pv">' + (cc.managerName ? esc(cc.managerName) : '<span class="line"></span>') + '</div></div><div class="field"><label>Date and time called</label><div class="pv">' + (cc.calledAt ? esc(new Date(cc.calledAt).toLocaleString('en-US')) : '<span class="line"></span>') + '</div></div></div></section>';
       var ma = def.medicalAuthorization; var title = d.header.position || '';
-      mhtml += '<section class="sheet card"><h2>' + esc(ma.title) + '</h2><table class="kv"><tr><td>Reason for test</td><td>' + esc(ma.reason) + '</td></tr><tr><td>Company name</td><td>' + esc(ma.company) + '</td></tr><tr><td>Location</td><td>' + esc(d.header.store) + '</td></tr><tr><td>Department</td><td>' + esc(d.header.department) + '</td></tr><tr><td>Position</td><td>' + esc(title) + '</td></tr><tr><td>Employee name</td><td>' + esc(d.header.candidateName) + '</td></tr><tr><td>Social Security number</td><td>' + esc(sub.values.ssn || '') + '</td></tr><tr><td>Date</td><td>' + esc(fmt(sub.submittedAt)) + '</td></tr></table><h3>Authorized tests</h3>' + ma.tests.map(function (t) { var on = t.always || (t.titles || []).some(function (x) { return title.toLowerCase().indexOf(x.toLowerCase()) >= 0; }); return '<div>[' + (on ? 'X' : ' ') + '] <strong>' + esc(t.label) + '</strong>' + (t.note ? ' <span class="muted">' + esc(t.note) + '</span>' : '') + '</div>'; }).join('') + '<p style="margin-top:12px">Authorizing name: <span class="line"></span> &nbsp; Signature: <span class="line"></span></p><p class="muted small">' + esc(ma.questions) + '</p></section>';
-      document.getElementById('packetForm').insertAdjacentHTML('afterend', mhtml);
+      if (ma) mhtml += '<section class="sheet card"><h2>' + esc(ma.title) + '</h2><table class="kv"><tr><td>Reason for test</td><td>' + esc(ma.reason) + '</td></tr><tr><td>Company name</td><td>' + esc(ma.company) + '</td></tr><tr><td>Location</td><td>' + esc(d.header.store) + '</td></tr><tr><td>Department</td><td>' + esc(d.header.department) + '</td></tr><tr><td>Position</td><td>' + esc(title) + '</td></tr><tr><td>Employee name</td><td>' + esc(d.header.candidateName) + '</td></tr><tr><td>Social Security number</td><td>' + esc(sub.values.ssn || '') + '</td></tr><tr><td>Date</td><td>' + esc(fmt(sub.submittedAt)) + '</td></tr></table><h3>Authorized tests</h3>' + ma.tests.map(function (t) { var on = t.always || (t.titles || []).some(function (x) { return title.toLowerCase().indexOf(x.toLowerCase()) >= 0; }); return '<div>[' + (on ? 'X' : ' ') + '] <strong>' + esc(t.label) + '</strong>' + (t.note ? ' <span class="muted">' + esc(t.note) + '</span>' : '') + '</div>'; }).join('') + '<p style="margin-top:12px">Authorizing name: <span class="line"></span> &nbsp; Signature: <span class="line"></span></p><p class="muted small">' + esc(ma.questions || '') + '</p></section>';
+      if (mhtml) document.getElementById('packetForm').insertAdjacentHTML('afterend', mhtml);
     }).catch(function (e) { root.innerHTML = '<div class="alert danger">' + esc(e.message) + '</div>'; });
   } else {
     api('GET', 'packet/definition').then(function (d) {
       var header = { candidateName: q.get('name') || '', position: q.get('position') || '', store: q.get('store') || '', department: q.get('department') || '', managerName: q.get('manager') || '' };
       renderForm({ definition: d.definition, header: header }, true, null);
       root.insertAdjacentHTML('afterbegin', '<div class="no-print actions" style="margin-bottom:12px"><a class="btn" href="/">Back</a><button class="btn btn-primary" onclick="window.print()">Print blank packet</button></div>');
-      var ms = d.definition.managerSection;
-      document.getElementById('packetForm').insertAdjacentHTML('afterend', '<section class="sheet card"><h2>' + esc(ms.title) + '</h2><div class="grid-3">' + ms.fields.map(function (f) { return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv"><span class="line" style="min-width:140px"></span></div></div>'; }).join('') + '</div><p>Approved: <span class="line"></span> Signature of Manager &nbsp; <span class="line"></span> Printed Name of Manager</p><h3>To be completed by Al Perret or Human Resources</h3><p>Drug test <span class="line" style="min-width:120px"></span> &nbsp; Background <span class="line" style="min-width:120px"></span> &nbsp; MVR <span class="line" style="min-width:120px"></span></p></section>' +
-        '<section class="sheet card"><h2>' + esc(d.definition.backgroundScreen.title) + '</h2><p>' + esc(d.definition.backgroundScreen.instruction) + '</p><p>Manager\'s name <span class="line"></span><br>Time called <span class="line"></span><br>Date called <span class="line"></span></p></section>');
+      var ms = d.definition.managerSection; var bs = d.definition.backgroundScreen; var extra = '';
+      if (ms) extra += '<section class="sheet card"><h2>' + esc(ms.title) + '</h2><div class="grid-3">' + ms.fields.map(function (f) { return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv"><span class="line" style="min-width:140px"></span></div></div>'; }).join('') + '</div><p>Approved: <span class="line"></span> Signature of Manager &nbsp; <span class="line"></span> Printed Name of Manager</p><h3>To be completed by ' + esc(screeningBy(ms)) + '</h3><p>' + screeningChecks(ms).map(function (k) { return esc(SCREEN_LABELS[k] || k) + ' <span class="line" style="min-width:120px"></span>'; }).join(' &nbsp; ') + '</p></section>';
+      if (bs) extra += '<section class="sheet card"><h2>' + esc(bs.title) + '</h2><p>' + esc(bs.instruction) + '</p><p>Manager\'s name <span class="line"></span><br>Time called <span class="line"></span><br>Date called <span class="line"></span></p></section>';
+      if (extra) document.getElementById('packetForm').insertAdjacentHTML('afterend', extra);
       if (q.get('autoprint') === '1') setTimeout(function () { window.print(); }, 400);
     });
   }

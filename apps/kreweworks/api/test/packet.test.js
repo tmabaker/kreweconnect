@@ -104,3 +104,35 @@ test('manager section and background screen call are recorded; pay hidden from I
   const res = await call('GET', `apply/${out.request.hire.packet.invite.token}`);
   assert.equal(res.body.status, 'expired');
 });
+
+test('a packet without employment history, manager, screening or medical blocks still validates; choice fields are checked', () => {
+  const profile = require('../src/lib/profile');
+  const saved = profile.load();
+  const raw = JSON.parse(JSON.stringify(saved));
+  raw.packet = {
+    version: 'test', title: 'Payroll packet', intro: '', inviteSummary: 'payroll forms',
+    afterSubmit: { title: 'Thanks', steps: ['HR will be in touch.'] },
+    sections: [
+      { key: 'info', title: 'Employee information', fields: [
+        { key: 'firstName', label: 'First name', type: 'text', required: true },
+        { key: 'ssn', label: 'SSN', type: 'ssn', required: true, pii: true },
+        { key: 'filingStatus', label: 'Filing status', type: 'choice', required: true, options: ['Single', 'Married'] }
+      ] },
+      { key: 'ack', title: 'Handbook', consent: 'I received the handbook.', signature: 'handbookSignature' }
+    ]
+  };
+  try {
+    profile.use(raw);
+    delete require.cache[require.resolve('../src/lib/packet')];
+    const pk = require('../src/lib/packet');
+    const sig = { handbookSignature: { name: 'Jane Doe', agreed: true } };
+    const ok = pk.normalizeSubmission({ firstName: 'Jane', ssn: '123456789', filingStatus: 'Married', signatures: sig }, {});
+    assert.equal(ok.values.filingStatus, 'Married');
+    assert.deepEqual(ok.employers, []);
+    assert.notEqual(ok.values.ssn, '123-45-6789'); // encrypted at rest
+    assert.throws(() => pk.normalizeSubmission({ firstName: 'Jane', ssn: '123456789', filingStatus: 'Widowed', signatures: sig }, {}), /highlighted/);
+  } finally {
+    profile.use(JSON.parse(JSON.stringify(saved)));
+    delete require.cache[require.resolve('../src/lib/packet')];
+  }
+});
