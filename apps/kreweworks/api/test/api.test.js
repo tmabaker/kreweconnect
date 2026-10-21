@@ -102,3 +102,26 @@ test('initialAccess in the profile seeds an empty access table once, then the po
     profile.use(JSON.parse(JSON.stringify(saved)));
   }
 });
+
+test('directory can be switched off and mail can send from another tenant', () => {
+  const saved = { ...process.env };
+  try {
+    process.env.PORTAL_GRAPH_CLIENT_ID = 'client'; process.env.PORTAL_GRAPH_CLIENT_SECRET = 'secret';
+    process.env.PORTAL_GRAPH_TENANT_ID = '00000000-0000-4000-8000-00000000c11e';
+    process.env.PORTAL_DIRECTORY_ENABLED = 'false'; process.env.PORTAL_MAIL_TENANT_ID = '00000000-0000-4000-8000-0000000a0017';
+    for (const m of ['../src/lib/config', '../src/lib/graph']) delete require.cache[require.resolve(m)];
+    const graph = require('../src/lib/graph');
+    assert.equal(graph.configured(), false);
+    assert.equal(graph.credentialed(), true);
+    assert.equal(graph.mailTenant(), '00000000-0000-4000-8000-0000000a0017');
+    delete process.env.PORTAL_DIRECTORY_ENABLED; delete process.env.PORTAL_MAIL_TENANT_ID;
+    for (const m of ['../src/lib/config', '../src/lib/graph']) delete require.cache[require.resolve(m)];
+    const g2 = require('../src/lib/graph');
+    assert.equal(g2.configured(), true);
+    assert.equal(g2.mailTenant(), '00000000-0000-4000-8000-00000000c11e');
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+    for (const m of ['../src/lib/config', '../src/lib/graph']) delete require.cache[require.resolve(m)];
+  }
+});

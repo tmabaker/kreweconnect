@@ -27,8 +27,8 @@
 | `tenants.allowed` | Entra tenant ids allowed to sign in (client plus MSP) |
 | `vocab` | `location` / `locations` (Store, Office, Vessel…), `hrSystem` (Netchex, Paylocity…), `portalName` |
 | `branding` | `logo` (path under the app), `primary`, `primaryDark`, `accent`, `subtitle` |
-| `mail` | `from`, `hr`, `it`, optional `itCc` (co-managed partner) |
-| `deploy` | `baseUrl`, `tablePrefix`, `blobContainer`, `graphClientId` |
+| `mail` | `from`, `hr`, `it`, optional `itCc` (co-managed partner), optional `tenantId` when the `from` mailbox lives in another tenant (for example the MSP's, when the app is not consented in the client tenant) |
+| `deploy` | `baseUrl`, `tablePrefix`, `blobContainer`, `graphClientId`, optional `directory: false` to turn off client-directory lookups (manager picker) when the app is not consented in the client tenant |
 | `stores` | the locations (`id`, `name`, `short`, plus anything the client needs) |
 | `departments`, `jobTitles` | pick lists |
 | `applications` | `key`, `label`, `always`, `owner`; non-`always` apps are offered for deactivation at exit |
