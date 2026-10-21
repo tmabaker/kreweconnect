@@ -145,6 +145,8 @@ def main():
         "PORTAL_MAIL_ENABLED": {"on": "true", "off": "false"}.get(a.mail) or existing.get("PORTAL_MAIL_ENABLED", "false"),
         "PORTAL_MAIL_FROM": mail.get("from", ""), "PORTAL_HR_EMAIL": mail.get("hr", ""), "PORTAL_IT_EMAIL": mail.get("it", ""),
         "PORTAL_IT_CC": ",".join(mail.get("itCc") or []), "PORTAL_BASE_URL": base_url,
+        "PORTAL_MAIL_TENANT_ID": mail.get("tenantId", ""),
+        "PORTAL_DIRECTORY_ENABLED": "false" if p.get("deploy", {}).get("directory") is False else "",
         "TECHTOOLS_BASE_URL": "https://techtools.noitgroup.com",
         "PORTAL_PII_KEY": existing.get("PORTAL_PII_KEY") or base64.b64encode(secrets.token_bytes(32)).decode(),
     }

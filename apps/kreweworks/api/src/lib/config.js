@@ -22,11 +22,15 @@ const config = {
   graph: {
     tenantId: env.PORTAL_GRAPH_TENANT_ID || tenantId,
     clientId: env.PORTAL_GRAPH_CLIENT_ID || p.deploy.graphClientId || '',
-    clientSecret: env.PORTAL_GRAPH_CLIENT_SECRET || ''
+    clientSecret: env.PORTAL_GRAPH_CLIENT_SECRET || '',
+    // Directory lookups (manager picker, prefill) in the client tenant. Off when the app is not consented there.
+    directory: env.PORTAL_DIRECTORY_ENABLED ? env.PORTAL_DIRECTORY_ENABLED !== 'false' : p.deploy.directory !== false
   },
   mail: {
     enabled: env.PORTAL_MAIL_ENABLED !== 'false' && !!env.PORTAL_GRAPH_CLIENT_SECRET,
     from: env.PORTAL_MAIL_FROM || p.mail.from || '',
+    // The tenant that owns the "from" mailbox; defaults to the client tenant (e.g. the MSP's tenant when it sends for the client).
+    tenantId: env.PORTAL_MAIL_TENANT_ID || p.mail.tenantId || '',
     hr: env.PORTAL_HR_EMAIL || p.mail.hr || '',
     it: env.PORTAL_IT_EMAIL || p.mail.it || '',
     // A co-managed client's other IT partner, copied on IT hand-offs.

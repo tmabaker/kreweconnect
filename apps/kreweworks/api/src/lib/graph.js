@@ -4,25 +4,30 @@
 // The client secret only ever arrives through the PORTAL_GRAPH_CLIENT_SECRET app setting.
 const config = require('./config');
 
-let tokenCache = { value: '', expiresAt: 0 };
+const tokenCache = {}; // per tenant: { value, expiresAt }
 let directoryCache = { at: 0, users: [] };
 const DIRECTORY_TTL_MS = 10 * 60 * 1000;
 
-function configured() { return !!(config.graph.clientId && config.graph.clientSecret && config.graph.tenantId); }
+function credentialed() { return !!(config.graph.clientId && config.graph.clientSecret); }
+// Directory lookups in the client tenant.
+function configured() { return credentialed() && !!config.graph.tenantId && config.graph.directory !== false; }
+function mailTenant() { return config.mail.tenantId || config.graph.tenantId; }
 
-async function token() {
-  if (!configured()) throw new Error('Graph is not configured (PORTAL_GRAPH_CLIENT_SECRET missing).');
-  if (tokenCache.value && Date.now() < tokenCache.expiresAt - 60000) return tokenCache.value;
+async function token(tenantId) {
+  const tid = tenantId || config.graph.tenantId;
+  if (!credentialed() || !tid) throw new Error('Graph is not configured (PORTAL_GRAPH_CLIENT_SECRET missing).');
+  const cached = tokenCache[tid];
+  if (cached && Date.now() < cached.expiresAt - 60000) return cached.value;
   const body = new URLSearchParams({ client_id: config.graph.clientId, client_secret: config.graph.clientSecret, scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials' });
-  const res = await fetch(`https://login.microsoftonline.com/${config.graph.tenantId}/oauth2/v2.0/token`, { method: 'POST', body });
+  const res = await fetch(`https://login.microsoftonline.com/${tid}/oauth2/v2.0/token`, { method: 'POST', body });
   const json = await res.json();
   if (!res.ok || !json.access_token) throw new Error(`Graph token request failed: ${json.error_description || res.status}`);
-  tokenCache = { value: json.access_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000 };
-  return tokenCache.value;
+  tokenCache[tid] = { value: json.access_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000 };
+  return tokenCache[tid].value;
 }
 
-async function call(method, path, body, extraHeaders) {
-  const t = await token();
+async function call(method, path, body, extraHeaders, tenantId) {
+  const t = await token(tenantId);
   const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
     method, headers: Object.assign({ Authorization: `Bearer ${t}`, 'Content-Type': 'application/json', ConsistencyLevel: 'eventual' }, extraHeaders || {}),
     body: body ? JSON.stringify(body) : undefined
@@ -71,7 +76,7 @@ async function managerOf(upn) {
 }
 
 async function sendMail(from, message) {
-  return call('POST', `/users/${encodeURIComponent(from)}/sendMail`, { message, saveToSentItems: true });
+  return call('POST', `/users/${encodeURIComponent(from)}/sendMail`, { message, saveToSentItems: true }, null, mailTenant());
 }
 
-module.exports = { configured, token, call, directory, searchUsers, userByUpn, managerOf, sendMail };
+module.exports = { configured, credentialed, mailTenant, token, call, directory, searchUsers, userByUpn, managerOf, sendMail };
