@@ -71,17 +71,22 @@ function normalizeSubmission(body, meta) {
       continue;
     }
     v = clean(v, f.type === 'textarea' ? 2000 : 200);
+    if (f.type === 'choice' && v && !(f.options || []).includes(v)) v = '';
     if (f.required && !v) errors.push(f.label);
     if (f.type === 'ssn') { const digits = v.replace(/\D/g, ''); if (v && digits.length !== 9) errors.push('Social Security number must be 9 digits'); v = digits ? `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}` : ''; }
     if (f.type === 'email' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) errors.push('Email must be valid');
     if (f.type === 'date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) errors.push(`${f.label} must be a date`);
     values[f.key] = f.pii ? (v ? pii.encrypt(v) : '') : v;
   }
-  // repeated employers
-  const emp = def.sections.find(s => s.repeat).repeat;
-  const rows = Array.isArray(body.employers) ? body.employers : [];
-  const employers = rows.map(row => { const o = {}; for (const f of emp.fields) o[f.key] = clean(row && row[f.key], 200); return o; }).filter(o => Object.values(o).some(Boolean)).slice(0, emp.max);
-  if (employers.length < emp.min) errors.push('List at least one previous employer (or "not applicable")');
+  // repeated employers, when the packet has an employment history section
+  const empSection = def.sections.find(s => s.repeat);
+  let employers = [];
+  if (empSection) {
+    const emp = empSection.repeat;
+    const rows = Array.isArray(body.employers) ? body.employers : [];
+    employers = rows.map(row => { const o = {}; for (const f of emp.fields) o[f.key] = clean(row && row[f.key], 200); return o; }).filter(o => Object.values(o).some(Boolean)).slice(0, emp.max);
+    if (employers.length < emp.min) errors.push('List at least one previous employer (or "not applicable")');
+  }
   // signatures: typed name + agreement checkbox
   const signatures = {};
   for (const s of SIGNATURES) {
