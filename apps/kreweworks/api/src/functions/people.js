@@ -5,6 +5,7 @@ const people = require('../lib/people');
 const workflow = require('../lib/workflow');
 const graph = require('../lib/graph');
 const model = require('../lib/model');
+const directorySync = require('../lib/sync');
 
 // Who may see a person record. A person on a confidential hire is visible only to HR, admins,
 // whoever filed it and the hiring manager (and to IT once the hire reaches IT; see workflow.visibleTo).
@@ -22,6 +23,8 @@ function scopeFilter(caller, requestsById) {
 async function requestIndex() { return Object.fromEntries((await workflow.listAll()).map(r => [r.id, r])); }
 
 app.http('people-list', { methods: ['GET'], authLevel: 'anonymous', route: 'people', handler: route(async (request, context, caller) => {
+  // Existing employees come from the company directory; refresh when the last sync is stale.
+  try { await directorySync.sync(false); } catch (e) { context.warn && context.warn('directory sync failed: ' + e.message); }
   const q = String(request.query.get('q') || '').trim().toLowerCase();
   const status = String(request.query.get('status') || '');
   const storeId = String(request.query.get('storeId') || '');
@@ -43,6 +46,11 @@ app.http('people-duplicates', { methods: ['POST'], authLevel: 'anonymous', route
     return { reasons: h.reasons, person: people.redact(h.person, caller), rehireWarning: h.person.status === 'terminated' && h.person.rehireEligible === 'no' ? 'HR marked this person as not eligible for rehire.' : (h.person.status === 'not_approved' ? 'This person was previously not approved for hire.' : '') };
   }) });
 }, { roles: ['manager'] }) });
+
+app.http('people-sync', { methods: ['GET', 'POST'], authLevel: 'anonymous', route: 'people/sync', handler: route(async (request) => {
+  if (request.method === 'GET') return ok({ connected: graph.configured(), last: await directorySync.lastRun() });
+  return ok(await directorySync.sync(true));
+}, { roles: ['hr'] }) });
 
 // Bring an existing employee (never processed through the portal) into the registry from the client directory.
 app.http('people-import', { methods: ['POST'], authLevel: 'anonymous', route: 'people/import', handler: route(async (request, context, caller) => {

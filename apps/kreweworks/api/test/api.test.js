@@ -105,6 +105,8 @@ test('initialAccess in the profile seeds an empty access table once, then the po
 
 test('directory can be switched off and mail can send from another tenant', () => {
   const saved = { ...process.env };
+  const mods = ['../src/lib/config', '../src/lib/graph'].map(m => require.resolve(m));
+  const cached = mods.map(m => require.cache[m]);
   try {
     process.env.PORTAL_GRAPH_CLIENT_ID = 'client'; process.env.PORTAL_GRAPH_CLIENT_SECRET = 'secret';
     process.env.PORTAL_GRAPH_TENANT_ID = '00000000-0000-4000-8000-00000000c11e';
@@ -122,6 +124,35 @@ test('directory can be switched off and mail can send from another tenant', () =
   } finally {
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
     Object.assign(process.env, saved);
-    for (const m of ['../src/lib/config', '../src/lib/graph']) delete require.cache[require.resolve(m)];
+    // put back the instances the rest of the app already holds
+    mods.forEach((m, i) => { require.cache[m] = cached[i]; });
   }
+});
+
+test('directory sync adds licensed staff, refreshes them, flags leavers and never terminates', async () => {
+  const graph = require('../src/lib/graph');
+  const sync = require('../src/lib/sync');
+  const orig = { configured: graph.configured, directory: graph.directory };
+  let dir = [
+    { id: 'e1', displayName: 'Guidry, Ann', givenName: 'Ann', surname: 'Guidry', upn: 'ann@bayoudemo.example', mail: 'ann@bayoudemo.example', jobTitle: 'Sales Associate', department: 'Sales', companyName: 'North Shore', licensed: true, managerUpn: 'gm@bayoudemo.example', managerName: 'GM' },
+    { id: 'e2', displayName: 'Shared Inbox', givenName: '', surname: '', upn: 'inbox@bayoudemo.example', mail: 'inbox@bayoudemo.example', licensed: false }
+  ];
+  graph.configured = () => true; graph.directory = async () => dir;
+  try {
+    let r = await sync.sync(true);
+    assert.equal(r.created, 1); assert.equal(r.directoryUsers, 1);
+    const ann = (await require('../src/lib/people').list()).find(p => p.workEmail === 'ann@bayoudemo.example');
+    assert.equal(ann.status, 'active'); assert.equal(ann.managerUpn, 'gm@bayoudemo.example'); assert.equal(ann.lastName, 'Guidry');
+    r = await sync.sync(true); assert.equal(r.created, 0); assert.equal(r.updated, 0);
+    dir[0].jobTitle = 'Sales Manager';
+    r = await sync.sync(true); assert.equal(r.updated, 1);
+    dir = [];
+    r = await sync.sync(true);
+    assert.deepEqual(r.missing.map(m => m.workEmail), ['ann@bayoudemo.example']);
+    assert.equal((await require('../src/lib/people').get(ann.id)).status, 'active');
+    // HR route
+    await call('PUT', 'access', { upn: 'hrlead@bayoudemo.example', role: 'hr', displayName: 'Pat' }, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
+    const res = await call('GET', 'people/sync', null, 'hrlead@bayoudemo.example');
+    assert.equal(res.status, 200); assert.equal(res.body.connected, true); assert.equal(res.body.last.missing.length, 1);
+  } finally { Object.assign(graph, orig); }
 });
