@@ -35,6 +35,8 @@ import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
 import { teamsChatLink, telLink, monthDay, birthdayDisplay, looksLikeGuid } from "./contactUtils";
 import type { EmployeeListItem } from "../../shared/types";
+import { useAimMembers } from "../../shared/hooks/useAimMembers";
+import { AimMark } from "../../shared/components/AimMark";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px" },
@@ -144,6 +146,7 @@ export function DirectoryPage() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
+  const aim = useAimMembers();
   const [showFilters, setShowFilters] = useState(true);
 
   const {
@@ -318,6 +321,7 @@ export function DirectoryPage() {
             <EmployeeCard
               key={emp.id}
               employee={emp}
+              aim={aim}
               onClick={() => navigate(`/directory/${emp.id}`)}
             />
           ))}
@@ -337,18 +341,28 @@ export function DirectoryPage() {
   );
 }
 
-function EmployeeCard({ employee, onClick }: { employee: EmployeeListItem; onClick: () => void }) {
+function EmployeeCard({
+  employee,
+  aim,
+  onClick,
+}: {
+  employee: EmployeeListItem;
+  aim: Set<string>;
+  onClick: () => void;
+}) {
   const styles = useStyles();
   return (
     <Card className={styles.card} onClick={onClick}>
       <div className={styles.cardHeader}>
-        <Avatar
-          name={employee.displayName}
-          initials={getInitials(employee.displayName)}
-          image={{ src: employee.photo ?? undefined }}
-          color={getAvatarColor(employee.displayName)}
-          size={48}
-        />
+        <AimMark active={aim.has(employee.id)} size={48}>
+          <Avatar
+            name={employee.displayName}
+            initials={getInitials(employee.displayName)}
+            image={{ src: employee.photo ?? undefined }}
+            color={getAvatarColor(employee.displayName)}
+            size={48}
+          />
+        </AimMark>
         <div className={styles.cardInfo}>
           <Text weight="semibold" size={400} className={styles.cardName}>
             {employee.displayName}

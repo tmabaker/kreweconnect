@@ -18,6 +18,8 @@ import {
   Organization24Regular,
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
+import { useAimMembers } from "../../shared/hooks/useAimMembers";
+import { AimMark } from "../../shared/components/AimMark";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
 import type { OrgChartNode } from "../../shared/types";
 
@@ -111,6 +113,7 @@ export function OrgChartPage() {
   const navigate = useNavigate();
   const { selectedTenant, isAllTenants } = useTenantContext();
   const { getOrgChart, loading, error } = useGraphEmployees(selectedTenant.tenantId);
+  const aim = useAimMembers();
   const [searchQuery, setSearchQuery] = useState("");
 
   const orgChart = useMemo(() => getOrgChart(), [getOrgChart]);
@@ -216,6 +219,7 @@ export function OrgChartPage() {
           <OrgTreeNode
             node={orgChart}
             matchedIds={matchedIds}
+            aim={aim}
             onNavigate={(id) => navigate(`/directory/${id}`)}
             depth={0}
           />
@@ -228,11 +232,13 @@ export function OrgChartPage() {
 function OrgTreeNode({
   node,
   matchedIds,
+  aim,
   onNavigate,
   depth,
 }: {
   node: OrgChartNode;
   matchedIds: Set<string>;
+  aim: Set<string>;
   onNavigate: (id: string) => void;
   depth: number;
 }) {
@@ -264,13 +270,15 @@ function OrgTreeNode({
           className={styles.nodeCard}
           onClick={() => onNavigate(node.id)}
         >
-          <Avatar
-            name={node.displayName}
-            initials={getInitials(node.displayName)}
-            image={{ src: node.photo ?? undefined }}
-            color={getAvatarColor(node.displayName)}
-            size={36}
-          />
+          <AimMark active={aim.has(node.id)} size={36}>
+            <Avatar
+              name={node.displayName}
+              initials={getInitials(node.displayName)}
+              image={{ src: node.photo ?? undefined }}
+              color={getAvatarColor(node.displayName)}
+              size={36}
+            />
+          </AimMark>
           <div className={styles.nodeInfo}>
             <Text weight="semibold" size={300} className={styles.nodeName}>
               {node.displayName}
@@ -295,6 +303,7 @@ function OrgTreeNode({
               key={child.id}
               node={child}
               matchedIds={matchedIds}
+              aim={aim}
               onNavigate={onNavigate}
               depth={depth + 1}
             />

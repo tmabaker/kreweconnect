@@ -8,3 +8,4 @@ import "./functions/cdkJobs";
 import "./functions/vendorJobs";
 import "./functions/contracts";
 import "./functions/kreweworks";
+import "./functions/kreweaim";

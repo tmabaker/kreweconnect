@@ -22,6 +22,8 @@ import {
   People24Regular,
   Briefcase24Regular,
 } from "@fluentui/react-icons";
+import { useAimMembers } from "../../shared/hooks/useAimMembers";
+import { AimMark } from "../../shared/components/AimMark";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
 import { teamsChatLink, telLink, monthDay, yearsSince, birthdayDisplay, looksLikeGuid } from "./contactUtils";
@@ -85,6 +87,7 @@ export function EmployeeDetailPage() {
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
   const { getDetail } = useGraphEmployees(selectedTenant.tenantId);
+  const aim = useAimMembers();
   const [employee, setEmployee] = useState<EmployeeDetail | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
@@ -146,13 +149,15 @@ export function EmployeeDetailPage() {
 
       {/* Profile Header */}
       <Card className={styles.profileHeader}>
-        <Avatar
-          name={employee.displayName}
-          initials={getInitials(employee.displayName)}
-          image={{ src: employee.photo ?? undefined }}
-          color={getAvatarColor(employee.displayName)}
-          size={96}
-        />
+        <AimMark active={aim.has(employee.id)} size={96}>
+          <Avatar
+            name={employee.displayName}
+            initials={getInitials(employee.displayName)}
+            image={{ src: employee.photo ?? undefined }}
+            color={getAvatarColor(employee.displayName)}
+            size={96}
+          />
+        </AimMark>
         <div className={styles.profileInfo}>
           <div className={styles.profileName}>
             <Title2>{employee.displayName}</Title2>
@@ -263,13 +268,15 @@ export function EmployeeDetailPage() {
             className={styles.personCard}
             onClick={() => navigate(`/directory/${employee.manager!.id}`)}
           >
-            <Avatar
-              name={employee.manager.displayName}
-              initials={getInitials(employee.manager.displayName)}
-              image={{ src: employee.manager.photo ?? undefined }}
-              color={getAvatarColor(employee.manager.displayName)}
-              size={40}
-            />
+            <AimMark active={aim.has(employee.manager.id)} size={40}>
+              <Avatar
+                name={employee.manager.displayName}
+                initials={getInitials(employee.manager.displayName)}
+                image={{ src: employee.manager.photo ?? undefined }}
+                color={getAvatarColor(employee.manager.displayName)}
+                size={40}
+              />
+            </AimMark>
             <div>
               <Text weight="semibold" size={300} style={{ display: "block" }}>
                 {employee.manager.displayName}
@@ -297,13 +304,15 @@ export function EmployeeDetailPage() {
                 className={styles.personCard}
                 onClick={() => navigate(`/directory/${dr.id}`)}
               >
-                <Avatar
-                  name={dr.displayName}
-                  initials={getInitials(dr.displayName)}
-                  image={{ src: dr.photo ?? undefined }}
-                  color={getAvatarColor(dr.displayName)}
-                  size={36}
-                />
+                <AimMark active={aim.has(dr.id)} size={36}>
+                  <Avatar
+                    name={dr.displayName}
+                    initials={getInitials(dr.displayName)}
+                    image={{ src: dr.photo ?? undefined }}
+                    color={getAvatarColor(dr.displayName)}
+                    size={36}
+                  />
+                </AimMark>
                 <div>
                   <Text weight="semibold" size={300} style={{ display: "block" }}>
                     {dr.displayName}
