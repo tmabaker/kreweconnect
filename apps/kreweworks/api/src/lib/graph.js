@@ -39,19 +39,21 @@ async function call(method, path, body, extraHeaders, tenantId) {
   return json;
 }
 
-const USER_SELECT = 'id,displayName,userPrincipalName,mail,jobTitle,department,companyName,officeLocation,accountEnabled,userType,employeeId,mobilePhone,businessPhones';
+const USER_SELECT = 'id,displayName,givenName,surname,userPrincipalName,mail,jobTitle,department,companyName,officeLocation,accountEnabled,userType,employeeId,mobilePhone,businessPhones,assignedLicenses';
 
 async function directory(force) {
   if (!force && directoryCache.users.length && Date.now() - directoryCache.at < DIRECTORY_TTL_MS) return directoryCache.users;
   const users = [];
-  let next = `/users?$select=${USER_SELECT}&$top=999`;
+  let next = `/users?$select=${USER_SELECT}&$expand=manager($select=displayName,userPrincipalName,mail)&$top=999`;
   while (next) {
     const page = await call('GET', next.replace('https://graph.microsoft.com/v1.0', ''));
     users.push(...(page.value || []));
     next = page['@odata.nextLink'] ? page['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0', '') : null;
   }
   const people = users.filter(u => u.accountEnabled && u.userType !== 'Guest' && u.mail && !/^(.*(account|boardroom|copier|key machine|photo booth).*)$/i.test(u.jobTitle || ''))
-    .map(u => ({ id: u.id, displayName: u.displayName, upn: (u.userPrincipalName || '').toLowerCase(), mail: (u.mail || '').toLowerCase(), jobTitle: u.jobTitle || '', department: u.department || '', companyName: u.companyName || '', employeeId: u.employeeId || '', mobilePhone: u.mobilePhone || '' }))
+    .map(u => ({ id: u.id, displayName: u.displayName, givenName: u.givenName || '', surname: u.surname || '', upn: (u.userPrincipalName || '').toLowerCase(), mail: (u.mail || '').toLowerCase(), jobTitle: u.jobTitle || '', department: u.department || '', companyName: u.companyName || '', officeLocation: u.officeLocation || '', employeeId: u.employeeId || '', mobilePhone: u.mobilePhone || '',
+      licensed: Array.isArray(u.assignedLicenses) && u.assignedLicenses.length > 0,
+      managerUpn: u.manager ? String(u.manager.userPrincipalName || u.manager.mail || '').toLowerCase() : '', managerName: u.manager ? u.manager.displayName || '' : '' }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
   directoryCache = { at: Date.now(), users: people };
   return people;

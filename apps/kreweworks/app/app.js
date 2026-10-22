@@ -176,12 +176,24 @@
   function peopleList(_, q) {
     q = q || {};
     return api('GET', 'people?q=' + encodeURIComponent(q.q || '') + '&status=' + (q.status || '')).then(function (r) {
-      $main.innerHTML = '<div class="page-head"><div><h1>People</h1><p class="muted">Everyone who has moved through this portal: applicants, hires, active staff and departures. ' + r.count + ' shown.</p></div><div class="actions">' + (can('hr') ? '<a class="btn btn-sm" href="/api/export/people.csv">Export CSV</a>' : '') + '</div></div>' +
+      $main.innerHTML = '<div class="page-head"><div><h1>People</h1><p class="muted">Applicants, hires, active staff and departures. Active staff are kept in sync with the company directory. ' + r.count + ' shown.</p></div><div class="actions">' + (can('hr') && state.cfg.directoryAvailable ? '<button class="btn btn-sm" id="pSync">Sync with directory</button>' : '') + (can('hr') ? '<a class="btn btn-sm" href="/api/export/people.csv">Export CSV</a>' : '') + '</div></div>' + (can('hr') ? '<div id="syncInfo"></div>' : '') +
         '<div class="card"><div class="row"><div class="field col" style="flex:2"><label>Search</label><input type="search" id="pq" placeholder="Name, email, mobile, employee number…" value="' + esc(q.q || '') + '"></div><div class="field col"><label>Status</label><select id="pStatus"><option value="">All</option>' + opt(Object.keys(state.cfg.personStatus).map(function (k) { return { v: k, l: state.cfg.personStatus[k] }; }), q.status || '', 'l', 'v') + '</select></div></div>' +
         (r.value.length ? '<table class="list"><thead><tr><th>Name</th><th>Status</th><th>' + esc(V('location')) + '</th><th>Title</th><th>Work email</th><th>Mobile</th><th>Updated</th></tr></thead><tbody>' + r.value.map(function (p) { return '<tr class="click" data-href="#/people/' + esc(p.id) + '"><td><strong>' + esc(p.firstName + ' ' + p.lastName) + '</strong>' + (p.preferredName ? ' <span class="dim">(' + esc(p.preferredName) + ')</span>' : '') + (p.rehireEligible === 'no' ? ' <span class="badge danger">No rehire</span>' : '') + '</td><td>' + personStatusBadge(p.status) + '</td><td>' + esc(storeName(p.storeId)) + '</td><td>' + esc(p.title) + '</td><td>' + esc(p.workEmail) + '</td><td>' + esc(p.mobile) + '</td><td class="dim">' + esc(ago(p.updatedAt)) + '</td></tr>'; }).join('') + '</tbody></table>' : '<div class="empty">No one matches. New hires appear here as soon as a hire request is started; existing staff are added the first time a change or termination is filed for them.</div>') + '</div>';
       bindRowLinks();
       var t; document.getElementById('pq').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { location.hash = '#/people?q=' + encodeURIComponent(val('pq')) + '&status=' + val('pStatus'); }, 350); });
       document.getElementById('pStatus').addEventListener('change', function () { location.hash = '#/people?q=' + encodeURIComponent(val('pq')) + '&status=' + val('pStatus'); });
+      if (can('hr')) {
+        var showSync = function (last) {
+          var box = document.getElementById('syncInfo'); if (!box) return;
+          if (!state.cfg.directoryAvailable) { box.innerHTML = '<div class="alert info">The company directory is not connected yet, so existing employees cannot be loaded automatically. NOIT Group is completing the connection.</div>'; return; }
+          if (!last) { box.innerHTML = ''; return; }
+          box.innerHTML = '<p class="small dim">Last directory sync ' + esc(ago(last.at)) + ': ' + last.directoryUsers + ' licensed users, ' + last.created + ' added, ' + last.updated + ' updated.</p>' +
+            (last.missing && last.missing.length ? '<div class="alert warn"><strong>' + last.missing.length + ' active ' + (last.missing.length === 1 ? 'person is' : 'people are') + ' no longer in the directory.</strong> If they have left, file a termination. ' + last.missing.slice(0, 10).map(function (m) { return '<a href="#/people/' + esc(m.id) + '">' + esc(m.name) + '</a>'; }).join(', ') + (last.missing.length > 10 ? ' and ' + (last.missing.length - 10) + ' more' : '') + '</div>' : '');
+        };
+        api('GET', 'people/sync').then(function (r) { showSync(r.last); }).catch(function () {});
+        var btn = document.getElementById('pSync');
+        if (btn) btn.addEventListener('click', function () { btn.disabled = true; btn.textContent = 'Syncing…'; api('POST', 'people/sync').then(function (r) { toast(r.created + ' added, ' + r.updated + ' updated.'); peopleList(_, q); }).catch(function (e) { toast(e.message, true); btn.disabled = false; btn.textContent = 'Sync with directory'; }); });
+      }
     });
   }
 
