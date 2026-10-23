@@ -86,7 +86,7 @@ export function setEntraValuesForTests(tenantId: string, locations: string[], de
 
 export async function resolvePicklist(tenantId: string): Promise<ResolvedPicklist> {
   const name = tenantName(tenantId);
-  const stored = (await readPicklistConfig())[tenantId.toLowerCase()];
+  const stored = (await readPicklistConfig(tenantId))[tenantId.toLowerCase()];
   const cfg = stored ?? defaultPicklistConfig(name);
 
   let warning: string | null = null;

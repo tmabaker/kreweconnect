@@ -119,7 +119,10 @@ function sortForList(records: ContractRecord[], includeArchived: boolean): Contr
 
 const listContractsHandler: Handler = async (request, _caller, tenantId) => {
   const includeArchived = request.query.get("includeArchived") === "true";
-  const records = tenantId === "all" ? await listAllContracts() : await listContracts(tenantId);
+  const records =
+    tenantId === "all"
+      ? await listAllContracts(config.clientTenants.map((t) => t.id))
+      : await listContracts(tenantId);
   return { status: 200, jsonBody: { contracts: sortForList(records, includeArchived) } };
 };
 

@@ -24,7 +24,7 @@ app.http("health", {
         settings,
         // Reported separately so they never block the CDK deploy gate.
         features: {
-          contractsStorage: Boolean(contractsConnection()),
+          contractsStorage: Boolean(contractsConnection("")),
           contractExtraction: extractionConfigured(),
         },
       },
