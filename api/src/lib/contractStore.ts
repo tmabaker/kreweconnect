@@ -19,30 +19,52 @@ const CONTAINER = "krewereview";
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID_RE = /^[0-9a-f-]{36}$/i;
 
-export function contractsConnection(env: NodeJS.ProcessEnv = process.env): string | undefined {
+/**
+ * Resolve the storage connection for a tenant.
+ *
+ * Bring-your-own storage: a client can host its KreweReview data in its own
+ * Azure resource — their subscription, their region — for data residency and
+ * continuity, while still using our shared front end. CONTRACTS_STORAGE_MAP is
+ * a JSON object { "<tenantId>": "<connection string>" }; each value should be a
+ * Key Vault reference in production, never a literal key in config. A tenant not
+ * listed falls back to the shared NOIT store (CONTRACTS_STORAGE_CONNECTION, then
+ * CDK_STORAGE_CONNECTION). The per-tenant blob path layout is unchanged, so a
+ * client's own store simply contains that one tenant's data.
+ */
+export function contractsConnection(tenantId: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.CONTRACTS_STORAGE_MAP;
+  if (raw) {
+    try {
+      const map = JSON.parse(raw) as Record<string, string>;
+      const own = map[tenantId] ?? map[tenantId.toLowerCase()];
+      if (own) return own;
+    } catch {
+      // malformed map — fall back to the shared store rather than failing writes
+    }
+  }
   return env.CONTRACTS_STORAGE_CONNECTION || env.CDK_STORAGE_CONNECTION || undefined;
 }
 
-let containerPromise: Promise<ContainerClient> | null = null;
-let containerFor = "";
+// One container client per distinct connection string: the shared NOIT store
+// plus any bring-your-own client stores, each cached across calls.
+const containers = new Map<string, Promise<ContainerClient>>();
 
-async function container(): Promise<ContainerClient> {
-  const conn = contractsConnection();
+async function container(tenantId: string): Promise<ContainerClient> {
+  const conn = contractsConnection(tenantId);
   if (!conn) {
     throw new ServiceUnavailableError("KreweReview storage is not configured. Nothing was saved.");
   }
-  if (!containerPromise || containerFor !== conn) {
-    containerFor = conn;
-    containerPromise = (async () => {
+  let promise = containers.get(conn);
+  if (!promise) {
+    promise = (async () => {
       const client = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
       await client.createIfNotExists();
       return client;
     })();
-    containerPromise.catch(() => {
-      containerPromise = null;
-    });
+    promise.catch(() => containers.delete(conn));
+    containers.set(conn, promise);
   }
-  return containerPromise;
+  return promise;
 }
 
 function tenantKey(tenantId: string): string {
@@ -97,7 +119,7 @@ async function writeJson(
 // ─── Contracts ────────────────────────────────────────────────────
 
 export async function listContracts(tenantId: string): Promise<ContractRecord[]> {
-  const c = await container();
+  const c = await container(tenantId);
   const prefix = `contracts/${tenantKey(tenantId)}/`;
   const paths: string[] = [];
   for await (const blob of c.listBlobsFlat({ prefix })) paths.push(blob.name);
@@ -110,39 +132,39 @@ export async function listContracts(tenantId: string): Promise<ContractRecord[]>
   return records;
 }
 
-/** Every tenant's agreements (MSP "All Tenants" view). */
-export async function listAllContracts(): Promise<ContractRecord[]> {
-  const c = await container();
-  const paths: string[] = [];
-  for await (const blob of c.listBlobsFlat({ prefix: "contracts/" })) paths.push(blob.name);
-  return Promise.all(
-    paths.map(async (p) => JSON.parse((await c.getBlobClient(p).downloadToBuffer()).toString("utf8")) as ContractRecord)
-  );
+/**
+ * Every tenant's agreements (MSP "All Tenants" view). Fans out across each
+ * tenant's store, so bring-your-own-storage tenants are included alongside the
+ * shared store. Callers pass the set of tenants the MSP may see.
+ */
+export async function listAllContracts(tenantIds: string[]): Promise<ContractRecord[]> {
+  const perTenant = await Promise.all(tenantIds.map((t) => listContracts(t).catch(() => [])));
+  return perTenant.flat();
 }
 
 export async function getContract(
   tenantId: string,
   id: string
 ): Promise<{ record: ContractRecord; etag: string }> {
-  const c = await container();
+  const c = await container(tenantId);
   const found = await readText(c, contractPath(tenantId, id));
   if (!found) throw new NotFoundError("Agreement not found.");
   return { record: JSON.parse(found.text) as ContractRecord, etag: found.etag };
 }
 
 export async function createContract(record: ContractRecord): Promise<void> {
-  const c = await container();
+  const c = await container(record.tenantId);
   await writeJson(c, contractPath(record.tenantId, record.id), record, { ifNoneMatch: "*" });
 }
 
 export async function saveContract(record: ContractRecord, etag: string): Promise<void> {
-  const c = await container();
+  const c = await container(record.tenantId);
   await writeJson(c, contractPath(record.tenantId, record.id), record, { ifMatch: etag });
 }
 
 /** Permanently remove an agreement and every file attached to it. */
 export async function deleteContract(record: ContractRecord): Promise<void> {
-  const c = await container();
+  const c = await container(record.tenantId);
   for (const doc of record.documents) {
     await deleteFile(record.tenantId, doc.id);
   }
@@ -166,7 +188,7 @@ function filePath(tenantId: string, fileId: string): string {
 }
 
 export async function putFile(meta: StoredFileMeta, data: Buffer): Promise<void> {
-  const c = await container();
+  const c = await container(meta.tenantId);
   const path = filePath(meta.tenantId, meta.id);
   await c.getBlockBlobClient(path).uploadData(data, {
     blobHTTPHeaders: { blobContentType: meta.contentType },
@@ -175,7 +197,7 @@ export async function putFile(meta: StoredFileMeta, data: Buffer): Promise<void>
 }
 
 export async function getFileMeta(tenantId: string, fileId: string): Promise<StoredFileMeta> {
-  const c = await container();
+  const c = await container(tenantId);
   const found = await readText(c, filePath(tenantId, fileId) + ".meta.json");
   if (!found) throw new NotFoundError("File not found.");
   return JSON.parse(found.text) as StoredFileMeta;
@@ -183,13 +205,13 @@ export async function getFileMeta(tenantId: string, fileId: string): Promise<Sto
 
 export async function getFile(tenantId: string, fileId: string): Promise<{ meta: StoredFileMeta; data: Buffer }> {
   const meta = await getFileMeta(tenantId, fileId);
-  const c = await container();
+  const c = await container(tenantId);
   const data = await c.getBlobClient(filePath(tenantId, fileId)).downloadToBuffer();
   return { meta, data };
 }
 
 export async function deleteFile(tenantId: string, fileId: string): Promise<void> {
-  const c = await container();
+  const c = await container(tenantId);
   const path = filePath(tenantId, fileId);
   await c.getBlobClient(path).deleteIfExists();
   await c.getBlobClient(path + ".meta.json").deleteIfExists();
@@ -212,14 +234,14 @@ export interface TenantPicklistConfig {
 
 const PICKLIST_PATH = "config/picklists.json";
 
-export async function readPicklistConfig(): Promise<Record<string, TenantPicklistConfig>> {
-  const c = await container();
+export async function readPicklistConfig(tenantId: string): Promise<Record<string, TenantPicklistConfig>> {
+  const c = await container(tenantId);
   const found = await readText(c, PICKLIST_PATH);
   return found ? (JSON.parse(found.text) as Record<string, TenantPicklistConfig>) : {};
 }
 
 export async function writeTenantPicklistConfig(tenantId: string, value: TenantPicklistConfig): Promise<void> {
-  const c = await container();
+  const c = await container(tenantId);
   const key = tenantKey(tenantId);
   // Read-modify-write under the blob ETag so concurrent edits to two tenants
   // can't drop each other's change.
@@ -236,8 +258,7 @@ export async function writeTenantPicklistConfig(tenantId: string, value: TenantP
   }
 }
 
-/** Test hook: forget the cached container client. */
+/** Test hook: forget the cached container clients. */
 export function resetContractStoreForTests(): void {
-  containerPromise = null;
-  containerFor = "";
+  containers.clear();
 }
