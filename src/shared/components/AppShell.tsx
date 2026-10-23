@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useMsal } from "@azure/msal-react";
 import { isDemoMode, demoUser } from "../auth/demoMode";
@@ -30,16 +30,20 @@ import {
   ShieldTask24Regular,
   Building24Regular,
   PeopleTeam24Regular,
+  Navigation24Regular,
 } from "@fluentui/react-icons";
 import { TenantSwitcher } from "../../components/TenantSwitcher";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useTenantContext } from "../hooks/useTenantContext";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { detectUserTenantContext } from "../../services/tenantService";
 
 const useStyles = makeStyles({
   root: {
     display: "flex",
-    height: "100vh",
+    // dvh tracks the visible viewport on phones, where 100vh hides content
+    // behind the browser toolbar.
+    height: ["100vh", "100dvh"],
     backgroundColor: tokens.colorNeutralBackground3,
   },
   sidebar: {
@@ -49,9 +53,34 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     flexShrink: 0,
+    overflowY: "auto",
+    transitionProperty: "width, transform",
+    transitionDuration: "150ms",
   },
   sidebarCollapsed: {
     width: "60px",
+  },
+  // Phones: the sidebar becomes a drawer over the page instead of a column
+  // that permanently eats most of a 375px screen.
+  sidebarMobile: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: "260px",
+    maxWidth: "85vw",
+    zIndex: 1000,
+    boxShadow: tokens.shadow28,
+    transform: "translateX(-100%)",
+  },
+  sidebarMobileOpen: {
+    transform: "translateX(0)",
+  },
+  backdrop: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 999,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
   brand: {
     display: "flex",
@@ -98,15 +127,18 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: "8px",
     padding: "8px 20px",
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground1,
     minHeight: "52px",
+    "@media (max-width: 768px)": { padding: "8px 12px" },
   },
   headerLeft: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
+    gap: "8px",
+    minWidth: 0,
   },
   headerRight: {
     display: "flex",
@@ -117,6 +149,7 @@ const useStyles = makeStyles({
     flex: 1,
     overflow: "auto",
     padding: "24px",
+    "@media (max-width: 768px)": { padding: "12px" },
   },
 });
 
@@ -149,6 +182,43 @@ export function AppShell() {
   const msalContext = isDemoMode ? null : useMsal(); // eslint-disable-line react-hooks/rules-of-hooks
   const { selectedTenant, setSelectedTenant } = useTenantContext();
   const userContext = detectUserTenantContext();
+  const isMobile = useIsMobile();
+  // Desktop: collapse to an icon rail, remembered per browser.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("kc.sidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  // Phones: the drawer starts closed and closes after every navigation.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname, isMobile]);
+
+  const toggleNav = () => {
+    if (isMobile) {
+      setDrawerOpen((open) => !open);
+      return;
+    }
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem("kc.sidebarCollapsed", c ? "0" : "1");
+      } catch {
+        // Storage blocked: the toggle still works for this visit.
+      }
+      return !c;
+    });
+  };
+
+  const showLabels = isMobile || !collapsed;
+  const sidebarClass = [
+    styles.sidebar,
+    isMobile ? styles.sidebarMobile : collapsed ? styles.sidebarCollapsed : "",
+    isMobile && drawerOpen ? styles.sidebarMobileOpen : "",
+  ].join(" ");
 
   const displayName = isDemoMode
     ? demoUser.name
@@ -167,18 +237,22 @@ export function AppShell() {
 
   return (
     <div className={styles.root}>
+      {isMobile && drawerOpen && (
+        <div className={styles.backdrop} onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+      )}
+
       {/* Sidebar */}
-      <div className={styles.sidebar}>
+      <div className={sidebarClass} aria-hidden={isMobile && !drawerOpen ? true : undefined}>
         <div className={styles.brand}>
           <ShieldKeyhole24Regular className={styles.brandIcon} />
-          <div>
+          {showLabels && <div>
             <Text weight="semibold" size={400}>
               NOIT Client Tools
             </Text>
             <Text size={200} style={{ display: "block", marginTop: "-2px" }}>
               KreweConnect · KreweReview · KreweWorks
             </Text>
-          </div>
+          </div>}
         </div>
 
         <nav className={styles.nav}>
@@ -197,7 +271,7 @@ export function AppShell() {
 
             return (
               <div key={item.path}>
-                {(item as any).section && (
+                {showLabels && (item as any).section && (
                   <Text
                     size={200}
                     weight="semibold"
@@ -216,10 +290,11 @@ export function AppShell() {
                 <div
                   className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
                   onClick={() => navigate(item.path)}
-                  style={(item as any).indent ? { paddingLeft: "24px" } : undefined}
+                  style={showLabels && (item as any).indent ? { paddingLeft: "24px" } : undefined}
+                  title={showLabels ? undefined : (item as any).section ? `${(item as any).section} · ${item.label}` : item.label}
                 >
                   {item.icon}
-                  <Text size={300}>{item.label}</Text>
+                  {showLabels && <Text size={300}>{item.label}</Text>}
                 </div>
               </div>
             );
@@ -231,6 +306,13 @@ export function AppShell() {
       <div className={styles.main}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
+            <Button
+              appearance="subtle"
+              icon={<Navigation24Regular />}
+              aria-label={isMobile ? (drawerOpen ? "Close menu" : "Open menu") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={isMobile ? drawerOpen : !collapsed}
+              onClick={toggleNav}
+            />
             <TenantSwitcher
               selectedTenant={selectedTenant}
               onTenantChange={setSelectedTenant}
@@ -261,8 +343,9 @@ export function AppShell() {
                 <Button
                   appearance="subtle"
                   icon={<Avatar name={displayName} initials={initials} size={28} />}
+                  aria-label={displayName}
                 >
-                  {displayName}
+                  {isMobile ? null : displayName}
                 </Button>
               </MenuTrigger>
               <MenuPopover>

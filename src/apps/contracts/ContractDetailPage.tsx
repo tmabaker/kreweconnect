@@ -79,7 +79,7 @@ const useStyles = makeStyles({
     padding: "10px 12px", borderRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground2,
   },
-  docInfo: { display: "flex", flexDirection: "column", gap: "2px" },
+  docInfo: { display: "flex", flexDirection: "column", gap: "2px", flex: 1, minWidth: 0 },
   dropZone: {
     border: `2px dashed ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusMedium,
@@ -366,25 +366,51 @@ export function ContractDetailPage() {
               <Title3>Documents</Title3>
             </div>
             {contract.documents.length > 0 ? (
-              contract.documents.map((doc) => (
-                <div key={doc.id} className={styles.docItem}>
-                  <div className={styles.docInfo}>
-                    <Text weight="semibold">{doc.fileName}</Text>
-                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                      {doc.kind === "renewal" ? "Renewal · " : ""}{formatFileSize(doc.fileSize)} · {new Date(doc.uploadedAt).toLocaleDateString()}
-                    </Text>
+              contract.documents.map((doc) => {
+                // Agreements bulk-loaded from a client's SharePoint list the
+                // original but never stored a copy (size 0). Send those to the
+                // source file instead of a download that can only 404.
+                const notStored = doc.fileSize === 0;
+                const sourceUrl =
+                  contract.sourceWebUrl && /^https?:\/\//i.test(contract.sourceWebUrl) ? contract.sourceWebUrl : null;
+                return (
+                  <div key={doc.id} className={styles.docItem}>
+                    <div className={styles.docInfo}>
+                      <Text weight="semibold" style={{ overflowWrap: "anywhere" }}>{doc.fileName}</Text>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                        {doc.kind === "renewal" ? "Renewal · " : ""}
+                        {notStored ? "Kept in the client's SharePoint" : formatFileSize(doc.fileSize)}
+                        {" · "}{new Date(doc.uploadedAt).toLocaleDateString()}
+                      </Text>
+                    </div>
+                    {notStored ? (
+                      sourceUrl && (
+                        <Button
+                          as="a"
+                          appearance="subtle"
+                          size="small"
+                          href={sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          icon={<Link24Regular />}
+                        >
+                          Open in SharePoint
+                        </Button>
+                      )
+                    ) : (
+                      <Button
+                        appearance="subtle"
+                        size="small"
+                        icon={<ArrowDownload24Regular />}
+                        disabled={isDemoMode || busy}
+                        onClick={() => run(() => downloadContractDocument(tenantId, id, doc))}
+                      >
+                        Download
+                      </Button>
+                    )}
                   </div>
-                  <Button
-                    appearance="subtle"
-                    size="small"
-                    icon={<ArrowDownload24Regular />}
-                    disabled={isDemoMode || busy}
-                    onClick={() => run(() => downloadContractDocument(tenantId, id, doc))}
-                  >
-                    Download
-                  </Button>
-                </div>
-              ))
+                );
+              })
             ) : (
               <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>No documents uploaded yet.</Text>
             )}

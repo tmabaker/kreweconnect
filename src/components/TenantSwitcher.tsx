@@ -26,12 +26,15 @@ const useStyles = makeStyles({
     gap: "8px",
     paddingLeft: "12px",
     paddingRight: "12px",
+    minWidth: 0,
+    "@media (max-width: 768px)": { paddingLeft: 0, paddingRight: 0 },
   },
   icon: {
     color: tokens.colorBrandForeground1,
   },
   dropdown: {
     minWidth: "220px",
+    "@media (max-width: 768px)": { minWidth: "140px", maxWidth: "52vw" },
   },
   adminBadge: {
     marginLeft: "4px",
