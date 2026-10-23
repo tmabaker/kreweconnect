@@ -395,6 +395,25 @@ export async function fetchUserById(userId: string, tenantId?: string): Promise<
 }
 
 /**
+ * KreweAIM (AI Mastery) assignment: ids of users in the tenant's KreweAIM
+ * group. Backend mode only; direct-Graph mode and failures yield an empty
+ * list so the directory never breaks over the badge.
+ */
+export async function fetchAimMembers(tenantId?: string): Promise<string[]> {
+  if (!useBackendApi) return [];
+  const cacheKey = `aim:${tenantId || "home"}`;
+  const cached = getCached<string[]>(cacheKey);
+  if (cached) return cached;
+  try {
+    const data = await apiFetch<{ value: string[] }>(`/tenants/${tenantId || "home"}/aim-members`);
+    setCache(cacheKey, data.value);
+    return data.value;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Fetch a user's profile photo as a blob URL.
  * Returns null if no photo is available.
  */

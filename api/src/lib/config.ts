@@ -157,6 +157,15 @@ export const config = {
     return process.env.ANNIVERSARY_ATTRIBUTE || "";
   },
 
+  /**
+   * KreweAIM (AI Mastery) assignment group. Members of this security group in a
+   * client tenant get the AIM mark on their directory card. Set via the
+   * KREWEAIM_GROUP app setting; defaults to the name KreweAIM provisions.
+   */
+  get kreweAimGroup(): string {
+    return process.env.KREWEAIM_GROUP || "KreweAIM Members";
+  },
+
   /* ── Geaux credential delivery (required in production) ─────────── */
   get callRailWorkerPublicKey(): string {
     return process.env.CALLRAIL_WORKER_PUBLIC_KEY || "";

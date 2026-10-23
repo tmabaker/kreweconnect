@@ -376,3 +376,47 @@ export async function fetchUserPhoto(
     contentType: response.headers.get("content-type") || "image/jpeg",
   };
 }
+
+export interface AimMembership {
+  /** False until the KreweAIM group exists in the tenant: nobody is assigned yet. */
+  groupFound: boolean;
+  /** Entra object ids of assigned members (transitive, users only). */
+  memberIds: string[];
+}
+
+/**
+ * KreweAIM assignment for one tenant: the user ids in the named security
+ * group. A tenant without the group is not an error; it just has no members.
+ */
+export async function fetchAimMembers(tenantId: string, groupName: string): Promise<AimMembership> {
+  const filter = encodeURIComponent(`displayName eq '${groupName.replace(/'/g, "''")}'`);
+  const groups = await graphFetch<GraphPagedResponse<{ id: string }>>(
+    tenantId,
+    `${GRAPH_BASE}/groups?$filter=${filter}&$select=id`
+  );
+  if (!groups.value.length) return { groupFound: false, memberIds: [] };
+  const ids = new Set<string>();
+  for (const g of groups.value) {
+    let url = `${GRAPH_BASE}/groups/${g.id}/transitiveMembers/microsoft.graph.user?$select=id&$top=999`;
+    while (url) {
+      const page = await graphFetch<GraphPagedResponse<{ id: string }>>(tenantId, url);
+      for (const m of page.value) ids.add(m.id);
+      url = page["@odata.nextLink"] || "";
+    }
+  }
+  return { groupFound: true, memberIds: [...ids] };
+}
+
+export async function fetchAimMembersAllTenants(
+  tenants: Array<{ id: string; name: string }>,
+  groupName: string
+): Promise<AimMembership> {
+  const results = await Promise.all(
+    tenants.map((t) => fetchAimMembers(t.id, groupName).catch(() => null))
+  );
+  const ok = results.filter((r): r is AimMembership => r !== null);
+  return {
+    groupFound: ok.some((r) => r.groupFound),
+    memberIds: ok.flatMap((r) => r.memberIds),
+  };
+}
