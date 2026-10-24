@@ -27,6 +27,7 @@ import {
 } from "@fluentui/react-icons";
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useContracts } from "../../shared/hooks/useContracts";
+import { useIsMobile } from "../../shared/hooks/useIsMobile";
 import {
   getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_STATUSES, AGREEMENT_CATEGORIES,
   getCategoryLabel, getRenewalTypeLabel, contractPath,
@@ -35,9 +36,12 @@ import type { AgreementCategory, ContractStatus } from "../../shared/types";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" },
   toolbar: { display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" },
-  searchInput: { minWidth: "300px", flex: 1, maxWidth: "480px" },
+  searchInput: {
+    minWidth: "300px", flex: 1, maxWidth: "480px",
+    "@media (max-width: 768px)": { minWidth: "100%", maxWidth: "100%" },
+  },
   filterBar: {
     display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap",
     padding: "12px 16px", backgroundColor: tokens.colorNeutralBackground2,
@@ -60,13 +64,35 @@ const useStyles = makeStyles({
   vendorCell: { display: "flex", flexDirection: "column", gap: "2px" },
   tagsCell: { display: "flex", flexWrap: "wrap", gap: "4px" },
   emptyState: { display: "flex", flexDirection: "column", alignItems: "center", padding: "64px", gap: "12px" },
+  // Phone layout: one card per agreement so the title gets the full width.
+  cardList: { display: "flex", flexDirection: "column", gap: "8px" },
+  mobileCard: { padding: "12px 14px", cursor: "pointer", gap: "6px" },
+  mobileTitle: { display: "block", overflowWrap: "anywhere" as const },
+  mobileMeta: { display: "block", color: tokens.colorNeutralForeground3, overflowWrap: "anywhere" as const },
+  mobileBadges: { display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" },
+  mobileSort: { display: "flex", gap: "8px", alignItems: "center" },
   pagination: { display: "flex", justifyContent: "center", alignItems: "center", gap: "16px", padding: "16px 0" },
 });
+
+// Same fields the desktop table headers sort by.
+const MOBILE_SORTS = [
+  { field: "title", label: "Contract" },
+  { field: "vendor", label: "Vendor" },
+  { field: "endDate", label: "Expires" },
+  { field: "decisionDate", label: "Latest decision date" },
+  { field: "value", label: "Value" },
+  { field: "status", label: "Status" },
+  { field: "category", label: "Category" },
+  { field: "renewalType", label: "Renewal type" },
+  { field: "location", label: "Location" },
+  { field: "tier", label: "Tier" },
+];
 
 export function ContractListPage() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
+  const isMobile = useIsMobile();
   const [showFilters, setShowFilters] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const {
@@ -203,6 +229,56 @@ export function ContractListPage() {
       {/* Table */}
       {loading ? (
         <Spinner label="Loading agreements…" />
+      ) : contracts.length > 0 && isMobile ? (
+        <div className={styles.cardList}>
+          {/* The table headers are the sort controls on desktop; phones get them here. */}
+          <div className={styles.mobileSort}>
+            <Dropdown
+              aria-label="Sort by"
+              style={{ flex: 1, minWidth: 0 }}
+              value={`Sort: ${MOBILE_SORTS.find((o) => o.field === sortBy)?.label ?? "Contract"}`}
+              selectedOptions={[sortBy]}
+              onOptionSelect={(_, d) => d.optionValue && setSortBy(d.optionValue)}
+            >
+              {MOBILE_SORTS.map((o) => <Option key={o.field} value={o.field}>{o.label}</Option>)}
+            </Dropdown>
+            <Button
+              appearance="subtle"
+              icon={sortDir === "asc" ? <ArrowUp16Regular /> : <ArrowDown16Regular />}
+              aria-label={sortDir === "asc" ? "Sorted ascending" : "Sorted descending"}
+              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+            />
+          </div>
+          {contracts.map((c) => (
+            <Card key={c.id} className={styles.mobileCard} onClick={() => navigate(contractPath(c.tenantId, c.id))}>
+              <Text weight="semibold" className={styles.mobileTitle}>{c.title}</Text>
+              <Text size={200} className={styles.mobileMeta}>
+                {[c.vendorName, getCategoryLabel(c.agreementCategory), c.location].filter(Boolean).join(" · ")}
+              </Text>
+              <div className={styles.mobileBadges}>
+                <Badge appearance="filled" color={getStatusColor(c.status)} size="small">
+                  {getStatusLabel(c.status)}
+                </Badge>
+                {selectedTenant.tenantId === "all" && (
+                  <Badge appearance="outline" color="informative" size="small">{c.tenantDisplayName}</Badge>
+                )}
+                {c.needsReview && <Badge appearance="outline" color="severe" size="small">Review</Badge>}
+                {c.isArchived && <Badge appearance="tint" color="subtle" size="small">Archived</Badge>}
+                {c.value ? <Text size={200} weight="semibold">{formatCurrency(c.value)}</Text> : null}
+              </div>
+              {c.endDate && (
+                <Text size={200} className={styles.mobileMeta}>
+                  Expires {c.endDate}
+                  {c.daysUntilExpiry !== null && c.daysUntilExpiry <= 90 && c.daysUntilExpiry > 0 && (
+                    <span style={{ color: c.daysUntilExpiry <= 30 ? "#D13438" : "#FF8C00" }}>
+                      {" · "}{formatDaysRemaining(c.daysUntilExpiry)}
+                    </span>
+                  )}
+                </Text>
+              )}
+            </Card>
+          ))}
+        </div>
       ) : contracts.length > 0 ? (
         <Card style={{ overflowX: "auto" }}>
           <table className={styles.table}>

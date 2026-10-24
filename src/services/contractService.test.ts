@@ -41,6 +41,14 @@ describe("toDetail", () => {
     expect(d.earliestRenewalDecisionDate).toBe("2028-03-01");
   });
 
+  it("keeps the source link of an imported agreement", () => {
+    expect(toDetail(record).sourceWebUrl).toBeNull();
+    const url = "https://fishmanhaygood.sharepoint.com/sites/clm/Shared%20Documents/Contracts/a.pdf";
+    const d = toDetail({ ...record, sourceWebUrl: url, sourceItemId: "item1" });
+    expect(d.sourceWebUrl).toBe(url);
+    expect(d.sourceItemId).toBe("item1");
+  });
+
   it("handles an agreement with no end date", () => {
     const d = toDetail({ ...record, endDate: null, renewalType: "Evergreen" });
     expect(d.daysUntilExpiry).toBeNull();
