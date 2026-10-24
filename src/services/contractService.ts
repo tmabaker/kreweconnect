@@ -68,6 +68,9 @@ export interface ContractRecord {
   createdAt: string;
   updatedById: string | null;
   updatedAt: string;
+  /** Set on agreements imported from a client's SharePoint; points at the original file. */
+  sourceWebUrl?: string | null;
+  sourceItemId?: string | null;
 }
 
 /** The editable part of a record, as the form sends it. */
@@ -140,8 +143,8 @@ export function toDetail(r: ContractRecord): ContractDetail {
     sourceTenantId: null,
     sourceContainer: null,
     sourcePath: null,
-    sourceItemId: null,
-    sourceWebUrl: null,
+    sourceItemId: r.sourceItemId ?? null,
+    sourceWebUrl: r.sourceWebUrl ?? null,
     sourceFileHash: null,
   };
 }

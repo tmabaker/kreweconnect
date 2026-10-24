@@ -70,8 +70,23 @@ const useStyles = makeStyles({
   mobileTitle: { display: "block", overflowWrap: "anywhere" as const },
   mobileMeta: { display: "block", color: tokens.colorNeutralForeground3, overflowWrap: "anywhere" as const },
   mobileBadges: { display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" },
+  mobileSort: { display: "flex", gap: "8px", alignItems: "center" },
   pagination: { display: "flex", justifyContent: "center", alignItems: "center", gap: "16px", padding: "16px 0" },
 });
+
+// Same fields the desktop table headers sort by.
+const MOBILE_SORTS = [
+  { field: "title", label: "Contract" },
+  { field: "vendor", label: "Vendor" },
+  { field: "endDate", label: "Expires" },
+  { field: "decisionDate", label: "Latest decision date" },
+  { field: "value", label: "Value" },
+  { field: "status", label: "Status" },
+  { field: "category", label: "Category" },
+  { field: "renewalType", label: "Renewal type" },
+  { field: "location", label: "Location" },
+  { field: "tier", label: "Tier" },
+];
 
 export function ContractListPage() {
   const styles = useStyles();
@@ -216,6 +231,24 @@ export function ContractListPage() {
         <Spinner label="Loading agreements…" />
       ) : contracts.length > 0 && isMobile ? (
         <div className={styles.cardList}>
+          {/* The table headers are the sort controls on desktop; phones get them here. */}
+          <div className={styles.mobileSort}>
+            <Dropdown
+              aria-label="Sort by"
+              style={{ flex: 1, minWidth: 0 }}
+              value={`Sort: ${MOBILE_SORTS.find((o) => o.field === sortBy)?.label ?? "Contract"}`}
+              selectedOptions={[sortBy]}
+              onOptionSelect={(_, d) => d.optionValue && setSortBy(d.optionValue)}
+            >
+              {MOBILE_SORTS.map((o) => <Option key={o.field} value={o.field}>{o.label}</Option>)}
+            </Dropdown>
+            <Button
+              appearance="subtle"
+              icon={sortDir === "asc" ? <ArrowUp16Regular /> : <ArrowDown16Regular />}
+              aria-label={sortDir === "asc" ? "Sorted ascending" : "Sorted descending"}
+              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+            />
+          </div>
           {contracts.map((c) => (
             <Card key={c.id} className={styles.mobileCard} onClick={() => navigate(contractPath(c.tenantId, c.id))}>
               <Text weight="semibold" className={styles.mobileTitle}>{c.title}</Text>
@@ -230,6 +263,7 @@ export function ContractListPage() {
                   <Badge appearance="outline" color="informative" size="small">{c.tenantDisplayName}</Badge>
                 )}
                 {c.needsReview && <Badge appearance="outline" color="severe" size="small">Review</Badge>}
+                {c.isArchived && <Badge appearance="tint" color="subtle" size="small">Archived</Badge>}
                 {c.value ? <Text size={200} weight="semibold">{formatCurrency(c.value)}</Text> : null}
               </div>
               {c.endDate && (
