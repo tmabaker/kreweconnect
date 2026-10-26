@@ -43,13 +43,28 @@ export function extractionConfigured(env: NodeJS.ProcessEnv = process.env): bool
   return Boolean(env.ANTHROPIC_API_KEY);
 }
 
+// Structured outputs allow at most 16 union-typed (nullable) parameters per
+// schema, and this record has far more optional fields than that. Optional
+// text, dates and list picks therefore use "" for "not stated" (no union), and
+// emptyToNull turns those back into null before anyone sees them. Only the
+// numbers stay true nullables.
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: "null" }] });
-const nullableEnum = (values: readonly string[]) =>
-  values.length ? nullable({ type: "string", enum: [...values] }) : { type: "null" };
-const nullableString = nullable({ type: "string" });
-const nullableDate = nullable({ type: "string", description: "YYYY-MM-DD" });
+const optionalEnum = (values: readonly string[]) =>
+  values.length ? { type: "string", enum: ["", ...values] } : { type: "string", enum: [""] };
+const optionalString = { type: "string", description: 'Use "" when the document does not state it.' };
+const optionalDate = { type: "string", description: 'YYYY-MM-DD, or "" when the document does not state it.' };
 const nullableNumber = nullable({ type: "number" });
 const nullableInteger = nullable({ type: "integer" });
+
+/** Optional fields come back as "" (see above); the record stores null. */
+export function emptyToNull(value: unknown): unknown {
+  if (value === "") return null;
+  if (Array.isArray(value)) return value.filter((v) => v !== "").map(emptyToNull);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, emptyToNull(v)]));
+  }
+  return value;
+}
 
 function object(properties: Record<string, unknown>) {
   return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
@@ -63,44 +78,44 @@ export function extractionSchema(picklist: TenantPicklist): Record<string, unkno
     },
     title: { type: "string" },
     vendorName: { type: "string", description: "Brand name of the other party." },
-    counterpartyName: nullableString,
+    counterpartyName: optionalString,
     agreementCategory: { type: "string", enum: [...AGREEMENT_CATEGORIES] },
-    location: nullableEnum(picklist.locations),
-    department: nullableEnum(picklist.departments),
+    location: optionalEnum(picklist.locations),
+    department: optionalEnum(picklist.departments),
     status: { type: "string", enum: [...CONTRACT_STATUSES] },
-    startDate: nullableDate,
-    endDate: nullableDate,
-    renewalDate: nullableDate,
-    renewalType: nullableEnum(RENEWAL_TYPES),
+    startDate: optionalDate,
+    endDate: optionalDate,
+    renewalDate: optionalDate,
+    renewalType: optionalEnum(RENEWAL_TYPES),
     noticePeriodDays: nullableInteger,
     renewalTermMonths: nullableInteger,
-    earliestRenewalDecisionDate: nullableDate,
-    latestRenewalDecisionDate: nullableDate,
+    earliestRenewalDecisionDate: optionalDate,
+    latestRenewalDecisionDate: optionalDate,
     totalValue: nullableNumber,
     recurringAmount: nullableNumber,
-    billingFrequency: nullableEnum(BILLING_FREQUENCIES),
-    description: nullableString,
-    terminationTerms: nullableString,
-    slaTerms: nullableString,
-    policyOrAccountNumber: nullableString,
-    coverageOrScopeSummary: nullableString,
+    billingFrequency: optionalEnum(BILLING_FREQUENCIES),
+    description: optionalString,
+    terminationTerms: optionalString,
+    slaTerms: optionalString,
+    policyOrAccountNumber: optionalString,
+    coverageOrScopeSummary: optionalString,
     tags: { type: "array", items: { type: "string", enum: [...CONTRACT_TAGS] } },
     contacts: {
       type: "array",
       items: object({
         role: { type: "string", enum: [...CONTACT_ROLES] },
-        name: nullableString,
-        company: nullableString,
-        email: nullableString,
-        phone: nullableString,
+        name: optionalString,
+        company: optionalString,
+        email: optionalString,
+        phone: optionalString,
       }),
     },
     obligations: {
       type: "array",
       items: object({
         description: { type: "string" },
-        dueDate: nullableDate,
-        recurrence: nullableString,
+        dueDate: optionalDate,
+        recurrence: optionalString,
       }),
     },
     confidenceTier: { type: "string", enum: [...CONFIDENCE_TIERS] },
@@ -113,15 +128,15 @@ function instructions(picklist: TenantPicklist, today: string, renewalOf: Contra
   const lines = [
     "You read one business agreement for an IT managed service provider and fill in a contract record for its client.",
     `Today is ${today}. Write every date as YYYY-MM-DD.`,
-    "Use only what the document states or clearly implies. Leave a field null when the document does not support it; never guess a value to fill a gap.",
+    'Use only what the document states or clearly implies. Leave a field empty ("" for text, dates and list picks; null for numbers) when the document does not support it; never guess a value to fill a gap.',
     "Pick agreementCategory from the allowed list. Use Other only when nothing else fits.",
     picklist.locations.length
       ? `Set location only when the document names one of these locations or an address that clearly belongs to one: ${picklist.locations.join("; ")}.`
-      : "location must be null.",
+      : 'location must be "".',
     picklist.departments.length
       ? `Set department only when the document clearly ties the agreement to one of: ${picklist.departments.join("; ")}.`
-      : "department must be null.",
-    "latestRenewalDecisionDate and earliestRenewalDecisionDate are only for dates the document states; leave them null otherwise.",
+      : 'department must be "".',
+    'latestRenewalDecisionDate and earliestRenewalDecisionDate are only for dates the document states; leave them "" otherwise.',
     "totalValue is the value over the whole term; recurringAmount is the amount per billing cycle.",
     "status: Active when the term covers today, Expired when it ended, Draft when the document is unsigned.",
     "confidenceTier: A when the key fields come from an executed agreement, B when some key fields had to be inferred, C when the document is only evidence of an agreement (an invoice, renewal notice, or email).",
@@ -231,7 +246,7 @@ export async function extractContractFields(
   const text = response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   let fields: Record<string, unknown>;
   try {
-    fields = JSON.parse(text) as Record<string, unknown>;
+    fields = emptyToNull(JSON.parse(text)) as Record<string, unknown>;
   } catch {
     throw new ServiceUnavailableError("The automatic reading returned an unusable answer. Enter the details by hand.");
   }

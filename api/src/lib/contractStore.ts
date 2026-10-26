@@ -118,18 +118,83 @@ async function writeJson(
 
 // ─── Contracts ────────────────────────────────────────────────────
 
-export async function listContracts(tenantId: string): Promise<ContractRecord[]> {
-  const c = await container(tenantId);
-  const prefix = `contracts/${tenantKey(tenantId)}/`;
-  const paths: string[] = [];
-  for await (const blob of c.listBlobsFlat({ prefix })) paths.push(blob.name);
-  const records = await Promise.all(
-    paths.map(async (p) => {
-      const buf = await c.getBlobClient(p).downloadToBuffer();
-      return JSON.parse(buf.toString("utf8")) as ContractRecord;
+// A list used to download every record blob on every request. With a few
+// hundred agreements per client that ran past the 45 second SWA function
+// limit on the All Tenants view. Each tenant now keeps a snapshot at
+// index/{tenantId}.json: every record plus the ETag it was read at. A list
+// call does one cheap blob listing (names + ETags), loads the snapshot, and
+// downloads only records whose ETag moved. The listing stays the source of
+// truth, so a stale or missing snapshot only costs speed, never correctness.
+
+interface Snapshot {
+  v: 1;
+  entries: Record<string, { etag: string; record: ContractRecord }>;
+}
+
+const SNAPSHOT_CONCURRENCY = 32;
+const SNAPSHOT_BATCH = 150;
+const snapshots = new Map<string, Snapshot>();
+
+function snapshotPath(tenantId: string): string {
+  return `index/${tenantKey(tenantId)}.json`;
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]);
+      }
     })
   );
-  return records;
+  return out;
+}
+
+export async function listContracts(tenantId: string): Promise<ContractRecord[]> {
+  const c = await container(tenantId);
+  const key = tenantKey(tenantId);
+  const listing = new Map<string, string>();
+  for await (const blob of c.listBlobsFlat({ prefix: `contracts/${key}/` })) {
+    listing.set(blob.name, blob.properties.etag ?? "");
+  }
+
+  let snap = snapshots.get(key);
+  if (!snap) {
+    const stored = await readText(c, snapshotPath(tenantId)).catch(() => null);
+    try {
+      snap = stored ? (JSON.parse(stored.text) as Snapshot) : undefined;
+    } catch {
+      snap = undefined;
+    }
+    if (snap?.v !== 1 || !snap.entries) snap = { v: 1, entries: {} };
+  }
+
+  const stale = [...listing].filter(([name, etag]) => snap!.entries[name]?.etag !== etag).map(([name]) => name);
+  const removed = Object.keys(snap.entries).filter((name) => !listing.has(name));
+  if (stale.length || removed.length) {
+    const entries = { ...snap.entries };
+    for (const name of removed) delete entries[name];
+    // Saved after every batch, so a first build that the platform cuts off
+    // still leaves progress for the next request to finish.
+    for (let i = 0; i < stale.length || i === 0; i += SNAPSHOT_BATCH) {
+      const batch = stale.slice(i, i + SNAPSHOT_BATCH);
+      const fresh = await mapLimit(batch, SNAPSHOT_CONCURRENCY, async (name) => ({ name, found: await readText(c, name) }));
+      for (const { name, found } of fresh) {
+        if (found) entries[name] = { etag: found.etag, record: JSON.parse(found.text) as ContractRecord };
+        else delete entries[name]; // deleted between the listing and the read
+      }
+      snap = { v: 1, entries: { ...entries } };
+      snapshots.set(key, snap);
+      // Best effort: a failed snapshot write only means the next cold start
+      // reads more blobs.
+      await writeJson(c, snapshotPath(tenantId), snap).catch(() => undefined);
+    }
+  }
+  snapshots.set(key, snap);
+  return Object.values(snap.entries).map((e) => e.record);
 }
 
 /**
@@ -260,5 +325,6 @@ export async function writeTenantPicklistConfig(tenantId: string, value: TenantP
 
 /** Test hook: forget the cached container clients. */
 export function resetContractStoreForTests(): void {
+  snapshots.clear();
   containers.clear();
 }

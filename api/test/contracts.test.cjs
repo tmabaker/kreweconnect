@@ -350,3 +350,41 @@ test('NOIT staff can replace a tenant pick list', async () => {
   });
   assert.equal(denied.status, 403);
 });
+
+// The list is served from a per-tenant snapshot (index/{tenant}.json). It must
+// still follow changes made straight to the record blobs, in this instance and
+// after a cold start that only has the stored snapshot to go on.
+test('the list snapshot follows direct record changes and cold starts', async () => {
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  const c = BlobServiceClient.fromConnectionString(process.env.CONTRACTS_STORAGE_CONNECTION).getContainerClient('krewereview');
+  const list = async () => (await call('tenants/{tenantId}/contracts', { params: { tenantId: GEAUX }, query: { includeArchived: 'true' } })).body.contracts;
+
+  const a = (await call('tenants/{tenantId}/contracts', { method: 'POST', params: { tenantId: GEAUX }, body: { ...base, location: 'Volvo - Baton Rouge', department: 'Sales', title: 'Snapshot A' } })).body.contract;
+  const b = (await call('tenants/{tenantId}/contracts', { method: 'POST', params: { tenantId: GEAUX }, body: { ...base, location: 'Volvo - Baton Rouge', department: 'Sales', title: 'Snapshot B' } })).body.contract;
+  assert.deepEqual((await list()).map((x) => x.title).filter((t) => t.startsWith('Snapshot')).sort(), ['Snapshot A', 'Snapshot B']);
+  assert.ok(await c.getBlobClient(`index/${GEAUX}.json`).exists(), 'snapshot written');
+
+  // Edit A and delete B behind the API's back.
+  const pathA = `contracts/${GEAUX}/${a.id}.json`;
+  const recA = JSON.parse((await c.getBlobClient(pathA).downloadToBuffer()).toString());
+  const edited = JSON.stringify({ ...recA, title: 'Snapshot A edited' });
+  await c.getBlockBlobClient(pathA).upload(edited, Buffer.byteLength(edited));
+  await c.getBlobClient(`contracts/${GEAUX}/${b.id}.json`).delete();
+
+  const titles = async () => (await list()).map((x) => x.title).filter((t) => t.startsWith('Snapshot')).sort();
+  assert.deepEqual(await titles(), ['Snapshot A edited']);
+
+  // Cold start: drop the in-memory cache; the stored snapshot must agree.
+  store.resetContractStoreForTests();
+  assert.deepEqual(await titles(), ['Snapshot A edited']);
+
+  // A corrupt snapshot is ignored and rebuilt, never served.
+  await c.getBlockBlobClient(`index/${GEAUX}.json`).upload('not json', 8);
+  store.resetContractStoreForTests();
+  assert.deepEqual(await titles(), ['Snapshot A edited']);
+
+  // Snapshots sit outside contracts/, so they never show up as agreements, and
+  // another tenant's list is untouched.
+  const fh = (await call('tenants/{tenantId}/contracts', { params: { tenantId: FH } })).body.contracts;
+  assert.ok(fh.every((x) => x.tenantId === FH));
+});
