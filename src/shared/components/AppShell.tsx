@@ -378,7 +378,7 @@ export function AppShell() {
           </div>
         </div>
 
-        <div className={styles.content}>
+        <div className={styles.content} data-scroll-root>
           {/* Keyed by route so a crash on one page clears when navigating away,
               instead of the old behavior where one error blanked the whole app. */}
           <ErrorBoundary key={location.pathname}>

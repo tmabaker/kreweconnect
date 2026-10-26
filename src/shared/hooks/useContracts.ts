@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSessionState } from "./useSessionState";
 import { isDemoMode } from "../auth/demoMode";
 import { MOCK_CONTRACT_LIST } from "../mockContracts";
 import { listContracts } from "../../services/contractService";
@@ -23,20 +24,25 @@ import type {
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-export function useContracts(tenantId: string, { includeArchived = false } = {}) {
+/**
+ * `viewKey` keeps search, filters and sort for the browser tab, so opening an
+ * agreement and coming back returns to the same view.
+ */
+export function useContracts(tenantId: string, { includeArchived = false, viewKey }: { includeArchived?: boolean; viewKey?: string } = {}) {
+  const k = (name: string) => (viewKey ? `${viewKey}.${name}` : undefined);
   const [all, setAll] = useState<ContractListItem[]>([]);
   const [loading, setLoading] = useState(!isDemoMode);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ContractStatus | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<AgreementCategory | null>(null);
-  const [vendorFilter, setVendorFilter] = useState<string | null>(null);
-  const [locationFilter, setLocationFilter] = useState<string | null>(null);
-  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<string>("title");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [searchQuery, setSearchQuery] = useSessionState(k("search"), "");
+  const [statusFilter, setStatusFilter] = useSessionState<ContractStatus | null>(k("status"), null);
+  const [categoryFilter, setCategoryFilter] = useSessionState<AgreementCategory | null>(k("category"), null);
+  const [vendorFilter, setVendorFilter] = useSessionState<string | null>(k("vendor"), null);
+  const [locationFilter, setLocationFilter] = useSessionState<string | null>(k("location"), null);
+  const [needsReviewOnly, setNeedsReviewOnly] = useSessionState(k("needsReview"), false);
+  const [sortBy, setSortBy] = useSessionState<string>(k("sortBy"), "title");
+  const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(k("sortDir"), "asc");
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
