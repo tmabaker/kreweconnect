@@ -27,6 +27,7 @@ export const AGREEMENT_CATEGORIES = [
   "FranchiseOrDealer",
   "PayerContract",
   "Confidentiality",
+  "Rebate",
   "Other",
 ] as const;
 
