@@ -102,16 +102,38 @@ test("a lesson for a tool the person does not have is rejected", async () => {
   await assert.rejects(coach.generateLesson(profile, { quiz: null, skill: {}, lessons: [] }), /tool you do not have/);
 });
 
-test("quiz questions are kept server side with answers and limited to the top tools", async () => {
+const qq = (platform, question, answer) => ({ platform, question, choices: ["a", "b", "c", "d"], answer, explanation: "Why." });
+
+test("quiz keeps answers server side and needs a full set for every requested tool", async () => {
   global.fetch = async () =>
     claudeReply({
       questions: [
-        { platform: "m365_copilot", question: "Best first step?", choices: ["a", "b", "c", "d"], answer: 2, explanation: "Context first." },
-        { platform: "gemini", question: "x", choices: ["a", "b", "c", "d"], answer: 0, explanation: "" },
+        qq("m365_copilot", "One?", 2), qq("m365_copilot", "Two?", 1), qq("m365_copilot", "Extra?", 0),
+        qq("copilot_chat", "Three?", 3), qq("copilot_chat", "Four?", 0), qq("gemini", "Not theirs?", 0),
       ],
     });
   const questions = await coach.generateQuiz(profile);
-  assert.equal(questions.length, 1);
-  assert.equal(questions[0].answer, 2);
-  assert.ok(questions[0].id);
+  assert.deepEqual(questions.map((q) => q.question), ["One?", "Two?", "Three?", "Four?"]);
+  assert.ok(questions.every((q) => q.id && Number.isInteger(q.answer)));
+
+  global.fetch = async () => claudeReply({ questions: [qq("m365_copilot", "One?", 2), qq("m365_copilot", "Two?", 1), qq("copilot_chat", "Only one?", 0)] });
+  await assert.rejects(coach.generateQuiz(profile), /incomplete/);
+});
+
+test("a tool added to the profile after the check needs its own short check", () => {
+  const state = { quiz: null, skill: { m365_copilot: 3 }, lessons: [] };
+  assert.deepEqual(coach.unassessedPlatforms(profile, state), ["copilot_chat"]);
+  assert.deepEqual(coach.unassessedPlatforms(profile, { ...state, skill: { m365_copilot: 3, copilot_chat: 2 } }), []);
+});
+
+test("every earlier lesson title reaches the coach, so long histories never repeat a topic", async () => {
+  let sent;
+  global.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return claudeReply({ platform: "copilot_chat", title: "New", level: 2, minutes: 5, why: "", body: "", tryIt: { instructions: "", prompt: "" }, takeaway: "" });
+  };
+  const lessons = Array.from({ length: 15 }, (_, i) => ({ title: `Lesson ${i + 1}`, platform: "copilot_chat", level: 1, status: "done", feedback: null, note: null }));
+  await coach.generateLesson(profile, { quiz: null, skill: {}, lessons });
+  const user = sent.messages[0].content;
+  for (let i = 1; i <= 15; i++) assert.match(user, new RegExp(`Lesson ${i}\\b`));
 });

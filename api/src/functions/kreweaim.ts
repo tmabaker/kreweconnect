@@ -21,7 +21,14 @@ import {
   type LearnerProfile,
   type LearnerState,
 } from "../lib/kreweaimLearner";
-import { coachConfigured, generateLesson, generateQuiz, quizPlatforms, scoreQuiz } from "../lib/kreweaimCoach";
+import {
+  coachConfigured,
+  generateLesson,
+  generateQuiz,
+  quizPlatforms,
+  scoreQuiz,
+  unassessedPlatforms,
+} from "../lib/kreweaimCoach";
 
 app.http("tenantAimMembers", {
   methods: ["GET", "OPTIONS"],
@@ -74,9 +81,16 @@ async function requireProfile(caller: CallerContext): Promise<LearnerProfile> {
   return profile;
 }
 
+/** Lessons for tools the person still has; a revoked or unapproved tool's lessons stop showing. */
+function currentLessons(profile: LearnerProfile | null, state: LearnerState) {
+  const tools = new Set((profile?.platforms ?? []).map((p) => p.key));
+  return state.lessons.filter((l) => tools.has(l.platform));
+}
+
 /** What the person sees. Quiz answers stay on the server. */
 function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boolean) {
   const quiz = state.quiz;
+  const newTools = profile && quiz?.completedAt ? unassessedPlatforms(profile, state) : [];
   return {
     enrolled,
     ready: !!profile,
@@ -86,6 +100,8 @@ function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boo
     agent: profile?.agent ?? null,
     quiz: !quiz
       ? { status: "not_started" }
+      : quiz.completedAt && newTools.length
+        ? { status: "new_tools", platforms: newTools }
       : quiz.completedAt
         ? {
             status: "done",
@@ -106,7 +122,7 @@ function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boo
             questions: quiz.questions.map(({ id, platform, question, choices }) => ({ id, platform, question, choices })),
           },
     skill: state.skill,
-    lessons: [...state.lessons].reverse(),
+    lessons: currentLessons(profile, state).reverse(),
   };
 }
 
@@ -128,8 +144,10 @@ app.http("kreweAimQuizStart", {
   handler: withAuth(async (_request, caller) => {
     const profile = await requireProfile(caller);
     const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
-    if (!state.quiz || state.quiz.completedAt) {
-      state.quiz = { questions: await generateQuiz(profile), createdAt: new Date().toISOString(), completedAt: null, answers: {}, selfRating: {} };
+    // First visit: the full check. Later: a short check for tools added since (none means nothing to do).
+    const platforms = !state.quiz ? quizPlatforms(profile) : state.quiz.completedAt ? unassessedPlatforms(profile, state) : [];
+    if (platforms.length) {
+      state.quiz = { platforms, questions: await generateQuiz(profile, platforms), createdAt: new Date().toISOString(), completedAt: null, answers: {}, selfRating: {} };
       await writeState(caller.tenantId, caller.userObjectId, state, etag);
     }
     return { status: 200, jsonBody: view(profile, state, true) };
@@ -152,8 +170,9 @@ app.http("kreweAimQuizAnswers", {
       quiz.questions.filter((q) => Number.isInteger(answers[q.id])).map((q) => [q.id, answers[q.id] as number])
     );
     if (Object.keys(quiz.answers).length < quiz.questions.length) throw new BadRequestError("Answer every question first.");
+    const asked = quiz.platforms ?? [...new Set(quiz.questions.map((q) => q.platform))];
     quiz.selfRating = Object.fromEntries(
-      quizPlatforms(profile).filter((p) => Number.isInteger(ratings[p])).map((p) => [p, ratings[p] as number])
+      asked.filter((p) => Number.isInteger(ratings[p])).map((p) => [p, ratings[p] as number])
     );
     quiz.completedAt = new Date().toISOString();
     state.skill = { ...state.skill, ...scoreQuiz(quiz.questions, quiz.answers, quiz.selfRating) };
@@ -170,7 +189,8 @@ app.http("kreweAimNextLesson", {
     const profile = await requireProfile(caller);
     const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
     if (!state.quiz?.completedAt) throw new BadRequestError("Take the skills check first so your lessons fit you.");
-    if (state.lessons.filter((l) => l.status === "new").length >= MAX_OPEN_LESSONS) {
+    if (unassessedPlatforms(profile, state).length) throw new BadRequestError("Take the quick check for your new tools first.");
+    if (currentLessons(profile, state).filter((l) => l.status === "new").length >= MAX_OPEN_LESSONS) {
       throw new BadRequestError(`Finish one of your ${MAX_OPEN_LESSONS} open lessons first.`);
     }
     state.lessons.push({ ...(await generateLesson(profile, state)), status: "new", feedback: null, note: null });

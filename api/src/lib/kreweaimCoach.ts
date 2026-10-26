@@ -72,6 +72,11 @@ export function quizPlatforms(profile: LearnerProfile): string[] {
   return profile.platforms.slice(0, QUIZ_PLATFORMS).map((p) => p.key);
 }
 
+/** Top tools the person has no skill estimate for yet (new to their profile since their last check). */
+export function unassessedPlatforms(profile: LearnerProfile, state: LearnerState): string[] {
+  return quizPlatforms(profile).filter((p) => !(p in state.skill));
+}
+
 function quizSchema(platforms: string[]) {
   const question = object({
     platform: { type: "string", enum: platforms },
@@ -84,8 +89,7 @@ function quizSchema(platforms: string[]) {
   return object({ questions: { type: "array", items: question } });
 }
 
-export async function generateQuiz(profile: LearnerProfile): Promise<StoredQuizQuestion[]> {
-  const platforms = quizPlatforms(profile);
+export async function generateQuiz(profile: LearnerProfile, platforms: string[] = quizPlatforms(profile)): Promise<StoredQuizQuestion[]> {
   const text = await callClaude(
     [
       "You write a short skills check for KreweAIM, a personal AI training program.",
@@ -103,11 +107,15 @@ export async function generateQuiz(profile: LearnerProfile): Promise<StoredQuizQ
     quizSchema(platforms)
   );
   const parsed = JSON.parse(text) as { questions: Omit<StoredQuizQuestion, "id">[] };
-  const questions = parsed.questions
-    .filter((q) => platforms.includes(q.platform) && q.choices.length === 4 && q.answer >= 0 && q.answer < 4)
-    .map((q) => ({ ...q, id: randomUUID(), question: tidy(q.question), choices: q.choices.map(tidy), explanation: tidy(q.explanation) }));
-  if (!questions.length) throw new ServiceUnavailableError("The skills check could not be prepared. Try again.");
-  return questions;
+  const valid = parsed.questions.filter(
+    (q) => platforms.includes(q.platform) && q.choices.length === 4 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < 4
+  );
+  // Every requested tool needs its full set, or that tool would get no skill estimate.
+  const questions = platforms.flatMap((p) => valid.filter((q) => q.platform === p).slice(0, QUESTIONS_PER_PLATFORM));
+  if (questions.length < platforms.length * QUESTIONS_PER_PLATFORM) {
+    throw new ServiceUnavailableError("The skills check came back incomplete. Try again.");
+  }
+  return questions.map((q) => ({ ...q, id: randomUUID(), question: tidy(q.question), choices: q.choices.map(tidy), explanation: tidy(q.explanation) }));
 }
 
 /**
@@ -158,7 +166,10 @@ function history(profile: LearnerProfile, state: LearnerState): string {
     const said = l.feedback === "helped" ? "helped" : l.feedback === "not_helpful" ? `did NOT help${l.note ? `: "${l.note}"` : ""}` : l.status === "done" ? "finished" : "not opened yet";
     return `- ${l.title} (${label(profile, l.platform)}, level ${l.level}): ${said}`;
   });
-  return `Lessons they already have (never repeat one; build on what helped, fix what did not):\n${recent.join("\n")}`;
+  // Older lessons keep only their titles, so no topic is ever repeated however long the history.
+  const older = state.lessons.slice(0, -12).map((l) => l.title);
+  const olderBlock = older.length ? `\nEarlier lesson titles (also never repeat): ${older.join("; ")}` : "";
+  return `Lessons they already have (never repeat one; build on what helped, fix what did not):\n${recent.join("\n")}${olderBlock}`;
 }
 
 export async function generateLesson(profile: LearnerProfile, state: LearnerState): Promise<Omit<Lesson, "status" | "feedback" | "note">> {

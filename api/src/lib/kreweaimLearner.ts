@@ -77,6 +77,8 @@ export interface Lesson {
 
 export interface LearnerState {
   quiz: {
+    /** Tools this check covered; a tool added to the profile later gets its own short check. */
+    platforms?: string[];
     questions: StoredQuizQuestion[];
     createdAt: string;
     completedAt: string | null;
@@ -118,9 +120,13 @@ export function learnerPath(tenantId: string, userId: string, file: "profile" | 
 async function read<T>(path: string): Promise<{ value: T; etag: string } | null> {
   const blob = (await container()).getBlockBlobClient(path);
   try {
-    const buf = await blob.downloadToBuffer();
-    const props = await blob.getProperties();
-    return { value: JSON.parse(buf.toString("utf8")) as T, etag: props.etag ?? "" };
+    // One request, so the ETag always belongs to the content that was read.
+    const response = await blob.download();
+    const chunks: Buffer[] = [];
+    for await (const chunk of response.readableStreamBody as AsyncIterable<Buffer | string>) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    }
+    return { value: JSON.parse(Buffer.concat(chunks).toString("utf8")) as T, etag: response.etag ?? "" };
   } catch (err) {
     if (err instanceof RestError && err.statusCode === 404) return null;
     throw err;

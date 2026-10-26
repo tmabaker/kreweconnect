@@ -113,6 +113,8 @@ export function KreweAimPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  // Set right after a skills check is submitted, so the results show before the lessons.
+  const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
     if (isDemoMode) {
@@ -207,9 +209,55 @@ export function KreweAimPage() {
   const name = me.givenName ? `, ${me.givenName.split(" ")[0]}` : "";
   const toolList = me.platforms.map((p) => p.label).join(", ");
 
-  // ── First visit: the skills check ────────────────────────────────
+  // ── Right after the check: what they got right, and why ──────────
+  if (quiz.status === "done" && showResults) {
+    const right = quiz.results.filter((r) => r.picked === r.answer).length;
+    return (
+      <div className={styles.page}>
+        {header}
+        <Card>
+          <div className={styles.section}>
+            <Title3>Your results</Title3>
+            <Text>
+              {right} of {quiz.results.length} right. Your levels:{" "}
+              {Object.entries(me.skill)
+                .map(([k, v]) => `${labelFor(k)} ${LEVELS[v]}`)
+                .join(", ")}
+              . Your lessons start from here.
+            </Text>
+          </div>
+        </Card>
+        {quiz.results.map((r) => (
+          <Card key={r.id}>
+            <div className={styles.question}>
+              <div className={styles.row}>
+                <Badge appearance="outline">{labelFor(r.platform)}</Badge>
+                <Badge appearance="tint" color={r.picked === r.answer ? "success" : "warning"}>
+                  {r.picked === r.answer ? "Right" : "Worth a look"}
+                </Badge>
+              </div>
+              <Text weight="semibold">{r.question}</Text>
+              {r.picked !== r.answer && r.picked !== null && <Text className={styles.muted}>You picked: {r.choices[r.picked]}</Text>}
+              <Text>Best answer: {r.choices[r.answer]}</Text>
+              <Text size={200} className={styles.muted}>
+                {r.explanation}
+              </Text>
+            </div>
+          </Card>
+        ))}
+        <div>
+          <Button appearance="primary" icon={<Sparkle24Regular />} onClick={() => setShowResults(false)}>
+            Continue to my lessons
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── First visit, or new tools since: the skills check ───────────
   if (quiz.status !== "done") {
     const inProgress = quiz.status === "in_progress" ? quiz : null;
+    const newTools = quiz.status === "new_tools" ? quiz.platforms.map(labelFor).join(", ") : null;
     const complete =
       !!inProgress &&
       inProgress.questions.every((q) => answers[q.id] !== undefined) &&
@@ -226,14 +274,15 @@ export function KreweAimPage() {
         {!inProgress ? (
           <Card>
             <div className={styles.section}>
-              <Title3>Welcome{name}</Title3>
+              <Title3>{newTools ? "You have new AI tools" : `Welcome${name}`}</Title3>
               <Text>
-                Your lessons are built for you alone, from your job, the AI tools you have ({toolList}) and what you already
-                know. A quick skills check first, about three minutes, so nothing is too basic or too far ahead.
+                {newTools
+                  ? `You now have ${newTools}. A short check, about a minute, so your lessons on it start at the right level.`
+                  : `Your lessons are built for you alone, from your job, the AI tools you have (${toolList}) and what you already know. A quick skills check first, about three minutes, so nothing is too basic or too far ahead.`}
               </Text>
               <div>
                 <Button appearance="primary" icon={<Sparkle24Regular />} disabled={!!busy || !me.coachReady} onClick={() => run("quiz", startSkillsCheck)}>
-                  Start my skills check
+                  {newTools ? "Start the quick check" : "Start my skills check"}
                 </Button>
               </div>
               {busy === "quiz" && <Spinner size="small" label="Writing questions for your role..." />}
@@ -276,7 +325,14 @@ export function KreweAimPage() {
               </Card>
             ))}
             <div className={styles.row}>
-              <Button appearance="primary" disabled={!complete || !!busy} onClick={() => run("answers", () => submitSkillsCheck(answers, ratings))}>
+              <Button
+                appearance="primary"
+                disabled={!complete || !!busy}
+                onClick={async () => {
+                  await run("answers", () => submitSkillsCheck(answers, ratings));
+                  setShowResults(true);
+                }}
+              >
                 See my results
               </Button>
               {busy === "answers" && <Spinner size="small" />}
