@@ -168,6 +168,8 @@ function FleurIcon() {
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: <Home24Regular />, section: null, mspOnly: true },
+  // KreweAIM first: a personal page every user can open (each sees only their own status).
+  { path: "/kreweaim", label: "AI Mastery", icon: <FleurIcon />, section: "KreweAIM" },
   { path: "/directory", label: "Directory", icon: <People24Regular />, section: "KreweConnect" },
   { path: "/org-chart", label: "Org Chart", icon: <Organization24Regular />, section: null, indent: true },
   { path: "/contracts", label: "Dashboard", icon: <Gavel24Regular />, section: "KreweReview", mspOnly: true },
@@ -179,8 +181,6 @@ const navItems = [
   { path: "/governance/clients", label: "Clients", icon: <Building24Regular />, section: null, indent: true },
   // KreweWorks: each client's portal is its own site; clients see only theirs.
   { path: "/kreweworks", label: "Employee Portal", icon: <PeopleTeam24Regular />, section: "KreweWorks" },
-  // KreweAIM: clients see their own members; the API scopes the list.
-  { path: "/kreweaim", label: "AI Mastery", icon: <FleurIcon />, section: "KreweAIM" },
   { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null, mspOnly: true },
 ];
 
@@ -262,7 +262,7 @@ export function AppShell() {
               NOIT Client Tools
             </Text>
             <Text size={200} style={{ display: "block", marginTop: "-2px" }}>
-              KreweConnect · KreweReview · KreweWorks · KreweAIM
+              KreweAIM · KreweConnect · KreweReview · KreweWorks
             </Text>
           </div>}
         </div>

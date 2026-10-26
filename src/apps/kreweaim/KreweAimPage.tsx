@@ -1,13 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   makeStyles,
   tokens,
   Title2,
-  Title3,
   Text,
   Card,
-  Avatar,
   Spinner,
   MessageBar,
   MessageBarBody,
@@ -18,9 +15,7 @@ import {
   ArrowRepeatAll24Regular,
 } from "@fluentui/react-icons";
 import { isDemoMode } from "../../shared/auth/demoMode";
-import { useTenantContext } from "../../shared/hooks/useTenantContext";
-import { useGraphEmployees } from "../../shared/hooks/useGraphEmployees";
-import { AimMark, Fleur } from "../../shared/components/AimMark";
+import { Fleur } from "../../shared/components/AimMark";
 import { fetchAimAssignment, type AimAssignment } from "../../services/graphService";
 import { detectUserTenantContext } from "../../services/tenantService";
 
@@ -49,19 +44,6 @@ const useStyles = makeStyles({
     gap: "16px",
   },
   pillarTitle: { display: "flex", alignItems: "center", gap: "8px" },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: "12px",
-  },
-  member: { display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" },
-  memberText: { minWidth: 0 },
-  ellipsis: {
-    display: "block",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
 });
 
 const PILLARS = [
@@ -82,12 +64,12 @@ const PILLARS = [
   },
 ];
 
-/** KreweAIM (AI Mastery) is a personal program: each person sees only their
- * own enrollment. NOIT staff, who assign it, also get the member list for the
- * selected tenant. */
+/** KreweAIM (AI Mastery) is a personal program: everyone, NOIT staff included,
+ * sees only their own enrollment and training. Who is enrolled is managed in
+ * Entra (the KreweAIM Members group), not on this page. */
 export function KreweAimPage() {
   const styles = useStyles();
-  const { isMspAdmin, userObjectId } = detectUserTenantContext();
+  const { userObjectId } = detectUserTenantContext();
   const [mine, setMine] = useState<AimAssignment | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -157,126 +139,6 @@ export function KreweAimPage() {
         ))}
       </div>
 
-      {isMspAdmin && <StaffMemberList />}
     </div>
-  );
-}
-
-/** NOIT staff only: who is enrolled in the selected tenant. Rendered as its
- * own component so client users never load the directory for this page. */
-function StaffMemberList() {
-  const styles = useStyles();
-  const navigate = useNavigate();
-  const { selectedTenant } = useTenantContext();
-  const { employees, loading: peopleLoading, error: peopleError } = useGraphEmployees(selectedTenant.tenantId);
-  const [assignment, setAssignment] = useState<AimAssignment | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isDemoMode) {
-      setAssignment({ memberIds: [], groupFound: false, groupName: "KreweAIM Members", failedTenants: 0 });
-      return;
-    }
-    let cancelled = false;
-    setAssignment(null);
-    setError(null);
-    fetchAimAssignment(selectedTenant.tenantId)
-      .then((a) => !cancelled && setAssignment(a))
-      .catch((err) => !cancelled && setError(err?.message || "Could not load KreweAIM members."));
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedTenant.tenantId]);
-
-  const members = useMemo(() => {
-    if (!assignment) return [];
-    const ids = new Set(assignment.memberIds);
-    return employees
-      .filter((e) => ids.has(e.id))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
-  }, [assignment, employees]);
-
-  const shownError = error || (peopleError ? `Could not load the directory: ${peopleError}` : null);
-  const loading = !shownError && (!assignment || peopleLoading);
-  const partial = !!assignment && assignment.failedTenants > 0;
-  const open = (m: (typeof members)[number]) => navigate(`/directory/${m.id}`, { state: { tenantId: m.tenantId } });
-
-  return (
-    <>
-      <div>
-        <Title3>Members</Title3>
-        <Text size={200} className={styles.muted}>
-          {selectedTenant.displayName}
-          {assignment && !loading ? ` · ${members.length} enrolled` : ""} · visible to NOIT staff only
-        </Text>
-      </div>
-
-      {shownError && (
-        <MessageBar intent="error">
-          <MessageBarBody>{shownError}</MessageBarBody>
-        </MessageBar>
-      )}
-      {!loading && partial && (
-        <MessageBar intent="warning">
-          <MessageBarBody>
-            {assignment.failedTenants} tenant{assignment.failedTenants === 1 ? "" : "s"} could not be checked, so
-            this list may be incomplete.
-          </MessageBarBody>
-        </MessageBar>
-      )}
-      {loading && <Spinner label="Loading members..." />}
-      {!loading && !shownError && assignment && !assignment.groupFound && !partial && (
-        <MessageBar intent="info">
-          <MessageBarBody>
-            {selectedTenant.tenantId === "all"
-              ? `KreweAIM is not set up in any tenant yet. Create a security group named ${assignment.groupName} in a tenant and add the people to enroll.`
-              : `KreweAIM is not set up in this tenant yet. Create a security group named ${assignment.groupName} there and add the people to enroll.`}
-          </MessageBarBody>
-        </MessageBar>
-      )}
-      {!loading && !shownError && assignment?.groupFound && members.length === 0 && (
-        <MessageBar intent="info">
-          <MessageBarBody>The {assignment.groupName} group exists but has no one in it yet.</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {!loading && members.length > 0 && (
-        <div className={styles.grid}>
-          {members.map((m) => (
-            <Card
-              key={m.id}
-              role="link"
-              tabIndex={0}
-              aria-label={`${m.displayName}, open directory profile`}
-              onClick={() => open(m)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  open(m);
-                }
-              }}
-            >
-              <div className={styles.member}>
-                <AimMark active size={40}>
-                  <Avatar
-                    name={m.displayName}
-                    image={m.photo ? { src: m.photo } : undefined}
-                    size={40}
-                  />
-                </AimMark>
-                <div className={styles.memberText}>
-                  <Text weight="semibold" className={styles.ellipsis}>
-                    {m.displayName}
-                  </Text>
-                  <Text size={200} className={`${styles.muted} ${styles.ellipsis}`}>
-                    {[m.jobTitle, m.department].filter(Boolean).join(" · ") || m.email || ""}
-                  </Text>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-    </>
   );
 }
