@@ -134,7 +134,10 @@ function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boo
     platforms: profile?.platforms ?? [],
     agent: profile?.agent ?? null,
     quiz: quizView(profile, state),
-    skill: state.skill,
+    // Skill for current tools only; a removed tool's estimate stays in storage but is not shown.
+    skill: Object.fromEntries(
+      Object.entries(state.skill).filter(([k]) => (profile?.platforms ?? []).some((p) => p.key === k))
+    ),
     lessons: currentLessons(profile, state).reverse(),
   };
 }
@@ -169,10 +172,17 @@ app.http("kreweAimQuizStart", {
           ? unassessedPlatforms(profile, state)
           : [];
     if (platforms.length) {
+      const questions = await generateQuiz(profile, platforms);
+      // Same guard as lessons: the profile may have changed during the model call.
+      const latest = (await readProfile(caller.tenantId, caller.userObjectId)) ?? profile;
+      const tools = new Set(latest.platforms.map((p) => p.key));
+      if (!platforms.every((p) => tools.has(p)) || policyVersion(latest) !== policyVersion(profile)) {
+        throw new ConflictError("Your KreweAIM program changed while the check was being written. Try again.");
+      }
       state.quiz = {
         platforms,
         policyVersion: policyVersion(profile),
-        questions: await generateQuiz(profile, platforms),
+        questions,
         createdAt: new Date().toISOString(),
         completedAt: null,
         answers: {},
@@ -197,9 +207,11 @@ app.http("kreweAimQuizAnswers", {
     if (quizIsStale(profile, quiz)) throw new BadRequestError("Your AI tools changed since this check started. Start it again.");
     const answers = (body.answers ?? {}) as Record<string, unknown>;
     const ratings = (body.selfRating ?? {}) as Record<string, unknown>;
-    quiz.answers = Object.fromEntries(
-      quiz.questions.filter((q) => Number.isInteger(answers[q.id])).map((q) => [q.id, answers[q.id] as number])
-    );
+    const valid = (q: (typeof quiz.questions)[number]) => {
+      const a = answers[q.id];
+      return Number.isInteger(a) && (a as number) >= 0 && (a as number) < q.choices.length;
+    };
+    quiz.answers = Object.fromEntries(quiz.questions.filter(valid).map((q) => [q.id, answers[q.id] as number]));
     if (Object.keys(quiz.answers).length < quiz.questions.length) throw new BadRequestError("Answer every question first.");
     const asked = quiz.platforms ?? [...new Set(quiz.questions.map((q) => q.platform))];
     quiz.selfRating = Object.fromEntries(
