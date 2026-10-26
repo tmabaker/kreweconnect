@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   makeStyles,
   tokens,
@@ -87,6 +87,7 @@ export function EmployeeDetailPage() {
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
   const { getDetail } = useGraphEmployees(selectedTenant.tenantId);
+  const tenantHint = (useLocation().state as { tenantId?: string } | null)?.tenantId ?? null;
   const aim = useAimMembers();
   const [employee, setEmployee] = useState<EmployeeDetail | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -101,7 +102,7 @@ export function EmployeeDetailPage() {
     let cancelled = false;
     setLoading(true);
 
-    Promise.resolve(getDetail(id)).then((detail) => {
+    Promise.resolve(getDetail(id, tenantHint)).then((detail) => {
       if (!cancelled) {
         setEmployee(detail);
         setLoading(false);
@@ -114,7 +115,7 @@ export function EmployeeDetailPage() {
     });
 
     return () => { cancelled = true; };
-  }, [id, getDetail]);
+  }, [id, getDetail, tenantHint]);
 
   if (loading) {
     return (

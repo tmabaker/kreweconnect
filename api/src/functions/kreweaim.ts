@@ -25,7 +25,12 @@ app.http("tenantAimMembers", {
     return {
       status: 200,
       headers: { "Cache-Control": "private, max-age=300" },
-      jsonBody: { value: result.memberIds, groupFound: result.groupFound },
+      jsonBody: {
+        value: result.memberIds,
+        groupFound: result.groupFound,
+        groupName: config.kreweAimGroup,
+        failedTenants: result.failedTenants ?? 0,
+      },
     };
   }),
 });
