@@ -157,3 +157,17 @@ test("an unfinished check that asks about a removed tool is stale", () => {
   assert.equal(coach.quizIsStale(profile, fits), false);
   assert.equal(coach.quizIsStale({ ...profile, policy: ["A new rule."] }, fits), true); // policy changed mid-check
 });
+
+test("free-form feedback notes never reach the model; unmeasured tools start low", async () => {
+  let sent;
+  global.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return claudeReply({ platform: "copilot_chat", title: "x", level: 1, minutes: 5, why: "", body: "", tryIt: { instructions: "", prompt: "" }, takeaway: "" });
+  };
+  const lessons = [{ title: "Old", platform: "copilot_chat", level: 1, status: "done", feedback: "not_helpful", note: "my password is hunter2" }];
+  await coach.generateLesson(profile, { quiz: null, skill: { m365_copilot: 3 }, lessons });
+  const user = sent.messages[0].content;
+  assert.doesNotMatch(user, /hunter2/);
+  assert.match(user, /Old .*did NOT help/);
+  assert.match(user, /Skill not measured yet for: Copilot Chat/);
+});

@@ -57,6 +57,10 @@ export function describeLearner(profile: LearnerProfile, state: LearnerState): s
         .map(([k, v]) => `${label(profile, k)} ${v}`)
         .join(", ")}`
     );
+    const unknown = profile.platforms.filter((p) => !(p.key in state.skill)).map((p) => p.label);
+    if (unknown.length) {
+      lines.push(`Skill not measured yet for: ${unknown.join(", ")}. A lesson on one of these starts at level 1 or 2 and steps up from their feedback.`);
+    }
   }
   return lines.join("\n");
 }
@@ -178,7 +182,8 @@ function lessonSchema(platforms: string[]) {
 function history(profile: LearnerProfile, state: LearnerState): string {
   if (!state.lessons.length) return "No lessons yet. This is their first: make it an early win on the tool they use most.";
   const recent = state.lessons.slice(-12).map((l) => {
-    const said = l.feedback === "helped" ? "helped" : l.feedback === "not_helpful" ? `did NOT help${l.note ? `: "${l.note}"` : ""}` : l.status === "done" ? "finished" : "not opened yet";
+    // The person's free-form note is never sent to the model: it may hold details that must not leave NOIT.
+    const said = l.feedback === "helped" ? "helped" : l.feedback === "not_helpful" ? "did NOT help" : l.status === "done" ? "finished" : "not opened yet";
     return `- ${l.title} (${label(profile, l.platform)}, level ${l.level}): ${said}`;
   });
   // Older lessons keep only their titles, so no topic is ever repeated however long the history.

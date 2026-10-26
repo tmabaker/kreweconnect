@@ -13,7 +13,7 @@ import { app } from "@azure/functions";
 import { fetchAimMembers, fetchAimMembersAllTenants, isAimMember } from "../lib/graphClient";
 import { config } from "../lib/config";
 import type { CallerContext } from "../lib/authMiddleware";
-import { BadRequestError, NotFoundError, readJsonBody, withAuth } from "../lib/http";
+import { BadRequestError, ConflictError, NotFoundError, readJsonBody, withAuth } from "../lib/http";
 import {
   readProfile,
   readState,
@@ -224,9 +224,16 @@ app.http("kreweAimNextLesson", {
     if (currentLessons(profile, state).filter((l) => l.status === "new").length >= MAX_OPEN_LESSONS) {
       throw new BadRequestError(`Finish one of your ${MAX_OPEN_LESSONS} open lessons first.`);
     }
-    state.lessons.push({ ...(await generateLesson(profile, state)), status: "new", feedback: null, note: null });
+    const lesson = await generateLesson(profile, state);
+    // The profile may have been republished during the model call: never save or show a lesson for
+    // a tool that was just removed or under a policy that was just replaced.
+    const latest = (await readProfile(caller.tenantId, caller.userObjectId)) ?? profile;
+    if (!latest.platforms.some((p) => p.key === lesson.platform) || policyVersion(latest) !== lesson.policyVersion) {
+      throw new ConflictError("Your KreweAIM program changed while that lesson was being written. Try again.");
+    }
+    state.lessons.push({ ...lesson, status: "new", feedback: null, note: null });
     await writeState(caller.tenantId, caller.userObjectId, state, etag);
-    return { status: 200, jsonBody: view(profile, state, true) };
+    return { status: 200, jsonBody: view(latest, state, true) };
   }),
 });
 

@@ -133,6 +133,8 @@ export function KreweAimPage() {
       setMe(await action());
     } catch (err) {
       setError((err as { message?: string })?.message || "Something went wrong. Try again.");
+      // The program may have changed under them (a new tool, a new policy): show its current state.
+      fetchMyAim().then(setMe).catch(() => undefined);
     } finally {
       setBusy(null);
     }
