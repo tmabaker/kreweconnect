@@ -25,6 +25,8 @@ import {
   coachConfigured,
   generateLesson,
   generateQuiz,
+  policyVersion,
+  quizIsStale,
   quizPlatforms,
   scoreQuiz,
   unassessedPlatforms,
@@ -81,16 +83,50 @@ async function requireProfile(caller: CallerContext): Promise<LearnerProfile> {
   return profile;
 }
 
-/** Lessons for tools the person still has; a revoked or unapproved tool's lessons stop showing. */
+/**
+ * Lessons that still fit: the tool is still theirs and the company AI policy is the one the
+ * lesson was written under. A revoked tool or a changed policy retires the old lessons.
+ */
 function currentLessons(profile: LearnerProfile | null, state: LearnerState) {
-  const tools = new Set((profile?.platforms ?? []).map((p) => p.key));
-  return state.lessons.filter((l) => tools.has(l.platform));
+  if (!profile) return [];
+  const tools = new Set(profile.platforms.map((p) => p.key));
+  const policy = policyVersion(profile);
+  return state.lessons.filter((l) => tools.has(l.platform) && l.policyVersion === policy);
 }
 
-/** What the person sees. Quiz answers stay on the server. */
-function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boolean) {
+/** Quiz status as the person sees it. Answers stay on the server. */
+function quizView(profile: LearnerProfile | null, state: LearnerState) {
   const quiz = state.quiz;
-  const newTools = profile && quiz?.completedAt ? unassessedPlatforms(profile, state) : [];
+  if (profile && !profile.platforms.length) return { status: "no_tools" };
+  const stale = !!profile && quizIsStale(profile, quiz);
+  const assessed = Object.keys(state.skill).length > 0;
+  if (!quiz || (stale && !assessed)) return { status: "not_started" };
+  const newTools = profile && (quiz.completedAt || stale) ? unassessedPlatforms(profile, state) : [];
+  if (newTools.length) return { status: "new_tools", platforms: newTools };
+  if (stale) return { status: "done", completedAt: quiz.createdAt, results: [] };
+  if (!quiz.completedAt) {
+    return {
+      status: "in_progress",
+      platforms: [...new Set(quiz.questions.map((q) => q.platform))],
+      questions: quiz.questions.map(({ id, platform, question, choices }) => ({ id, platform, question, choices })),
+    };
+  }
+  return {
+    status: "done",
+    completedAt: quiz.completedAt,
+    results: quiz.questions.map((q) => ({
+      id: q.id,
+      platform: q.platform,
+      question: q.question,
+      choices: q.choices,
+      picked: quiz.answers[q.id] ?? null,
+      answer: q.answer,
+      explanation: q.explanation,
+    })),
+  };
+}
+
+function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boolean) {
   return {
     enrolled,
     ready: !!profile,
@@ -98,29 +134,7 @@ function view(profile: LearnerProfile | null, state: LearnerState, enrolled: boo
     givenName: profile?.givenName ?? null,
     platforms: profile?.platforms ?? [],
     agent: profile?.agent ?? null,
-    quiz: !quiz
-      ? { status: "not_started" }
-      : quiz.completedAt && newTools.length
-        ? { status: "new_tools", platforms: newTools }
-      : quiz.completedAt
-        ? {
-            status: "done",
-            completedAt: quiz.completedAt,
-            results: quiz.questions.map((q) => ({
-              id: q.id,
-              platform: q.platform,
-              question: q.question,
-              choices: q.choices,
-              picked: quiz.answers[q.id] ?? null,
-              answer: q.answer,
-              explanation: q.explanation,
-            })),
-          }
-        : {
-            status: "in_progress",
-            platforms: [...new Set(quiz.questions.map((q) => q.platform))],
-            questions: quiz.questions.map(({ id, platform, question, choices }) => ({ id, platform, question, choices })),
-          },
+    quiz: quizView(profile, state),
     skill: state.skill,
     lessons: currentLessons(profile, state).reverse(),
   };
@@ -144,8 +158,17 @@ app.http("kreweAimQuizStart", {
   handler: withAuth(async (_request, caller) => {
     const profile = await requireProfile(caller);
     const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
-    // First visit: the full check. Later: a short check for tools added since (none means nothing to do).
-    const platforms = !state.quiz ? quizPlatforms(profile) : state.quiz.completedAt ? unassessedPlatforms(profile, state) : [];
+    if (!profile.platforms.length) throw new BadRequestError("Your profile has no approved AI tools yet. Ask your IT admin or NOIT Group.");
+    // First visit: the full check. Later, or when the tools changed mid-check: a short check for
+    // the tools without an estimate. An unfinished check that still fits is kept as is.
+    const stale = quizIsStale(profile, state.quiz);
+    const assessed = Object.keys(state.skill).length > 0;
+    const platforms =
+      !state.quiz || (stale && !assessed)
+        ? quizPlatforms(profile)
+        : state.quiz.completedAt || stale
+          ? unassessedPlatforms(profile, state)
+          : [];
     if (platforms.length) {
       state.quiz = { platforms, questions: await generateQuiz(profile, platforms), createdAt: new Date().toISOString(), completedAt: null, answers: {}, selfRating: {} };
       await writeState(caller.tenantId, caller.userObjectId, state, etag);
@@ -164,6 +187,7 @@ app.http("kreweAimQuizAnswers", {
     const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
     const quiz = state.quiz;
     if (!quiz || quiz.completedAt) throw new BadRequestError("There is no skills check waiting for answers.");
+    if (quizIsStale(profile, quiz)) throw new BadRequestError("Your AI tools changed since this check started. Start it again.");
     const answers = (body.answers ?? {}) as Record<string, unknown>;
     const ratings = (body.selfRating ?? {}) as Record<string, unknown>;
     quiz.answers = Object.fromEntries(
@@ -188,7 +212,7 @@ app.http("kreweAimNextLesson", {
   handler: withAuth(async (_request, caller) => {
     const profile = await requireProfile(caller);
     const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
-    if (!state.quiz?.completedAt) throw new BadRequestError("Take the skills check first so your lessons fit you.");
+    if (!Object.keys(state.skill).length) throw new BadRequestError("Take the skills check first so your lessons fit you.");
     if (unassessedPlatforms(profile, state).length) throw new BadRequestError("Take the quick check for your new tools first.");
     if (currentLessons(profile, state).filter((l) => l.status === "new").length >= MAX_OPEN_LESSONS) {
       throw new BadRequestError(`Finish one of your ${MAX_OPEN_LESSONS} open lessons first.`);

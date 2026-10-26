@@ -12,7 +12,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ServiceUnavailableError } from "./http";
 import type { LearnerProfile, LearnerState, Lesson, StoredQuizQuestion } from "./kreweaimLearner";
 
@@ -70,6 +70,18 @@ function policyBlock(profile: LearnerProfile): string {
 
 export function quizPlatforms(profile: LearnerProfile): string[] {
   return profile.platforms.slice(0, QUIZ_PLATFORMS).map((p) => p.key);
+}
+
+/** Fingerprint of the company's AI policy; lessons written under another version are retired. */
+export function policyVersion(profile: LearnerProfile): string {
+  return createHash("sha256").update(JSON.stringify(profile.policy)).digest("hex").slice(0, 16);
+}
+
+/** An unfinished check that asks about a tool the person no longer has. */
+export function quizIsStale(profile: LearnerProfile, quiz: LearnerState["quiz"]): boolean {
+  if (!quiz || quiz.completedAt) return false;
+  const tools = new Set(profile.platforms.map((p) => p.key));
+  return quiz.questions.some((q) => !tools.has(q.platform));
 }
 
 /** Top tools the person has no skill estimate for yet (new to their profile since their last check). */
@@ -173,6 +185,7 @@ function history(profile: LearnerProfile, state: LearnerState): string {
 }
 
 export async function generateLesson(profile: LearnerProfile, state: LearnerState): Promise<Omit<Lesson, "status" | "feedback" | "note">> {
+  const version = policyVersion(profile);
   const platforms = profile.platforms.map((p) => p.key);
   const guidance = profile.guidance.length
     ? `NOIT guidance that fits this person. Use it as grounding, do not copy it:\n${profile.guidance
@@ -193,7 +206,7 @@ export async function generateLesson(profile: LearnerProfile, state: LearnerStat
   ].join("\n");
   const user = `The person:\n${describeLearner(profile, state)}\n\n${history(profile, state)}`;
   const { text, model } = await callClaudeWithModel(instructions, user, lessonSchema(platforms));
-  const raw = JSON.parse(text) as Omit<Lesson, "id" | "createdAt" | "model" | "status" | "feedback" | "note">;
+  const raw = JSON.parse(text) as Omit<Lesson, "id" | "createdAt" | "model" | "policyVersion" | "status" | "feedback" | "note">;
   if (!platforms.includes(raw.platform)) throw new ServiceUnavailableError("The lesson came back for a tool you do not have. Try again.");
   return {
     id: randomUUID(),
@@ -207,6 +220,7 @@ export async function generateLesson(profile: LearnerProfile, state: LearnerStat
     tryIt: { instructions: tidy(raw.tryIt.instructions), prompt: raw.tryIt.prompt.trim() },
     takeaway: tidy(raw.takeaway),
     model,
+    policyVersion: version,
   };
 }
 
@@ -218,8 +232,9 @@ export async function generateLesson(profile: LearnerProfile, state: LearnerStat
  */
 export function tidy(text: string): string {
   return text
-    .replace(/\s*[—–]\s*/g, ", ")
-    .replace(/(\S) - (\S)/g, "$1, $2")
+    .replace(/(\d)\s*[\u2013\u2014]\s*(\d)/g, "$1 to $2") // number ranges keep their meaning
+    .replace(/\s*[\u2014\u2013]\s*/g, ", ")
+    .replace(/(\S) - (\S)/g, (m, a: string, b: string) => (/\d/.test(a) && /\d/.test(b) ? m : `${a}, ${b}`)) // keep subtraction
     .replace(/,\s*,/g, ",")
     .trim();
 }

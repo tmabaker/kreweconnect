@@ -70,6 +70,8 @@ export interface Lesson {
   tryIt: { instructions: string; prompt: string };
   takeaway: string;
   model: string;
+  /** Fingerprint of the company AI policy the lesson was written under. */
+  policyVersion: string;
   status: "new" | "done";
   feedback: "helped" | "not_helpful" | null;
   note: string | null;

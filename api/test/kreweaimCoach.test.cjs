@@ -38,6 +38,8 @@ test("writing rules: dashes used as punctuation become commas, hyphenated words 
   assert.equal(coach.tidy("Open Teams — then ask Copilot"), "Open Teams, then ask Copilot");
   assert.equal(coach.tidy("Draft it - then check it"), "Draft it, then check it");
   assert.equal(coach.tidy("A follow-up email"), "A follow-up email");
+  assert.equal(coach.tidy("Review rows 10\u201320 first"), "Review rows 10 to 20 first");
+  assert.equal(coach.tidy("Seats left: 5 - 2 = 3"), "Seats left: 5 - 2 = 3");
 });
 
 test("the model sees unapproved and planned tools only as things not to teach", () => {
@@ -136,4 +138,19 @@ test("every earlier lesson title reaches the coach, so long histories never repe
   await coach.generateLesson(profile, { quiz: null, skill: {}, lessons });
   const user = sent.messages[0].content;
   for (let i = 1; i <= 15; i++) assert.match(user, new RegExp(`Lesson ${i}\\b`));
+});
+
+test("lessons carry the policy they were written under; a policy change retires them", async () => {
+  global.fetch = async () =>
+    claudeReply({ platform: "copilot_chat", title: "x", level: 1, minutes: 5, why: "", body: "", tryIt: { instructions: "", prompt: "" }, takeaway: "" });
+  const lesson = await coach.generateLesson(profile, { quiz: null, skill: {}, lessons: [] });
+  assert.equal(lesson.policyVersion, coach.policyVersion(profile));
+  assert.notEqual(coach.policyVersion({ ...profile, policy: [...profile.policy, "New rule."] }), lesson.policyVersion);
+});
+
+test("an unfinished check that asks about a removed tool is stale", () => {
+  const quiz = { questions: [{ platform: "m365_copilot" }, { platform: "gemini" }], completedAt: null };
+  assert.equal(coach.quizIsStale(profile, quiz), true);
+  assert.equal(coach.quizIsStale(profile, { ...quiz, questions: [{ platform: "m365_copilot" }] }), false);
+  assert.equal(coach.quizIsStale(profile, { ...quiz, completedAt: "2026-10-26" }), false);
 });

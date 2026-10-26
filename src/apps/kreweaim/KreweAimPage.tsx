@@ -206,6 +206,14 @@ export function KreweAimPage() {
   }
 
   const quiz = me.quiz;
+  if (quiz.status === "no_tools") {
+    return (
+      <div className={styles.page}>
+        {header}
+        {statusCard(true, "You're enrolled", "Your profile does not list any AI tools your company has approved yet. Ask your IT admin or NOIT Group, and your program starts as soon as one is added.")}
+      </div>
+    );
+  }
   const name = me.givenName ? `, ${me.givenName.split(" ")[0]}` : "";
   const toolList = me.platforms.map((p) => p.label).join(", ");
 

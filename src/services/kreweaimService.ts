@@ -43,6 +43,7 @@ export type AimQuiz =
   | { status: "not_started" }
   | { status: "in_progress"; platforms: string[]; questions: AimQuestion[] }
   | { status: "new_tools"; platforms: string[] }
+  | { status: "no_tools" }
   | { status: "done"; completedAt: string; results: AimQuizResult[] };
 
 export interface AimMe {
