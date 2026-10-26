@@ -128,7 +128,10 @@ function instructions(picklist: TenantPicklist, today: string, renewalOf: Contra
   const lines = [
     "You read one business agreement for an IT managed service provider and fill in a contract record for its client.",
     `Today is ${today}. Write every date as YYYY-MM-DD.`,
-    'Use only what the document states or clearly implies. Leave a field empty ("" for text, dates and list picks; null for numbers) when the document does not support it; never guess a value to fill a gap.',
+    "Fill every field the document supports. Work out values it implies: an end date from a start or signing date plus a stated term, a total value from a periodic payment times the term, a payment amount from a total and its schedule, a renewal type from the renewal or termination language.",
+    'Leave a field empty ("" for text, dates and list picks; null for numbers) only when the document gives nothing to base it on. Never invent a value with no basis in the document.',
+    "Every value you worked out rather than read directly must appear in reviewQuestions with how you got it, so a person can confirm it with one answer. Set confidenceTier to B when any key field was worked out.",
+    "description: two or three sentences on what the agreement covers, the parties, and the commercial terms a client would want at a glance.",
     "Pick agreementCategory from the allowed list. Use Other only when nothing else fits.",
     picklist.locations.length
       ? `Set location only when the document names one of these locations or an address that clearly belongs to one: ${picklist.locations.join("; ")}.`
