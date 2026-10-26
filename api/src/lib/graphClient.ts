@@ -409,6 +409,34 @@ export async function fetchAimMembers(tenantId: string, groupName: string): Prom
   return { groupFound: true, memberIds: [...ids] };
 }
 
+/**
+ * Is this one user (transitively) in the named KreweAIM group? Asks Graph about the caller only
+ * (checkMemberGroups) instead of listing every member. Falls back to the full list if the app
+ * lacks the permission for the targeted check.
+ */
+export async function isAimMember(tenantId: string, groupName: string, userId: string): Promise<boolean> {
+  const filter = encodeURIComponent(`displayName eq '${groupName.replace(/'/g, "''")}'`);
+  const groups = await graphFetch<GraphPagedResponse<{ id: string }>>(
+    tenantId,
+    `${GRAPH_BASE}/groups?$filter=${filter}&$select=id`
+  );
+  if (!groups.value.length) return false;
+  try {
+    const result = await graphRequest<{ value: string[] }>(
+      tenantId,
+      "POST",
+      `/directoryObjects/${encodeURIComponent(userId)}/checkMemberGroups`,
+      { groupIds: groups.value.map((g) => g.id) }
+    );
+    return (result?.value ?? []).length > 0;
+  } catch (err) {
+    if (err instanceof GraphRequestError && err.status === 403) {
+      return (await fetchAimMembers(tenantId, groupName)).memberIds.includes(userId);
+    }
+    throw err;
+  }
+}
+
 export async function fetchAimMembersAllTenants(
   tenants: Array<{ id: string; name: string }>,
   groupName: string

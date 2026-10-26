@@ -153,4 +153,7 @@ test("an unfinished check that asks about a removed tool is stale", () => {
   assert.equal(coach.quizIsStale(profile, quiz), true);
   assert.equal(coach.quizIsStale(profile, { ...quiz, questions: [{ platform: "m365_copilot" }] }), false);
   assert.equal(coach.quizIsStale(profile, { ...quiz, completedAt: "2026-10-26" }), false);
+  const fits = { ...quiz, questions: [{ platform: "m365_copilot" }], policyVersion: coach.policyVersion(profile) };
+  assert.equal(coach.quizIsStale(profile, fits), false);
+  assert.equal(coach.quizIsStale({ ...profile, policy: ["A new rule."] }, fits), true); // policy changed mid-check
 });

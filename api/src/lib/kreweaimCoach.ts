@@ -17,8 +17,9 @@ import { ServiceUnavailableError } from "./http";
 import type { LearnerProfile, LearnerState, Lesson, StoredQuizQuestion } from "./kreweaimLearner";
 
 const DEFAULT_MODEL = "claude-opus-5-5";
-// SWA managed functions stop a request at about 45 seconds.
-const REQUEST_TIMEOUT_MS = 38_000;
+// SWA managed functions stop a request at about 45 seconds; the model call gets 30 of them,
+// leaving room for the membership check, the profile and state reads and the state write.
+const REQUEST_TIMEOUT_MS = 30_000;
 const QUIZ_PLATFORMS = 3;
 const QUESTIONS_PER_PLATFORM = 2;
 
@@ -80,6 +81,8 @@ export function policyVersion(profile: LearnerProfile): string {
 /** An unfinished check that asks about a tool the person no longer has. */
 export function quizIsStale(profile: LearnerProfile, quiz: LearnerState["quiz"]): boolean {
   if (!quiz || quiz.completedAt) return false;
+  // Written under another company policy: its questions may teach what the rules now forbid.
+  if (quiz.policyVersion !== undefined && quiz.policyVersion !== policyVersion(profile)) return true;
   const tools = new Set(profile.platforms.map((p) => p.key));
   return quiz.questions.some((q) => !tools.has(q.platform));
 }

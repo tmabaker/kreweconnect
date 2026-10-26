@@ -81,6 +81,8 @@ export interface LearnerState {
   quiz: {
     /** Tools this check covered; a tool added to the profile later gets its own short check. */
     platforms?: string[];
+    /** Fingerprint of the company AI policy the questions were written under. */
+    policyVersion?: string;
     questions: StoredQuizQuestion[];
     createdAt: string;
     completedAt: string | null;

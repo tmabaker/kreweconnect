@@ -10,7 +10,7 @@
  */
 
 import { app } from "@azure/functions";
-import { fetchAimMembers, fetchAimMembersAllTenants } from "../lib/graphClient";
+import { fetchAimMembers, fetchAimMembersAllTenants, isAimMember } from "../lib/graphClient";
 import { config } from "../lib/config";
 import type { CallerContext } from "../lib/authMiddleware";
 import { BadRequestError, NotFoundError, readJsonBody, withAuth } from "../lib/http";
@@ -71,8 +71,7 @@ app.http("tenantAimMembers", {
 const MAX_OPEN_LESSONS = 3;
 
 async function enrolledProfile(caller: CallerContext): Promise<{ enrolled: boolean; profile: LearnerProfile | null }> {
-  const membership = await fetchAimMembers(caller.tenantId, config.kreweAimGroup);
-  const enrolled = membership.memberIds.includes(caller.userObjectId);
+  const enrolled = await isAimMember(caller.tenantId, config.kreweAimGroup, caller.userObjectId);
   return { enrolled, profile: enrolled ? await readProfile(caller.tenantId, caller.userObjectId) : null };
 }
 
@@ -170,7 +169,15 @@ app.http("kreweAimQuizStart", {
           ? unassessedPlatforms(profile, state)
           : [];
     if (platforms.length) {
-      state.quiz = { platforms, questions: await generateQuiz(profile, platforms), createdAt: new Date().toISOString(), completedAt: null, answers: {}, selfRating: {} };
+      state.quiz = {
+        platforms,
+        policyVersion: policyVersion(profile),
+        questions: await generateQuiz(profile, platforms),
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        answers: {},
+        selfRating: {},
+      };
       await writeState(caller.tenantId, caller.userObjectId, state, etag);
     }
     return { status: 200, jsonBody: view(profile, state, true) };
