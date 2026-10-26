@@ -401,16 +401,34 @@ export async function fetchUserById(userId: string, tenantId?: string): Promise<
  */
 export async function fetchAimMembers(tenantId?: string): Promise<string[]> {
   if (!useBackendApi) return [];
-  const cacheKey = `aim:${tenantId || "home"}`;
-  const cached = getCached<string[]>(cacheKey);
-  if (cached) return cached;
   try {
-    const data = await apiFetch<{ value: string[] }>(`/tenants/${tenantId || "home"}/aim-members`);
-    setCache(cacheKey, data.value);
-    return data.value;
+    return (await fetchAimAssignment(tenantId)).memberIds;
   } catch {
     return [];
   }
+}
+
+export interface AimAssignment {
+  memberIds: string[];
+  /** False until the tenant's KreweAIM group exists. */
+  groupFound: boolean;
+}
+
+/**
+ * KreweAIM assignment with the group's existence, for the KreweAIM page.
+ * Unlike fetchAimMembers this throws, so the page can say why it is empty.
+ */
+export async function fetchAimAssignment(tenantId?: string): Promise<AimAssignment> {
+  if (!useBackendApi) return { memberIds: [], groupFound: false };
+  const cacheKey = `aim:${tenantId || "home"}`;
+  const cached = getCached<AimAssignment>(cacheKey);
+  if (cached) return cached;
+  const data = await apiFetch<{ value: string[]; groupFound: boolean }>(
+    `/tenants/${tenantId || "home"}/aim-members`
+  );
+  const result = { memberIds: data.value, groupFound: data.groupFound };
+  setCache(cacheKey, result);
+  return result;
 }
 
 /**
