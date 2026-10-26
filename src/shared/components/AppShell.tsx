@@ -156,6 +156,15 @@ const useStyles = makeStyles({
 // `mspOnly` items are hidden from client-tenant users — clients only ever see
 // their own Directory + Org Chart (KreweConnect). The route guards enforce the
 // same rule for direct URL access.
+// Fluent has no infinity icon; this matches the AIM mark on directory cards.
+function InfinityIcon() {
+  return (
+    <span aria-hidden="true" style={{ width: 24, height: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 22, lineHeight: 1, fontWeight: 600 }}>
+      ∞
+    </span>
+  );
+}
+
 const navItems = [
   { path: "/", label: "Dashboard", icon: <Home24Regular />, section: null, mspOnly: true },
   { path: "/directory", label: "Directory", icon: <People24Regular />, section: "KreweConnect" },
@@ -169,6 +178,8 @@ const navItems = [
   { path: "/governance/clients", label: "Clients", icon: <Building24Regular />, section: null, indent: true },
   // KreweWorks: each client's portal is its own site; clients see only theirs.
   { path: "/kreweworks", label: "Employee Portal", icon: <PeopleTeam24Regular />, section: "KreweWorks" },
+  // KreweAIM: clients see their own members; the API scopes the list.
+  { path: "/kreweaim", label: "AI Mastery", icon: <InfinityIcon />, section: "KreweAIM" },
   { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null, mspOnly: true },
 ];
 
@@ -250,7 +261,7 @@ export function AppShell() {
               NOIT Client Tools
             </Text>
             <Text size={200} style={{ display: "block", marginTop: "-2px" }}>
-              KreweConnect · KreweReview · KreweWorks
+              KreweConnect · KreweReview · KreweWorks · KreweAIM
             </Text>
           </div>}
         </div>

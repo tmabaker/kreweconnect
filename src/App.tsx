@@ -67,6 +67,9 @@ const GovClientDetailPage = lazy(() =>
 const KreweWorksPage = lazy(() =>
   import("./apps/kreweworks/KreweWorksPage").then((m) => ({ default: m.KreweWorksPage }))
 );
+const KreweAimPage = lazy(() =>
+  import("./apps/kreweaim/KreweAimPage").then((m) => ({ default: m.KreweAimPage }))
+);
 const AssembledPolicyPage = lazy(() =>
   import("./apps/governance/AssembledPolicyPage").then((m) => ({ default: m.AssembledPolicyPage }))
 );
@@ -113,6 +116,8 @@ function App() {
                 <Route path="/governance/clients/:id" element={<GovClientDetailPage />} />
                 <Route path="/governance/assembled/:id" element={<AssembledPolicyPage />} />
                 <Route path="/kreweworks" element={<KreweWorksPage />} />
+                {/* KreweAIM — client-reachable; members are scoped to the caller. */}
+                <Route path="/kreweaim" element={<KreweAimPage />} />
               </Route>
             </Routes>
           </BrowserRouter>
