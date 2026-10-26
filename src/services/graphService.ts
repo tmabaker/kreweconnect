@@ -412,6 +412,10 @@ export interface AimAssignment {
   memberIds: string[];
   /** False until the tenant's KreweAIM group exists. */
   groupFound: boolean;
+  /** The group name the API looks for (KREWEAIM_GROUP, default "KreweAIM Members"). */
+  groupName: string;
+  /** All-tenants view: tenants whose lookup failed, so groupFound may be incomplete. */
+  failedTenants: number;
 }
 
 /**
@@ -419,14 +423,19 @@ export interface AimAssignment {
  * Unlike fetchAimMembers this throws, so the page can say why it is empty.
  */
 export async function fetchAimAssignment(tenantId?: string): Promise<AimAssignment> {
-  if (!useBackendApi) return { memberIds: [], groupFound: false };
+  if (!useBackendApi) throw new Error("KreweAIM status needs the KreweConnect backend API.");
   const cacheKey = `aim:${tenantId || "home"}`;
   const cached = getCached<AimAssignment>(cacheKey);
   if (cached) return cached;
-  const data = await apiFetch<{ value: string[]; groupFound: boolean }>(
+  const data = await apiFetch<{ value: string[]; groupFound: boolean; groupName?: string; failedTenants?: number }>(
     `/tenants/${tenantId || "home"}/aim-members`
   );
-  const result = { memberIds: data.value, groupFound: data.groupFound };
+  const result = {
+    memberIds: data.value,
+    groupFound: data.groupFound,
+    groupName: data.groupName || "KreweAIM Members",
+    failedTenants: data.failedTenants ?? 0,
+  };
   setCache(cacheKey, result);
   return result;
 }

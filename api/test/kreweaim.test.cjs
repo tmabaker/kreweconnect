@@ -38,11 +38,20 @@ test("group name quotes are escaped for OData", async () => {
   assert.ok(urls[0].includes(encodeURIComponent("displayName eq 'O''Brien AIM'")));
 });
 
-test("all tenants view skips unreachable tenants", async () => {
-  global.fetch = async (url) => {
-    if (url.includes("bad")) throw new Error("unreachable");
+test("all tenants view skips unreachable tenants and counts them", async () => {
+  // The tenant travels in the token, not the URL, so key the failure on the token.
+  const original = tokenService.getAppToken;
+  tokenService.getAppToken = async (tenantId) => `token-${tenantId}`;
+  global.fetch = async (_url, init) => {
+    if (String(init?.headers?.Authorization ?? init?.headers?.authorization ?? "").includes("token-bad")) {
+      throw new Error("unreachable");
+    }
     return json({ value: [] });
   };
-  const r = await fetchAimMembersAllTenants([{ id: "bad", name: "x" }, { id: "ok", name: "y" }], "KreweAIM Members");
-  assert.deepEqual(r, { groupFound: false, memberIds: [] });
+  try {
+    const r = await fetchAimMembersAllTenants([{ id: "bad", name: "x" }, { id: "ok", name: "y" }], "KreweAIM Members");
+    assert.deepEqual(r, { groupFound: false, memberIds: [], failedTenants: 1 });
+  } finally {
+    tokenService.getAppToken = original;
+  }
 });

@@ -229,7 +229,7 @@ export function useGraphEmployees(tenantId: string) {
 
   // Get employee detail
   const getDetail = useCallback(
-    async (id: string): Promise<EmployeeDetail | null> => {
+    async (id: string, tenantHint?: string | null): Promise<EmployeeDetail | null> => {
       if (isDemoMode) return mockHook.getDetail(id);
 
       const selectedTenant = tenantId === "all" ? undefined : tenantId;
@@ -240,7 +240,9 @@ export function useGraphEmployees(tenantId: string) {
 
         // In the aggregate view, each user carries its own source tenant — use
         // that so detail/reports come from the right tenant, not "all".
-        const userTenant = user?.tenantId ?? selectedTenant;
+        // A caller that already knows the tenant (a link from an aggregate list)
+        // passes it, so detail does not wait for the aggregate list to load.
+        const userTenant = user?.tenantId ?? tenantHint ?? selectedTenant;
 
         if (!user) {
           // Fetch from Graph directly

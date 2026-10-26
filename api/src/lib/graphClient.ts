@@ -382,6 +382,8 @@ export interface AimMembership {
   groupFound: boolean;
   /** Entra object ids of assigned members (transitive, users only). */
   memberIds: string[];
+  /** All-tenants view only: tenants whose lookup failed (consent, outage). */
+  failedTenants?: number;
 }
 
 /**
@@ -418,5 +420,6 @@ export async function fetchAimMembersAllTenants(
   return {
     groupFound: ok.some((r) => r.groupFound),
     memberIds: ok.flatMap((r) => r.memberIds),
+    failedTenants: results.length - ok.length,
   };
 }

@@ -93,7 +93,7 @@ export function KreweAimPage() {
 
   useEffect(() => {
     if (isDemoMode) {
-      setMine({ memberIds: [], groupFound: false });
+      setMine({ memberIds: [], groupFound: false, groupName: "KreweAIM Members", failedTenants: 0 });
       return;
     }
     let cancelled = false;
@@ -168,13 +168,13 @@ function StaffMemberList() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
-  const { employees, loading: peopleLoading } = useGraphEmployees(selectedTenant.tenantId);
+  const { employees, loading: peopleLoading, error: peopleError } = useGraphEmployees(selectedTenant.tenantId);
   const [assignment, setAssignment] = useState<AimAssignment | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isDemoMode) {
-      setAssignment({ memberIds: [], groupFound: false });
+      setAssignment({ memberIds: [], groupFound: false, groupName: "KreweAIM Members", failedTenants: 0 });
       return;
     }
     let cancelled = false;
@@ -196,7 +196,10 @@ function StaffMemberList() {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [assignment, employees]);
 
-  const loading = !error && (!assignment || peopleLoading);
+  const shownError = error || (peopleError ? `Could not load the directory: ${peopleError}` : null);
+  const loading = !shownError && (!assignment || peopleLoading);
+  const partial = !!assignment && assignment.failedTenants > 0;
+  const open = (m: (typeof members)[number]) => navigate(`/directory/${m.id}`, { state: { tenantId: m.tenantId } });
 
   return (
     <>
@@ -208,31 +211,51 @@ function StaffMemberList() {
         </Text>
       </div>
 
-      {error && (
+      {shownError && (
         <MessageBar intent="error">
-          <MessageBarBody>{error}</MessageBarBody>
+          <MessageBarBody>{shownError}</MessageBarBody>
         </MessageBar>
       )}
-      {loading && <Spinner label="Loading members..." />}
-      {!loading && assignment && !assignment.groupFound && (
-        <MessageBar intent="info">
+      {!loading && partial && (
+        <MessageBar intent="warning">
           <MessageBarBody>
-            {selectedTenant.tenantId === "all"
-              ? "KreweAIM is not set up in any tenant yet. Create a security group named KreweAIM Members in a tenant and add the people to enroll."
-              : "KreweAIM is not set up in this tenant yet. Create a security group named KreweAIM Members there and add the people to enroll."}
+            {assignment.failedTenants} tenant{assignment.failedTenants === 1 ? "" : "s"} could not be checked, so
+            this list may be incomplete.
           </MessageBarBody>
         </MessageBar>
       )}
-      {!loading && assignment?.groupFound && members.length === 0 && (
+      {loading && <Spinner label="Loading members..." />}
+      {!loading && !shownError && assignment && !assignment.groupFound && !partial && (
         <MessageBar intent="info">
-          <MessageBarBody>The KreweAIM Members group exists but has no one in it yet.</MessageBarBody>
+          <MessageBarBody>
+            {selectedTenant.tenantId === "all"
+              ? `KreweAIM is not set up in any tenant yet. Create a security group named ${assignment.groupName} in a tenant and add the people to enroll.`
+              : `KreweAIM is not set up in this tenant yet. Create a security group named ${assignment.groupName} there and add the people to enroll.`}
+          </MessageBarBody>
+        </MessageBar>
+      )}
+      {!loading && !shownError && assignment?.groupFound && members.length === 0 && (
+        <MessageBar intent="info">
+          <MessageBarBody>The {assignment.groupName} group exists but has no one in it yet.</MessageBarBody>
         </MessageBar>
       )}
 
       {!loading && members.length > 0 && (
         <div className={styles.grid}>
           {members.map((m) => (
-            <Card key={m.id} onClick={() => navigate(`/directory/${m.id}`)}>
+            <Card
+              key={m.id}
+              role="link"
+              tabIndex={0}
+              aria-label={`${m.displayName}, open directory profile`}
+              onClick={() => open(m)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  open(m);
+                }
+              }}
+            >
               <div className={styles.member}>
                 <AimMark active size={40}>
                   <Avatar
