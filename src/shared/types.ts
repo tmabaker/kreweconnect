@@ -122,6 +122,7 @@ export type AgreementCategory =
   | "PayerContract"
   | "Confidentiality"
   | "Rebate"
+  | "License"
   | "Other";
 
 export type RenewalType =
