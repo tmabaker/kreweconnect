@@ -1,0 +1,117 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+process.env.ANTHROPIC_API_KEY = "test-key";
+const coach = require("../dist/src/lib/kreweaimCoach.js");
+const { learnerPath } = require("../dist/src/lib/kreweaimLearner.js");
+
+const profile = {
+  schema: 1,
+  built: "2026-10-26",
+  company: "Example Co",
+  givenName: "Pat",
+  role: { title: "Project Manager", family: "operations", department: "" },
+  vertical: "homebuilding",
+  platforms: [
+    { key: "m365_copilot", label: "Microsoft 365 Copilot" },
+    { key: "copilot_chat", label: "Copilot Chat" },
+  ],
+  unapprovedReported: ["gemini"],
+  planned: { claude: "After the November meeting." },
+  agent: null,
+  apps: ["Microsoft 365"],
+  policy: ["Never paste client financials into a tool."],
+  guidance: [{ id: "prompting-fundamentals", title: "Prompting fundamentals", platform: "any", summary: "Give context." }],
+};
+
+const q = (id, platform, answer) => ({ id, platform, question: "?", choices: ["a", "b", "c", "d"], answer, explanation: "" });
+
+test("skill blends answers with the person's own rating", () => {
+  const questions = [q("1", "m365_copilot", 0), q("2", "m365_copilot", 1), q("3", "copilot_chat", 2), q("4", "copilot_chat", 3)];
+  const skill = coach.scoreQuiz(questions, { 1: 0, 2: 1, 3: 0, 4: 0 }, { m365_copilot: 4, copilot_chat: 1 });
+  assert.deepEqual(skill, { m365_copilot: 4, copilot_chat: 1 });
+  // A missing or invalid rating falls back to what the answers show.
+  assert.deepEqual(coach.scoreQuiz(questions, { 1: 0, 2: 0, 3: 2, 4: 3 }, { m365_copilot: 9 }), { m365_copilot: 3, copilot_chat: 4 });
+});
+
+test("writing rules: dashes used as punctuation become commas, hyphenated words stay", () => {
+  assert.equal(coach.tidy("Open Teams — then ask Copilot"), "Open Teams, then ask Copilot");
+  assert.equal(coach.tidy("Draft it - then check it"), "Draft it, then check it");
+  assert.equal(coach.tidy("A follow-up email"), "A follow-up email");
+});
+
+test("the model sees unapproved and planned tools only as things not to teach", () => {
+  const text = coach.describeLearner(profile, { quiz: null, skill: { m365_copilot: 2 }, lessons: [] });
+  assert.match(text, /NOT approved \(never teach.*gemini/);
+  assert.match(text, /Coming later, not approved yet: claude/);
+  assert.match(text, /Microsoft 365 Copilot 2/);
+  assert.doesNotMatch(text, /@|[0-9a-f]{8}-[0-9a-f]{4}/); // no addresses or ids
+});
+
+test("learner paths only accept real ids", () => {
+  const t = "11111111-2222-3333-4444-555555555555";
+  assert.equal(learnerPath(t, t, "state"), `learners/${t}/${t}/state.json`);
+  assert.throws(() => learnerPath("../x", t, "state"));
+  assert.throws(() => learnerPath(t, "all", "profile"));
+});
+
+function claudeReply(json) {
+  return new Response(
+    JSON.stringify({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "claude-opus-5-5",
+      content: [{ type: "text", text: JSON.stringify(json) }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
+}
+
+test("a lesson is limited to the person's tools and cleaned before saving", async () => {
+  let sent;
+  global.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return claudeReply({
+      platform: "m365_copilot",
+      title: "Recap a site meeting — fast",
+      level: 7,
+      minutes: 40,
+      why: "You run weekly site meetings.",
+      body: "Open the meeting - then ask for the recap.",
+      tryIt: { instructions: "Try it now.", prompt: "Summarize [meeting]" },
+      takeaway: "Recap the same day.",
+    });
+  };
+  const lesson = await coach.generateLesson(profile, { quiz: null, skill: {}, lessons: [] });
+  assert.deepEqual(sent.output_config.format.schema.properties.platform.enum, ["m365_copilot", "copilot_chat"]);
+  assert.match(sent.system, /Never paste client financials/);
+  assert.equal(lesson.title, "Recap a site meeting, fast");
+  assert.equal(lesson.body, "Open the meeting, then ask for the recap.");
+  assert.equal(lesson.level, 4);
+  assert.equal(lesson.minutes, 15);
+  assert.equal(lesson.model, "claude-opus-5-5");
+});
+
+test("a lesson for a tool the person does not have is rejected", async () => {
+  global.fetch = async () =>
+    claudeReply({ platform: "gemini", title: "x", level: 1, minutes: 5, why: "", body: "", tryIt: { instructions: "", prompt: "" }, takeaway: "" });
+  await assert.rejects(coach.generateLesson(profile, { quiz: null, skill: {}, lessons: [] }), /tool you do not have/);
+});
+
+test("quiz questions are kept server side with answers and limited to the top tools", async () => {
+  global.fetch = async () =>
+    claudeReply({
+      questions: [
+        { platform: "m365_copilot", question: "Best first step?", choices: ["a", "b", "c", "d"], answer: 2, explanation: "Context first." },
+        { platform: "gemini", question: "x", choices: ["a", "b", "c", "d"], answer: 0, explanation: "" },
+      ],
+    });
+  const questions = await coach.generateQuiz(profile);
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].answer, 2);
+  assert.ok(questions[0].id);
+});

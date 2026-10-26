@@ -1,29 +1,45 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   makeStyles,
   tokens,
   Title2,
+  Title3,
   Text,
   Card,
+  Badge,
+  Button,
+  Radio,
+  RadioGroup,
+  Textarea,
   Spinner,
   MessageBar,
   MessageBarBody,
 } from "@fluentui/react-components";
 import {
-  PersonAdd24Regular,
   Sparkle24Regular,
-  ArrowRepeatAll24Regular,
+  Copy24Regular,
+  Checkmark24Regular,
+  ThumbLike24Regular,
+  ThumbDislike24Regular,
 } from "@fluentui/react-icons";
 import { isDemoMode } from "../../shared/auth/demoMode";
 import { Fleur } from "../../shared/components/AimMark";
-import { fetchAimAssignment, type AimAssignment } from "../../services/graphService";
-import { detectUserTenantContext } from "../../services/tenantService";
+import {
+  fetchMyAim,
+  nextLesson,
+  startSkillsCheck,
+  submitSkillsCheck,
+  updateLesson,
+  type AimLesson,
+  type AimMe,
+} from "../../services/kreweaimService";
 
 const useStyles = makeStyles({
-  page: { display: "flex", flexDirection: "column", gap: "20px" },
+  page: { display: "flex", flexDirection: "column", gap: "20px", maxWidth: "900px" },
   muted: { display: "block", color: tokens.colorNeutralForeground3 },
+  row: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" },
   status: { display: "flex", alignItems: "flex-start", gap: "16px" },
-  statusMark: {
+  mark: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -34,111 +50,369 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorBrandBackground,
     color: tokens.colorNeutralForegroundOnBrand,
   },
-  statusMarkOff: {
+  markOff: { backgroundColor: tokens.colorNeutralBackground3, color: tokens.colorNeutralForeground3 },
+  section: { display: "flex", flexDirection: "column", gap: "12px" },
+  question: { display: "flex", flexDirection: "column", gap: "6px" },
+  lessonBody: { display: "flex", flexDirection: "column", gap: "8px", lineHeight: "1.5" },
+  tryIt: {
+    padding: "12px 16px",
+    borderRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground3,
-    color: tokens.colorNeutralForeground3,
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
   },
-  pillars: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-    gap: "16px",
+  prompt: {
+    fontFamily: tokens.fontFamilyMonospace,
+    whiteSpace: "pre-wrap",
+    padding: "8px 12px",
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground1,
   },
-  pillarTitle: { display: "flex", alignItems: "center", gap: "8px" },
+  done: { opacity: 0.75 },
 });
 
-const PILLARS = [
-  {
-    icon: <PersonAdd24Regular />,
-    title: "Your tools only",
-    body: "Everything you learn is about the AI tools your company gives you, and your company's AI policy comes first.",
-  },
-  {
-    icon: <Sparkle24Regular />,
-    title: "Shaped to your work",
-    body: "Lessons follow your role, how comfortable you already are with AI and anything that has tripped you up before.",
-  },
-  {
-    icon: <ArrowRepeatAll24Regular />,
-    title: "Always current",
-    body: "There is no finish line. When your tools get new features, you hear about them without having to go looking.",
-  },
-];
+const RATINGS = ["New to it", "Getting started", "Comfortable", "Power user"];
+const LEVELS = ["", "Getting started", "Building", "Confident", "Power user"];
 
-/** KreweAIM (AI Mastery) is a personal program: everyone, NOIT staff included,
- * sees only their own enrollment and training. Who is enrolled is managed in
- * Entra (the KreweAIM Members group), not on this page. */
+/** Bold (**text**) inside one line, as React nodes: no HTML is injected. */
+function inline(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <Fragment key={i}>{part}</Fragment>
+  );
+}
+
+/** The small Markdown subset lessons use: paragraphs, "- " bullets, **bold**. */
+function LessonText({ text }: { text: string }) {
+  const styles = useStyles();
+  const blocks = text.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  return (
+    <div className={styles.lessonBody}>
+      {blocks.map((block, i) => {
+        const lines = block.split("\n").map((l) => l.trim());
+        if (lines.every((l) => /^[-*] /.test(l))) {
+          return (
+            <ul key={i} style={{ margin: 0, paddingLeft: "20px" }}>
+              {lines.map((l, j) => (
+                <li key={j}>{inline(l.slice(2))}</li>
+              ))}
+            </ul>
+          );
+        }
+        return <Text key={i}>{inline(lines.join(" ").replace(/^#+\s*/, ""))}</Text>;
+      })}
+    </div>
+  );
+}
+
+/** KreweAIM (AI Mastery): the signed-in person's own program, and only theirs. */
 export function KreweAimPage() {
   const styles = useStyles();
-  const { userObjectId } = detectUserTenantContext();
-  const [mine, setMine] = useState<AimAssignment | null>(null);
+  const [me, setMe] = useState<AimMe | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (isDemoMode) {
-      setMine({ memberIds: [], groupFound: false, groupName: "KreweAIM Members", failedTenants: 0 });
+      setMe({ enrolled: false, ready: false, coachReady: false, givenName: null, platforms: [], agent: null, quiz: { status: "not_started" }, skill: {}, lessons: [] });
       return;
     }
-    let cancelled = false;
-    fetchAimAssignment("home")
-      .then((a) => !cancelled && setMine(a))
-      .catch((err) => !cancelled && setError(err?.message || "Could not load your KreweAIM status."));
-    return () => {
-      cancelled = true;
-    };
+    fetchMyAim()
+      .then(setMe)
+      .catch((err) => setError(err?.message || "Could not load your KreweAIM."));
   }, []);
 
-  const enrolled = !!mine && !!userObjectId && mine.memberIds.includes(userObjectId);
+  const run = async (label: string, action: () => Promise<AimMe>) => {
+    setBusy(label);
+    setError(null);
+    try {
+      setMe(await action());
+    } catch (err) {
+      setError((err as { message?: string })?.message || "Something went wrong. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
 
+  const labelFor = (key: string) => me?.platforms.find((p) => p.key === key)?.label ?? key;
+
+  const header = (
+    <div>
+      <Title2>KreweAIM</Title2>
+      <Text size={300} className={styles.muted}>
+        AI Mastery. Your own program for getting the most out of the AI tools your company provides.
+      </Text>
+    </div>
+  );
+
+  if (!me) {
+    return (
+      <div className={styles.page}>
+        {header}
+        {error ? (
+          <MessageBar intent="error">
+            <MessageBarBody>{error}</MessageBarBody>
+          </MessageBar>
+        ) : (
+          <Spinner label="Loading your KreweAIM..." />
+        )}
+      </div>
+    );
+  }
+
+  const statusCard = (enrolled: boolean, title: string, body: string) => (
+    <Card>
+      <div className={styles.status}>
+        <span className={`${styles.mark} ${enrolled ? "" : styles.markOff}`}>
+          <Fleur size={26} />
+        </span>
+        <div>
+          <Text weight="semibold" size={500} style={{ display: "block" }}>
+            {title}
+          </Text>
+          <Text size={300} className={styles.muted}>
+            {body}
+          </Text>
+        </div>
+      </div>
+    </Card>
+  );
+
+  const errorBar = error && (
+    <MessageBar intent="error">
+      <MessageBarBody>{error}</MessageBarBody>
+    </MessageBar>
+  );
+
+  if (!me.enrolled) {
+    return (
+      <div className={styles.page}>
+        {header}
+        {statusCard(false, "You're not enrolled yet", "KreweAIM is assigned by your IT admin or NOIT Group. Ask them if you would like to join.")}
+      </div>
+    );
+  }
+  if (!me.ready) {
+    return (
+      <div className={styles.page}>
+        {header}
+        {statusCard(true, "You're enrolled", "Your program is being built from your role and the AI tools you have. Check back soon.")}
+      </div>
+    );
+  }
+
+  const quiz = me.quiz;
+  const name = me.givenName ? `, ${me.givenName.split(" ")[0]}` : "";
+  const toolList = me.platforms.map((p) => p.label).join(", ");
+
+  // ── First visit: the skills check ────────────────────────────────
+  if (quiz.status !== "done") {
+    const inProgress = quiz.status === "in_progress" ? quiz : null;
+    const complete =
+      !!inProgress &&
+      inProgress.questions.every((q) => answers[q.id] !== undefined) &&
+      inProgress.platforms.every((p) => ratings[p] !== undefined);
+    return (
+      <div className={styles.page}>
+        {header}
+        {errorBar}
+        {!me.coachReady && (
+          <MessageBar intent="warning">
+            <MessageBarBody>Coaching is not switched on yet. Your skills check will be ready soon.</MessageBarBody>
+          </MessageBar>
+        )}
+        {!inProgress ? (
+          <Card>
+            <div className={styles.section}>
+              <Title3>Welcome{name}</Title3>
+              <Text>
+                Your lessons are built for you alone, from your job, the AI tools you have ({toolList}) and what you already
+                know. A quick skills check first, about three minutes, so nothing is too basic or too far ahead.
+              </Text>
+              <div>
+                <Button appearance="primary" icon={<Sparkle24Regular />} disabled={!!busy || !me.coachReady} onClick={() => run("quiz", startSkillsCheck)}>
+                  Start my skills check
+                </Button>
+              </div>
+              {busy === "quiz" && <Spinner size="small" label="Writing questions for your role..." />}
+            </div>
+          </Card>
+        ) : (
+          <>
+            {inProgress.platforms.map((platform) => (
+              <Card key={platform}>
+                <div className={styles.section}>
+                  <Title3>{labelFor(platform)}</Title3>
+                  <div className={styles.question}>
+                    <Text weight="semibold">How comfortable are you with {labelFor(platform)} today?</Text>
+                    <RadioGroup
+                      layout="horizontal"
+                      value={ratings[platform] ? String(ratings[platform]) : ""}
+                      onChange={(_, d) => setRatings((r) => ({ ...r, [platform]: Number(d.value) }))}
+                    >
+                      {RATINGS.map((r, i) => (
+                        <Radio key={r} value={String(i + 1)} label={r} />
+                      ))}
+                    </RadioGroup>
+                  </div>
+                  {inProgress.questions
+                    .filter((q) => q.platform === platform)
+                    .map((q) => (
+                      <div key={q.id} className={styles.question}>
+                        <Text weight="semibold">{q.question}</Text>
+                        <RadioGroup
+                          value={answers[q.id] !== undefined ? String(answers[q.id]) : ""}
+                          onChange={(_, d) => setAnswers((a) => ({ ...a, [q.id]: Number(d.value) }))}
+                        >
+                          {q.choices.map((c, i) => (
+                            <Radio key={i} value={String(i)} label={c} />
+                          ))}
+                        </RadioGroup>
+                      </div>
+                    ))}
+                </div>
+              </Card>
+            ))}
+            <div className={styles.row}>
+              <Button appearance="primary" disabled={!complete || !!busy} onClick={() => run("answers", () => submitSkillsCheck(answers, ratings))}>
+                See my results
+              </Button>
+              {busy === "answers" && <Spinner size="small" />}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── The program: skill levels and lessons ────────────────────────
+  const open = me.lessons.filter((l) => l.status === "new").length;
   return (
     <div className={styles.page}>
-      <div>
-        <Title2>KreweAIM</Title2>
-        <Text size={300} className={styles.muted}>
-          AI Mastery. Your personal program for getting the most out of the AI tools your company
-          provides.
-        </Text>
-      </div>
+      {header}
+      {errorBar}
+      <Card>
+        <div className={styles.section}>
+          <Title3>Your AI tools</Title3>
+          <div className={styles.row}>
+            {me.platforms.map((p) => (
+              <Badge key={p.key} appearance="tint" size="large">
+                {p.label}
+                {me.skill[p.key] ? ` · ${LEVELS[me.skill[p.key]]}` : ""}
+              </Badge>
+            ))}
+          </div>
+          {me.agent && (
+            <Text size={200} className={styles.muted}>
+              Your Krewe agent is {me.agent.agent}, on {me.agent.channel}.
+            </Text>
+          )}
+          <div className={styles.row}>
+            <Button appearance="primary" icon={<Sparkle24Regular />} disabled={!!busy || open >= 3 || !me.coachReady} onClick={() => run("lesson", nextLesson)}>
+              {me.lessons.length ? "Get my next lesson" : "Get my first lesson"}
+            </Button>
+            {busy === "lesson" && <Spinner size="small" label="Writing a lesson for you..." />}
+            {open >= 3 && !busy && <Text size={200} className={styles.muted}>Finish an open lesson to unlock the next one.</Text>}
+          </div>
+        </div>
+      </Card>
 
-      {error && (
-        <MessageBar intent="error">
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
-      {!mine && !error && <Spinner label="Checking your enrollment..." />}
-      {mine && (
-        <Card>
-          <div className={styles.status}>
-            <span className={`${styles.statusMark} ${enrolled ? "" : styles.statusMarkOff}`}>
-              <Fleur size={26} />
-            </span>
+      {me.lessons.map((lesson) => (
+        <LessonCard key={lesson.id} lesson={lesson} label={labelFor(lesson.platform)} busy={!!busy} onUpdate={(u) => run(`l:${lesson.id}`, () => updateLesson(lesson.id, u))} />
+      ))}
+    </div>
+  );
+}
+
+function LessonCard({
+  lesson,
+  label,
+  busy,
+  onUpdate,
+}: {
+  lesson: AimLesson;
+  label: string;
+  busy: boolean;
+  onUpdate: (u: { status?: "done"; feedback?: "helped" | "not_helpful"; note?: string }) => void;
+}) {
+  const styles = useStyles();
+  const [copied, setCopied] = useState(false);
+  const [askNote, setAskNote] = useState(false);
+  const [note, setNote] = useState("");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(lesson.tryIt.prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked: the prompt is still on screen to select by hand.
+    }
+  };
+  return (
+    <Card className={lesson.status === "done" ? styles.done : undefined}>
+      <div className={styles.section}>
+        <div className={styles.row}>
+          <Badge appearance="outline">{label}</Badge>
+          <Text size={200} className={styles.muted}>
+            {LEVELS[lesson.level]} · {lesson.minutes} min
+          </Text>
+          {lesson.status === "done" && <Badge appearance="tint" color="success">Done</Badge>}
+        </div>
+        <Title3>{lesson.title}</Title3>
+        <Text italic>{lesson.why}</Text>
+        <LessonText text={lesson.body} />
+        <div className={styles.tryIt}>
+          <Text weight="semibold">Try it now</Text>
+          <Text>{lesson.tryIt.instructions}</Text>
+          {lesson.tryIt.prompt && (
+            <>
+              <div className={styles.prompt}>{lesson.tryIt.prompt}</div>
+              <div>
+                <Button size="small" icon={copied ? <Checkmark24Regular /> : <Copy24Regular />} onClick={copy}>
+                  {copied ? "Copied" : "Copy prompt"}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+        <Text weight="semibold">{lesson.takeaway}</Text>
+        {lesson.feedback ? (
+          <Text size={200} className={styles.muted}>
+            {lesson.feedback === "helped" ? "You said this helped." : "You said this did not help. Your next lessons take that into account."}
+          </Text>
+        ) : (
+          <div className={styles.row}>
+            {lesson.status === "new" && (
+              <Button disabled={busy} icon={<Checkmark24Regular />} onClick={() => onUpdate({ status: "done" })}>
+                Mark done
+              </Button>
+            )}
+            <Button disabled={busy} icon={<ThumbLike24Regular />} onClick={() => onUpdate({ feedback: "helped" })}>
+              This helped
+            </Button>
+            <Button disabled={busy} icon={<ThumbDislike24Regular />} onClick={() => setAskNote(true)}>
+              Didn't help
+            </Button>
+          </div>
+        )}
+        {askNote && !lesson.feedback && (
+          <div className={styles.section}>
+            <Textarea
+              value={note}
+              onChange={(_, d) => setNote(d.value)}
+              placeholder="What went wrong? For example: the feature wasn't there, the answer was wrong, or it didn't fit my work."
+              resize="vertical"
+            />
             <div>
-              <Text weight="semibold" size={500} style={{ display: "block" }}>
-                {enrolled ? "You're enrolled" : "You're not enrolled yet"}
-              </Text>
-              <Text size={300} className={styles.muted}>
-                {enrolled
-                  ? "Your program is built around the AI tools your company provides you. The fleur de lis beside your name in the directory shows you're a KreweAIM member."
-                  : "KreweAIM is assigned by your IT admin or NOIT Group. Ask them if you would like to join."}
-              </Text>
+              <Button appearance="primary" disabled={busy} onClick={() => onUpdate({ feedback: "not_helpful", note })}>
+                Send
+              </Button>
             </div>
           </div>
-        </Card>
-      )}
-
-      <div className={styles.pillars}>
-        {PILLARS.map((p) => (
-          <Card key={p.title}>
-            <div className={styles.pillarTitle}>
-              {p.icon}
-              <Text weight="semibold" size={400}>
-                {p.title}
-              </Text>
-            </div>
-            <Text size={300}>{p.body}</Text>
-          </Card>
-        ))}
+        )}
       </div>
-
-    </div>
+    </Card>
   );
 }

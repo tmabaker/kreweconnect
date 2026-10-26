@@ -1,0 +1,261 @@
+/**
+ * KreweAIM coach: a skills check on first visit, then lessons generated for one
+ * person from their profile (role, licensed and approved AI tools, apps,
+ * company policy), their skill, the lessons they already have and what they
+ * said about them.
+ *
+ * Every lesson is unique, so quality is enforced by the system rather than by
+ * reviewing lessons one at a time:
+ *  - the output schema only allows the person's own approved tools;
+ *  - the instructions carry the company's AI policy and NOIT's guidance;
+ *  - the text is checked against NOIT's writing rules before it is saved.
+ */
+
+import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "node:crypto";
+import { ServiceUnavailableError } from "./http";
+import type { LearnerProfile, LearnerState, Lesson, StoredQuizQuestion } from "./kreweaimLearner";
+
+const DEFAULT_MODEL = "claude-opus-5-5";
+// SWA managed functions stop a request at about 45 seconds.
+const REQUEST_TIMEOUT_MS = 38_000;
+const QUIZ_PLATFORMS = 3;
+const QUESTIONS_PER_PLATFORM = 2;
+
+export function coachConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.ANTHROPIC_API_KEY);
+}
+
+function object(properties: Record<string, unknown>) {
+  return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
+}
+
+// ─── Context ─────────────────────────────────────────────────────
+
+function label(profile: LearnerProfile, key: string): string {
+  return profile.platforms.find((p) => p.key === key)?.label ?? key;
+}
+
+/** The person, as the model sees them. Names only the first name; no ids. */
+export function describeLearner(profile: LearnerProfile, state: LearnerState): string {
+  const lines = [
+    `First name: ${profile.givenName}`,
+    `Company: ${profile.company} (industry: ${profile.vertical || "general"})`,
+    `Role: ${profile.role.title || "not listed"} (family: ${profile.role.family})${profile.role.department ? `, ${profile.role.department}` : ""}`,
+    `AI tools they have and may learn: ${profile.platforms.map((p) => `${p.label} [${p.key}]`).join(", ")}`,
+  ];
+  if (profile.agent) lines.push(`Their Krewe agent: ${profile.agent.agent}, reached over ${profile.agent.channel}`);
+  if (profile.apps.length) lines.push(`Work apps: ${profile.apps.join(", ")}`);
+  if (profile.unapprovedReported.length) {
+    lines.push(`Tools the company has NOT approved (never teach; steer to approved tools): ${profile.unapprovedReported.join(", ")}`);
+  }
+  for (const [tool, note] of Object.entries(profile.planned)) lines.push(`Coming later, not approved yet: ${tool}. ${note}`);
+  if (Object.keys(state.skill).length) {
+    lines.push(
+      `Skill (1 new, 4 power user): ${Object.entries(state.skill)
+        .map(([k, v]) => `${label(profile, k)} ${v}`)
+        .join(", ")}`
+    );
+  }
+  return lines.join("\n");
+}
+
+function policyBlock(profile: LearnerProfile): string {
+  return profile.policy.length
+    ? `The company's AI rules. Every lesson must follow them:\n${profile.policy.map((p) => `- ${p}`).join("\n")}`
+    : "The company has not published AI rules beyond safe use: never put passwords, client secrets or personal data into a tool the company has not approved.";
+}
+
+// ─── Skills check ────────────────────────────────────────────────
+
+export function quizPlatforms(profile: LearnerProfile): string[] {
+  return profile.platforms.slice(0, QUIZ_PLATFORMS).map((p) => p.key);
+}
+
+function quizSchema(platforms: string[]) {
+  const question = object({
+    platform: { type: "string", enum: platforms },
+    question: { type: "string" },
+    // Structured outputs only allow minItems 0 or 1; the four-choice rule is checked after.
+    choices: { type: "array", items: { type: "string" }, description: "Exactly four choices." },
+    answer: { type: "integer", description: "Index 0-3 of the one correct choice." },
+    explanation: { type: "string", description: "One sentence on why that choice is right." },
+  });
+  return object({ questions: { type: "array", items: question } });
+}
+
+export async function generateQuiz(profile: LearnerProfile): Promise<StoredQuizQuestion[]> {
+  const platforms = quizPlatforms(profile);
+  const text = await callClaude(
+    [
+      "You write a short skills check for KreweAIM, a personal AI training program.",
+      `Write ${QUESTIONS_PER_PLATFORM} multiple-choice questions for each of these tools: ${platforms.join(", ")}.`,
+      "Each question is a realistic situation from this person's own job, asking what works best in that tool.",
+      "Mix difficulty: one everyday question and one that separates a capable user from a power user.",
+      "Speak to the person as \"you\", never by name.",
+      "Exactly one choice is correct. Wrong choices are plausible, not silly, and about as long as the right one. Vary where the right one sits. Plain language, no jargon.",
+      "Do not ask about features you are unsure exist. Prefer durable skills: prompting, giving context, checking output, safe use.",
+      "Write without dashes as punctuation and never start a sentence with And, But, Or, So or Yet.",
+      "",
+      policyBlock(profile),
+    ].join("\n"),
+    `The person:\n${describeLearner(profile, { quiz: null, skill: {}, lessons: [] })}`,
+    quizSchema(platforms)
+  );
+  const parsed = JSON.parse(text) as { questions: Omit<StoredQuizQuestion, "id">[] };
+  const questions = parsed.questions
+    .filter((q) => platforms.includes(q.platform) && q.choices.length === 4 && q.answer >= 0 && q.answer < 4)
+    .map((q) => ({ ...q, id: randomUUID(), question: tidy(q.question), choices: q.choices.map(tidy), explanation: tidy(q.explanation) }));
+  if (!questions.length) throw new ServiceUnavailableError("The skills check could not be prepared. Try again.");
+  return questions;
+}
+
+/**
+ * Skill per platform, 1..4: the average of the person's own rating and what
+ * their answers show (none right 1, half 2.5, all 4).
+ */
+export function scoreQuiz(
+  questions: StoredQuizQuestion[],
+  answers: Record<string, number>,
+  selfRating: Record<string, number>
+): Record<string, number> {
+  const skill: Record<string, number> = {};
+  for (const platform of new Set(questions.map((q) => q.platform))) {
+    const qs = questions.filter((q) => q.platform === platform);
+    const right = qs.filter((q) => answers[q.id] === q.answer).length;
+    const shown = 1 + (3 * right) / qs.length;
+    const rating = selfRating[platform];
+    const self = Number.isInteger(rating) && rating >= 1 && rating <= 4 ? rating : shown;
+    skill[platform] = Math.max(1, Math.min(4, Math.round((shown + self) / 2)));
+  }
+  return skill;
+}
+
+// ─── Lessons ─────────────────────────────────────────────────────
+
+function lessonSchema(platforms: string[]) {
+  return object({
+    platform: { type: "string", enum: platforms },
+    title: { type: "string", description: "Short and specific to the person's work." },
+    level: { type: "integer", description: "1 new .. 4 power user; match their skill on this tool." },
+    minutes: { type: "integer", description: "Time to finish, 3 to 15." },
+    why: { type: "string", description: "One or two sentences on why this matters for them now." },
+    body: {
+      type: "string",
+      description: "The lesson, 150 to 350 words. Markdown limited to short paragraphs, '- ' bullets and **bold**.",
+    },
+    tryIt: object({
+      instructions: { type: "string", description: "What to do right now, in one or two sentences." },
+      prompt: { type: "string", description: "A ready-to-use prompt with [brackets] for their details." },
+    }),
+    takeaway: { type: "string", description: "One sentence to remember." },
+  });
+}
+
+function history(profile: LearnerProfile, state: LearnerState): string {
+  if (!state.lessons.length) return "No lessons yet. This is their first: make it an early win on the tool they use most.";
+  const recent = state.lessons.slice(-12).map((l) => {
+    const said = l.feedback === "helped" ? "helped" : l.feedback === "not_helpful" ? `did NOT help${l.note ? `: "${l.note}"` : ""}` : l.status === "done" ? "finished" : "not opened yet";
+    return `- ${l.title} (${label(profile, l.platform)}, level ${l.level}): ${said}`;
+  });
+  return `Lessons they already have (never repeat one; build on what helped, fix what did not):\n${recent.join("\n")}`;
+}
+
+export async function generateLesson(profile: LearnerProfile, state: LearnerState): Promise<Omit<Lesson, "status" | "feedback" | "note">> {
+  const platforms = profile.platforms.map((p) => p.key);
+  const guidance = profile.guidance.length
+    ? `NOIT guidance that fits this person. Use it as grounding, do not copy it:\n${profile.guidance
+        .map((g) => `- [${g.platform}] ${g.title}: ${g.summary}`)
+        .join("\n")}`
+    : "";
+  const instructions = [
+    "You are the KreweAIM coach. Write the single next lesson for one person, built for them alone.",
+    "Pick the tool and topic that will pay off most in their actual work right now, given their role, apps, skill and history.",
+    "Teach only tools on their list. Use their tool's real name. Match the level to their skill on that tool, stepping up once a level is mastered.",
+    "Make it practical: a real task from their job, the exact way to do it, and a prompt they can paste today.",
+    "If you are not sure a feature exists in their version of a tool, teach the durable skill instead of the feature.",
+    "Never ask them to paste passwords, client confidential details or personal data anywhere.",
+    "Voice: warm, plain, confident. Write without dashes as punctuation, never start a sentence with And, But, Or, So or Yet, and vary sentence length.",
+    "",
+    policyBlock(profile),
+    guidance,
+  ].join("\n");
+  const user = `The person:\n${describeLearner(profile, state)}\n\n${history(profile, state)}`;
+  const { text, model } = await callClaudeWithModel(instructions, user, lessonSchema(platforms));
+  const raw = JSON.parse(text) as Omit<Lesson, "id" | "createdAt" | "model" | "status" | "feedback" | "note">;
+  if (!platforms.includes(raw.platform)) throw new ServiceUnavailableError("The lesson came back for a tool you do not have. Try again.");
+  return {
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    platform: raw.platform,
+    title: tidy(raw.title),
+    level: Math.max(1, Math.min(4, Math.round(raw.level))),
+    minutes: Math.max(3, Math.min(15, Math.round(raw.minutes))),
+    why: tidy(raw.why),
+    body: tidy(raw.body),
+    tryIt: { instructions: tidy(raw.tryIt.instructions), prompt: raw.tryIt.prompt.trim() },
+    takeaway: tidy(raw.takeaway),
+    model,
+  };
+}
+
+// ─── Writing rules ───────────────────────────────────────────────
+
+/**
+ * NOIT's writing rules, enforced on every generated text: no em or en dashes
+ * and no spaced hyphen used as punctuation. Hyphenated words are untouched.
+ */
+export function tidy(text: string): string {
+  return text
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/(\S) - (\S)/g, "$1, $2")
+    .replace(/,\s*,/g, ",")
+    .trim();
+}
+
+// ─── Claude ──────────────────────────────────────────────────────
+
+async function callClaude(system: string, user: string, schema: Record<string, unknown>): Promise<string> {
+  return (await callClaudeWithModel(system, user, schema)).text;
+}
+
+async function callClaudeWithModel(system: string, user: string, schema: Record<string, unknown>): Promise<{ text: string; model: string }> {
+  if (!coachConfigured()) throw new ServiceUnavailableError("KreweAIM coaching is not set up yet.");
+  const client = new Anthropic({ timeout: REQUEST_TIMEOUT_MS, maxRetries: 0 });
+  let response: Anthropic.Beta.BetaMessage;
+  try {
+    response = await client.beta.messages.create({
+      model: process.env.KREWEAIM_MODEL || DEFAULT_MODEL,
+      max_tokens: 8000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "low", format: { type: "json_schema", schema } },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+  } catch (err) {
+    if (err instanceof Anthropic.APIConnectionTimeoutError) {
+      throw new ServiceUnavailableError("That took too long. Try again.");
+    }
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+      throw new ServiceUnavailableError("KreweAIM coaching could not sign in to its AI service.");
+    }
+    if (err instanceof Anthropic.BadRequestError) {
+      throw new ServiceUnavailableError(`KreweAIM coaching rejected the request: ${err.message}`);
+    }
+    if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.APIError) {
+      throw new ServiceUnavailableError("KreweAIM coaching is busy. Try again shortly.");
+    }
+    throw err;
+  }
+  if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
+    throw new ServiceUnavailableError("That lesson could not be written. Try again.");
+  }
+  const text = response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  try {
+    JSON.parse(text);
+  } catch {
+    throw new ServiceUnavailableError("KreweAIM coaching returned an unusable answer. Try again.");
+  }
+  return { text, model: response.model };
+}
