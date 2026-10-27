@@ -21,12 +21,17 @@ import {
   Checkmark24Regular,
   ThumbLike24Regular,
   ThumbDislike24Regular,
+  Chat24Regular,
+  ArrowSync24Regular,
+  Send24Regular,
 } from "@fluentui/react-icons";
 import { isDemoMode } from "../../shared/auth/demoMode";
 import { Fleur } from "../../shared/components/AimMark";
 import {
+  askCoach,
   fetchMyAim,
   nextLesson,
+  reworkLesson,
   startSkillsCheck,
   submitSkillsCheck,
   updateLesson,
@@ -75,7 +80,36 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
   },
   done: { opacity: 0.75 },
+  coach: {
+    padding: "12px 16px",
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  you: {
+    alignSelf: "flex-end",
+    maxWidth: "85%",
+    padding: "8px 12px",
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorBrandBackground2,
+    whiteSpace: "pre-wrap",
+  },
+  coachSays: {
+    maxWidth: "95%",
+    padding: "8px 12px",
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
 });
+
+const STARTERS = [
+  "I'm not set up for this yet. Walk me through getting started.",
+  "Make this simpler.",
+  "Take this a step further.",
+  "Fit this to a different task I do.",
+];
 
 const RATINGS = ["New to it", "Getting started", "Comfortable", "Power user"];
 const LEVELS = ["", "Getting started", "Building", "Confident", "Power user"];
@@ -435,7 +469,16 @@ export function KreweAimPage() {
       </Card>
 
       {me.lessons.map((lesson) => (
-        <LessonCard key={lesson.id} lesson={lesson} label={labelFor(lesson.platform)} busy={!!busy} onUpdate={(u) => run(`l:${lesson.id}`, () => updateLesson(lesson.id, u))} />
+        <LessonCard
+          key={lesson.id}
+          lesson={lesson}
+          label={labelFor(lesson.platform)}
+          busy={!!busy}
+          working={busy?.startsWith(`c:${lesson.id}`) ? "coach" : busy?.startsWith(`r:${lesson.id}`) ? "rework" : null}
+          onUpdate={(u) => run(`l:${lesson.id}`, () => updateLesson(lesson.id, u))}
+          onCoach={(message) => run(`c:${lesson.id}`, () => askCoach(lesson.id, message))}
+          onRework={(request) => run(`r:${lesson.id}`, () => reworkLesson(lesson.id, request))}
+        />
       ))}
     </div>
   );
@@ -445,14 +488,29 @@ function LessonCard({
   lesson,
   label,
   busy,
+  working,
   onUpdate,
+  onCoach,
+  onRework,
 }: {
   lesson: AimLesson;
   label: string;
   busy: boolean;
+  working: "coach" | "rework" | null;
   onUpdate: (u: { status?: "done"; feedback?: "helped" | "not_helpful"; note?: string }) => void;
+  onCoach: (message: string) => Promise<boolean>;
+  onRework: (request: string) => Promise<boolean>;
 }) {
   const styles = useStyles();
+  const thread = lesson.thread ?? [];
+  const [coachOpen, setCoachOpen] = useState(thread.length > 0);
+  const [draft, setDraft] = useState("");
+  const send = async () => {
+    if (draft.trim() && (await onCoach(draft.trim()))) setDraft("");
+  };
+  const rework = async () => {
+    if (await onRework(draft.trim())) setDraft("");
+  };
   const [copied, setCopied] = useState(false);
   const [askNote, setAskNote] = useState(false);
   const [note, setNote] = useState("");
@@ -474,6 +532,7 @@ function LessonCard({
             {LEVELS[lesson.level]} · {lesson.minutes} min
           </Text>
           {lesson.status === "done" && <Badge appearance="tint" color="success">Done</Badge>}
+          {lesson.revisedAt && <Badge appearance="tint" color="brand">Reworked for you</Badge>}
         </div>
         <Title3>{lesson.title}</Title3>
         <Text italic>{lesson.why}</Text>
@@ -493,6 +552,58 @@ function LessonCard({
           )}
         </div>
         <Text weight="semibold">{lesson.takeaway}</Text>
+        {!coachOpen ? (
+          <div>
+            <Button appearance="primary" icon={<Chat24Regular />} onClick={() => setCoachOpen(true)}>
+              Work on this with your coach
+            </Button>
+          </div>
+        ) : (
+          <div className={styles.coach}>
+            <Text weight="semibold">Work on this with your coach</Text>
+            <Text size={200} className={styles.muted}>
+              Ask a question, say what doesn't fit how you work, or take the idea further. When it's right, rework the lesson
+              so it matches. Don't share passwords or client confidential details.
+            </Text>
+            {thread.map((t, i) =>
+              t.from === "you" ? (
+                <div key={i} className={styles.you}>
+                  <Text>{t.text}</Text>
+                </div>
+              ) : (
+                <div key={i} className={styles.coachSays}>
+                  <LessonText text={t.text} />
+                </div>
+              )
+            )}
+            {!thread.length && (
+              <div className={styles.row}>
+                {STARTERS.map((s) => (
+                  <Button key={s} size="small" appearance="outline" onClick={() => setDraft(s)}>
+                    {s}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <Textarea
+              value={draft}
+              onChange={(_, d) => setDraft(d.value)}
+              placeholder="For example: I don't run those exports yet. Where would I start?"
+              resize="vertical"
+              maxLength={1500}
+            />
+            <div className={styles.row}>
+              <Button appearance="primary" icon={<Send24Regular />} disabled={busy || !draft.trim()} onClick={send}>
+                Ask your coach
+              </Button>
+              <Button icon={<ArrowSync24Regular />} disabled={busy || (!draft.trim() && !thread.length)} onClick={rework}>
+                Rework this lesson
+              </Button>
+              {working === "coach" && <Spinner size="small" label="Your coach is thinking..." />}
+              {working === "rework" && <Spinner size="small" label="Reworking your lesson..." />}
+            </div>
+          </div>
+        )}
         {lesson.feedback ? (
           <Text size={200} className={styles.muted}>
             {lesson.feedback === "helped" ? "You said this helped." : "You said this did not help. Your next lessons take that into account."}

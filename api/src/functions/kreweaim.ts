@@ -24,7 +24,11 @@ import {
 } from "../lib/kreweaimLearner";
 import {
   coachConfigured,
+  coachReply,
   generateLesson,
+  MAX_COACH_MESSAGE,
+  MAX_COACH_TURNS,
+  reworkLesson,
   generateQuiz,
   policyVersion,
   quizIsStale,
@@ -62,6 +66,8 @@ app.http("tenantAimMembers", {
 //   POST /api/kreweaim/me/quiz/answers         score it   { answers, selfRating }
 //   POST /api/kreweaim/me/lessons              generate the next lesson
 //   POST /api/kreweaim/me/lessons/{lessonId}   { status?: "done", feedback?, note? }
+//   POST /api/kreweaim/me/lessons/{lessonId}/coach    work the lesson through { message }
+//   POST /api/kreweaim/me/lessons/{lessonId}/rework   rewrite it from that  { request? }
 //
 // Every route acts only for the caller (tid + oid from their token), and only
 // while they are in their company's KreweAIM group. Nobody can read or act on
@@ -275,5 +281,68 @@ app.http("kreweAimLessonUpdate", {
     if (typeof body.note === "string") lesson.note = body.note.trim().slice(0, 500) || null;
     await writeState(caller.tenantId, caller.userObjectId, state, etag);
     return { status: 200, jsonBody: view(profile, state, true) };
+  }),
+});
+
+/** One of the caller's lessons that still fits their tools and their company's AI policy. */
+function currentLesson(profile: LearnerProfile, state: LearnerState, lessonId: string) {
+  const lesson = currentLessons(profile, state).find((l) => l.id === lessonId);
+  if (!lesson) throw new NotFoundError("That lesson is not yours or no longer exists.");
+  return lesson;
+}
+
+app.http("kreweAimLessonCoach", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "kreweaim/me/lessons/{lessonId}/coach",
+  handler: withAuth(async (request, caller) => {
+    const profile = await requireProfile(caller);
+    const body = await readJsonBody(request);
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    if (!message) throw new BadRequestError("Write a message for your coach first.");
+    if (message.length > MAX_COACH_MESSAGE) throw new BadRequestError(`Keep it under ${MAX_COACH_MESSAGE} characters.`);
+    const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
+    const lesson = currentLesson(profile, state, request.params.lessonId);
+    if ((lesson.thread ?? []).filter((t) => t.from === "you").length >= MAX_COACH_TURNS) {
+      throw new BadRequestError("This lesson has had a full conversation. Rework it, or get your next lesson.");
+    }
+    const reply = await coachReply(profile, state, lesson, message);
+    const latest = await sameProfileAfterGeneration(caller, profile, "your coach's answer");
+    const at = new Date().toISOString();
+    lesson.thread = [...(lesson.thread ?? []), { from: "you", text: message, at }, { from: "coach", text: reply, at }];
+    await writeState(caller.tenantId, caller.userObjectId, state, etag);
+    return { status: 200, jsonBody: view(latest, state, true) };
+  }),
+});
+
+app.http("kreweAimLessonRework", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "kreweaim/me/lessons/{lessonId}/rework",
+  handler: withAuth(async (request, caller) => {
+    const profile = await requireProfile(caller);
+    const body = await readJsonBody(request);
+    const ask = typeof body.request === "string" ? body.request.trim() : "";
+    if (ask.length > MAX_COACH_MESSAGE) throw new BadRequestError(`Keep it under ${MAX_COACH_MESSAGE} characters.`);
+    const { state, etag } = await readState(caller.tenantId, caller.userObjectId);
+    const lesson = currentLesson(profile, state, request.params.lessonId);
+    if (!ask && !(lesson.thread ?? []).length) {
+      throw new BadRequestError("Tell your coach what to change first.");
+    }
+    // Each rework adds a coach turn, so reworks count against the same limit as messages.
+    if ((lesson.thread ?? []).filter((t) => t.from === "coach").length >= MAX_COACH_TURNS) {
+      throw new BadRequestError("This lesson has had a full conversation. Get your next lesson instead.");
+    }
+    const revised = await reworkLesson(profile, state, lesson, ask);
+    const latest = await sameProfileAfterGeneration(caller, profile, "the reworked lesson");
+    const at = new Date().toISOString();
+    Object.assign(lesson, revised, { status: "new", feedback: null, note: null, revisedAt: at });
+    lesson.thread = [
+      ...(lesson.thread ?? []),
+      ...(ask ? [{ from: "you" as const, text: ask, at }] : []),
+      { from: "coach" as const, text: "I reworked the lesson above from what you told me.", at },
+    ];
+    await writeState(caller.tenantId, caller.userObjectId, state, etag);
+    return { status: 200, jsonBody: view(latest, state, true) };
   }),
 });

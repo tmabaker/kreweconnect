@@ -75,6 +75,16 @@ export interface Lesson {
   status: "new" | "done";
   feedback: "helped" | "not_helpful" | null;
   note: string | null;
+  /** The person working the lesson through with the coach. Used only for this lesson. */
+  thread?: CoachTurn[];
+  /** Set when the person had the coach rework the lesson. */
+  revisedAt?: string;
+}
+
+export interface CoachTurn {
+  from: "you" | "coach";
+  text: string;
+  at: string;
 }
 
 export interface LearnerState {
