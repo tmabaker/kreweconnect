@@ -126,15 +126,18 @@ export function KreweAimPage() {
       .catch((err) => setError(err?.message || "Could not load your KreweAIM."));
   }, []);
 
-  const run = async (label: string, action: () => Promise<AimMe>) => {
+  /** Runs an action; true when it succeeded, so callers only move on after a real success. */
+  const run = async (label: string, action: () => Promise<AimMe>): Promise<boolean> => {
     setBusy(label);
     setError(null);
     try {
       setMe(await action());
+      return true;
     } catch (err) {
       setError((err as { message?: string })?.message || "Something went wrong. Try again.");
       // The program may have changed under them (a new tool, a new policy): show its current state.
       fetchMyAim().then(setMe).catch(() => undefined);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -339,8 +342,7 @@ export function KreweAimPage() {
                 appearance="primary"
                 disabled={!complete || !!busy}
                 onClick={async () => {
-                  await run("answers", () => submitSkillsCheck(answers, ratings));
-                  setShowResults(true);
+                  if (await run("answers", () => submitSkillsCheck(answers, ratings))) setShowResults(true);
                 }}
               >
                 See my results

@@ -13,6 +13,7 @@ import { app } from "@azure/functions";
 import { fetchAimMembers, fetchAimMembersAllTenants, isAimMember } from "../lib/graphClient";
 import { config } from "../lib/config";
 import type { CallerContext } from "../lib/authMiddleware";
+import { createHash } from "node:crypto";
 import { BadRequestError, ConflictError, NotFoundError, readJsonBody, withAuth } from "../lib/http";
 import {
   readProfile,
@@ -66,6 +67,23 @@ app.http("tenantAimMembers", {
 // while they are in their company's KreweAIM group. Nobody can read or act on
 // anyone else's program here.
 
+
+/** Fingerprint of everything generation reads from a profile. */
+function profileVersion(profile: LearnerProfile): string {
+  return createHash("sha256").update(JSON.stringify(profile)).digest("hex");
+}
+
+/**
+ * The profile may be republished or withdrawn while the model is writing (up to 30 seconds).
+ * Anything generated from an older profile is not saved or shown.
+ */
+async function sameProfileAfterGeneration(caller: CallerContext, used: LearnerProfile, what: string): Promise<LearnerProfile> {
+  const latest = await readProfile(caller.tenantId, caller.userObjectId);
+  if (!latest || profileVersion(latest) !== profileVersion(used)) {
+    throw new ConflictError(`Your KreweAIM program changed while ${what} was being written. Try again.`);
+  }
+  return latest;
+}
 
 /** Unfinished lessons someone may hold at once, so generation stays deliberate. */
 const MAX_OPEN_LESSONS = 3;
@@ -173,12 +191,7 @@ app.http("kreweAimQuizStart", {
           : [];
     if (platforms.length) {
       const questions = await generateQuiz(profile, platforms);
-      // Same guard as lessons: the profile may have changed during the model call.
-      const latest = (await readProfile(caller.tenantId, caller.userObjectId)) ?? profile;
-      const tools = new Set(latest.platforms.map((p) => p.key));
-      if (!platforms.every((p) => tools.has(p)) || policyVersion(latest) !== policyVersion(profile)) {
-        throw new ConflictError("Your KreweAIM program changed while the check was being written. Try again.");
-      }
+      await sameProfileAfterGeneration(caller, profile, "the check");
       state.quiz = {
         platforms,
         policyVersion: policyVersion(profile),
@@ -214,9 +227,9 @@ app.http("kreweAimQuizAnswers", {
     quiz.answers = Object.fromEntries(quiz.questions.filter(valid).map((q) => [q.id, answers[q.id] as number]));
     if (Object.keys(quiz.answers).length < quiz.questions.length) throw new BadRequestError("Answer every question first.");
     const asked = quiz.platforms ?? [...new Set(quiz.questions.map((q) => q.platform))];
-    quiz.selfRating = Object.fromEntries(
-      asked.filter((p) => Number.isInteger(ratings[p])).map((p) => [p, ratings[p] as number])
-    );
+    const rated = (p: string) => Number.isInteger(ratings[p]) && (ratings[p] as number) >= 1 && (ratings[p] as number) <= 4;
+    if (!asked.every(rated)) throw new BadRequestError("Rate how comfortable you are with each tool first.");
+    quiz.selfRating = Object.fromEntries(asked.map((p) => [p, ratings[p] as number]));
     quiz.completedAt = new Date().toISOString();
     state.skill = { ...state.skill, ...scoreQuiz(quiz.questions, quiz.answers, quiz.selfRating) };
     await writeState(caller.tenantId, caller.userObjectId, state, etag);
@@ -237,12 +250,7 @@ app.http("kreweAimNextLesson", {
       throw new BadRequestError(`Finish one of your ${MAX_OPEN_LESSONS} open lessons first.`);
     }
     const lesson = await generateLesson(profile, state);
-    // The profile may have been republished during the model call: never save or show a lesson for
-    // a tool that was just removed or under a policy that was just replaced.
-    const latest = (await readProfile(caller.tenantId, caller.userObjectId)) ?? profile;
-    if (!latest.platforms.some((p) => p.key === lesson.platform) || policyVersion(latest) !== lesson.policyVersion) {
-      throw new ConflictError("Your KreweAIM program changed while that lesson was being written. Try again.");
-    }
+    const latest = await sameProfileAfterGeneration(caller, profile, "that lesson");
     state.lessons.push({ ...lesson, status: "new", feedback: null, note: null });
     await writeState(caller.tenantId, caller.userObjectId, state, etag);
     return { status: 200, jsonBody: view(latest, state, true) };
