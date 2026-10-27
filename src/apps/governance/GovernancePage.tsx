@@ -77,7 +77,7 @@ export function GovernancePage() {
             KREWE Governance — policy templates with {"{{variable}}"} placeholders, assembled per client
           </Text>
         </div>
-        <Button appearance="primary" icon={<Add24Regular />} onClick={() => navigate("/governance/policies/new")}>
+        <Button appearance="primary" icon={<Add24Regular />} onClick={() => navigate("/krewegovernance/policies/new")}>
           New Policy
         </Button>
       </div>
@@ -135,7 +135,7 @@ export function GovernancePage() {
                 <tr
                   key={policy.id}
                   className={styles.row}
-                  onClick={() => navigate(`/governance/policies/${policy.id}`)}
+                  onClick={() => navigate(`/krewegovernance/policies/${policy.id}`)}
                 >
                   <td className={styles.td}>
                     <Text weight="semibold" style={{ display: "block" }}>{policy.title}</Text>

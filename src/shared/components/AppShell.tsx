@@ -167,18 +167,18 @@ function FleurIcon() {
 }
 
 const navItems = [
-  { path: "/", label: "Dashboard", icon: <Home24Regular />, section: null, mspOnly: true },
+  { path: "/kreweconnect", label: "Dashboard", icon: <Home24Regular />, section: null, mspOnly: true },
   // KreweAIM first: a personal page every user can open (each sees only their own status).
   { path: "/kreweaim", label: "AI Mastery", icon: <FleurIcon />, section: "KreweAIM" },
-  { path: "/directory", label: "Directory", icon: <People24Regular />, section: "KreweConnect" },
-  { path: "/org-chart", label: "Org Chart", icon: <Organization24Regular />, section: null, indent: true },
-  { path: "/contracts", label: "Dashboard", icon: <Gavel24Regular />, section: "KreweReview", mspOnly: true },
-  { path: "/contracts/all", label: "All Contracts", icon: <DocumentText24Regular />, section: null, indent: true, mspOnly: true },
-  { path: "/contracts/renewals", label: "Renewals", icon: <CalendarClock24Regular />, section: null, indent: true, mspOnly: true },
+  { path: "/kreweconnect/directory", label: "Directory", icon: <People24Regular />, section: "KreweConnect" },
+  { path: "/kreweconnect/org-chart", label: "Org Chart", icon: <Organization24Regular />, section: null, indent: true },
+  { path: "/krewereview", label: "Dashboard", icon: <Gavel24Regular />, section: "KreweReview", mspOnly: true },
+  { path: "/krewereview/all", label: "All Contracts", icon: <DocumentText24Regular />, section: null, indent: true, mspOnly: true },
+  { path: "/krewereview/renewals", label: "Renewals", icon: <CalendarClock24Regular />, section: null, indent: true, mspOnly: true },
   // Governance: clients keep the "Clients" entry — it routes them straight to
   // their own company (wizard answers + assembled policies).
-  { path: "/governance", label: "Policy Library", icon: <ShieldTask24Regular />, section: "KREWE Governance", mspOnly: true },
-  { path: "/governance/clients", label: "Clients", icon: <Building24Regular />, section: null, indent: true },
+  { path: "/krewegovernance", label: "Policy Library", icon: <ShieldTask24Regular />, section: "KREWE Governance", mspOnly: true },
+  { path: "/krewegovernance/clients", label: "Clients", icon: <Building24Regular />, section: null, indent: true },
   // KreweWorks: each client's portal is its own site; clients see only theirs.
   { path: "/kreweworks", label: "Employee Portal", icon: <PeopleTeam24Regular />, section: "KreweWorks" },
   { path: "/settings", label: "Settings", icon: <Settings24Regular />, section: null, mspOnly: true },
@@ -272,13 +272,13 @@ export function AppShell() {
             .filter((item) => userContext.isMspAdmin || !(item as any).mspOnly)
             .map((item) => {
             const isActive =
-              item.path === "/"
-                ? location.pathname === "/"
-                : item.path === "/contracts"
-                  ? location.pathname === "/contracts"
-                  : item.path === "/governance"
-                    ? location.pathname === "/governance" ||
-                      location.pathname.startsWith("/governance/policies")
+              item.path === "/kreweconnect"
+                ? location.pathname.replace(/\/$/, "") === "/kreweconnect"
+                : item.path === "/krewereview"
+                  ? location.pathname === "/krewereview"
+                  : item.path === "/krewegovernance"
+                    ? location.pathname === "/krewegovernance" ||
+                      location.pathname.startsWith("/krewegovernance/policies")
                     : location.pathname.startsWith(item.path);
 
             return (

@@ -54,6 +54,12 @@ export async function initializeMsal(): Promise<void> {
     if (result?.account) {
       msalInstance.setActiveAccount(result.account);
     }
+    // Back to the page sign-in started from, before the router reads the URL. Only an
+    // in-app path is accepted, so the state value can never send anyone off the site.
+    const returnTo = result?.state;
+    if (returnTo && /^\/app\/[^/]/.test(returnTo) && returnTo !== window.location.pathname) {
+      window.history.replaceState(null, "", returnTo);
+    }
   } catch (err) {
     // A failed/duplicate redirect shouldn't wedge startup; clear and continue.
     console.error("MSAL redirect handling failed:", err);

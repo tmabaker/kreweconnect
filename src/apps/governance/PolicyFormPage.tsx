@@ -111,10 +111,10 @@ export function PolicyFormPage() {
       };
       if (isEdit) {
         await updatePolicy(id!, { ...payload, changeNotes: changeNotes || undefined });
-        navigate(`/governance/policies/${id}`);
+        navigate(`/krewegovernance/policies/${id}`);
       } else {
         const created = await createPolicy(payload);
-        navigate(`/governance/policies/${created.id}`);
+        navigate(`/krewegovernance/policies/${created.id}`);
       }
     } catch (err) {
       setSaveError(errorMessage(err));
@@ -137,7 +137,7 @@ export function PolicyFormPage() {
         <Button
           appearance="subtle"
           icon={<ArrowLeft24Regular />}
-          onClick={() => navigate(isEdit ? `/governance/policies/${id}` : "/governance")}
+          onClick={() => navigate(isEdit ? `/krewegovernance/policies/${id}` : "/krewegovernance")}
         >
           {isEdit ? "Back to policy" : "Policy Library"}
         </Button>
@@ -239,7 +239,7 @@ export function PolicyFormPage() {
             <Button appearance="primary" icon={<Save24Regular />} disabled={saving} onClick={handleSave}>
               {saving ? "Saving…" : isEdit ? "Save changes" : "Create policy"}
             </Button>
-            <Button onClick={() => navigate(isEdit ? `/governance/policies/${id}` : "/governance")}>
+            <Button onClick={() => navigate(isEdit ? `/krewegovernance/policies/${id}` : "/krewegovernance")}>
               Cancel
             </Button>
           </div>

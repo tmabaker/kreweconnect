@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import {
   FluentProvider,
   webDarkTheme,
@@ -77,6 +77,12 @@ const AssembledPolicyPage = lazy(() =>
 // Use dark theme by default (NOIT branding)
 const theme = webDarkTheme;
 
+/** Sends an old address to the same page at the app's own address, keeping the rest of the path and query. */
+function MovedTo({ from, to }: { from: string; to: string }) {
+  const { pathname, search, hash } = useLocation();
+  return <Navigate to={`${to}${pathname.slice(from.length)}${search}${hash}`} replace />;
+}
+
 function App() {
   return (
     <FluentProvider theme={theme} style={{ height: "100vh" }}>
@@ -84,41 +90,48 @@ function App() {
       <AuthProvider>
         <RequireAuth>
           <TenantProvider>
-          <BrowserRouter basename="/app/kreweconnect">
+          <BrowserRouter basename="/app">
             <Routes>
               <Route element={<AppShell />}>
-                {/* MSP-admin-only landing. Clients are redirected to /directory. */}
-                <Route index element={<MspAdminRoute><DashboardPage /></MspAdminRoute>} />
+                {/* MSP-admin-only landing, and where sign-in returns. Clients are redirected to the directory. */}
+                <Route path="/kreweconnect" element={<MspAdminRoute><DashboardPage /></MspAdminRoute>} />
                 {/* KreweConnect — available to clients (their own tenant only). */}
-                <Route path="/directory" element={<DirectoryPage />} />
-                <Route path="/directory/:id" element={<EmployeeDetailPage />} />
-                <Route path="/org-chart" element={<OrgChartPage />} />
+                <Route path="/kreweconnect/directory" element={<DirectoryPage />} />
+                <Route path="/kreweconnect/directory/:id" element={<EmployeeDetailPage />} />
+                <Route path="/kreweconnect/org-chart" element={<OrgChartPage />} />
                 {/* KreweReview / Contracts + Settings — MSP-admin only. */}
-                <Route path="/contracts" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
-                <Route path="/contracts/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
-                <Route path="/contracts/new" element={<MspAdminRoute><ContractFormPage mode="new" /></MspAdminRoute>} />
-                <Route path="/contracts/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
-                <Route path="/contracts/lists" element={<MspAdminRoute><PicklistsPage /></MspAdminRoute>} />
-                <Route path="/contracts/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
-                <Route path="/contracts/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
-                <Route path="/contracts/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
+                <Route path="/krewereview" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
+                <Route path="/krewereview/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
+                <Route path="/krewereview/new" element={<MspAdminRoute><ContractFormPage mode="new" /></MspAdminRoute>} />
+                <Route path="/krewereview/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
+                <Route path="/krewereview/lists" element={<MspAdminRoute><PicklistsPage /></MspAdminRoute>} />
+                <Route path="/krewereview/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
+                <Route path="/krewereview/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
+                <Route path="/krewereview/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
                 <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
                 {/* KREWE Governance — library management is MSP-only; the wizard,
                     client profile, and assembled viewer are client-reachable
                     (the API scopes them to the caller's own company). */}
-                <Route path="/governance" element={<MspAdminRoute><GovernancePage /></MspAdminRoute>} />
-                <Route path="/governance/policies/new" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
-                <Route path="/governance/policies/:id" element={<MspAdminRoute><PolicyDetailPage /></MspAdminRoute>} />
-                <Route path="/governance/policies/:id/edit" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
-                <Route path="/governance/policies/:id/variables" element={<MspAdminRoute><PolicyVariablesPage /></MspAdminRoute>} />
-                <Route path="/governance/policies/:id/wizard" element={<WizardPage />} />
-                <Route path="/governance/clients" element={<GovClientsPage />} />
-                <Route path="/governance/clients/:id" element={<GovClientDetailPage />} />
-                <Route path="/governance/assembled/:id" element={<AssembledPolicyPage />} />
+                <Route path="/krewegovernance" element={<MspAdminRoute><GovernancePage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/new" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id" element={<MspAdminRoute><PolicyDetailPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id/edit" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id/variables" element={<MspAdminRoute><PolicyVariablesPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id/wizard" element={<WizardPage />} />
+                <Route path="/krewegovernance/clients" element={<GovClientsPage />} />
+                <Route path="/krewegovernance/clients/:id" element={<GovClientDetailPage />} />
+                <Route path="/krewegovernance/assembled/:id" element={<AssembledPolicyPage />} />
                 <Route path="/kreweworks" element={<KreweWorksPage />} />
                 {/* KreweAIM — client-reachable; members are scoped to the caller. */}
                 <Route path="/kreweaim" element={<KreweAimPage />} />
               </Route>
+              {/* Each app has its own address. Links from before that keep working. */}
+              <Route path="/kreweconnect/kreweaim" element={<MovedTo from="/kreweconnect/kreweaim" to="/kreweaim" />} />
+              <Route path="/kreweconnect/contracts/*" element={<MovedTo from="/kreweconnect/contracts" to="/krewereview" />} />
+              <Route path="/kreweconnect/governance/*" element={<MovedTo from="/kreweconnect/governance" to="/krewegovernance" />} />
+              <Route path="/kreweconnect/kreweworks" element={<MovedTo from="/kreweconnect/kreweworks" to="/kreweworks" />} />
+              <Route path="/kreweconnect/settings" element={<MovedTo from="/kreweconnect/settings" to="/settings" />} />
+              <Route path="*" element={<Navigate to="/kreweconnect" replace />} />
             </Routes>
           </BrowserRouter>
           </TenantProvider>

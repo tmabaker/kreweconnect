@@ -150,7 +150,7 @@ export function PicklistsPage() {
   return (
     <div className={styles.page}>
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/contracts")} aria-label="Back" />
+        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/krewereview")} aria-label="Back" />
         <div>
           <Title2>Locations & Departments</Title2>
           <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>

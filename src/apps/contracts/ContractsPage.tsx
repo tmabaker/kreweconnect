@@ -70,8 +70,8 @@ export function ContractsPage() {
           </Text>
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <Button appearance="subtle" onClick={() => navigate("/contracts/lists")}>Locations & Departments</Button>
-          <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/contracts/new")}>
+          <Button appearance="subtle" onClick={() => navigate("/krewereview/lists")}>Locations & Departments</Button>
+          <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/krewereview/new")}>
             Upload Agreement
           </Button>
         </div>
@@ -133,7 +133,7 @@ export function ContractsPage() {
               appearance="subtle"
               icon={<ArrowRight16Regular />}
               iconPosition="after"
-              onClick={() => navigate("/contracts/renewals")}
+              onClick={() => navigate("/krewereview/renewals")}
             >
               View All Renewals
             </Button>
@@ -143,7 +143,7 @@ export function ContractsPage() {
               <Card
                 key={alert.id}
                 className={styles.alertCard}
-                onClick={() => navigate(contractPath(alert.tenantId ?? selectedTenant.tenantId, alert.contractId), { state: { from: "/contracts" } })}
+                onClick={() => navigate(contractPath(alert.tenantId ?? selectedTenant.tenantId, alert.contractId), { state: { from: "/krewereview" } })}
               >
                 <div className={styles.alertHeader}>
                   <div>
@@ -179,7 +179,7 @@ export function ContractsPage() {
             appearance="subtle"
             icon={<ArrowRight16Regular />}
             iconPosition="after"
-            onClick={() => navigate("/contracts/all")}
+            onClick={() => navigate("/krewereview/all")}
           >
             View All
           </Button>
@@ -189,7 +189,7 @@ export function ContractsPage() {
             <div
               key={contract.id}
               className={styles.recentItem}
-              onClick={() => navigate(contractPath(contract.tenantId, contract.id), { state: { from: "/contracts" } })}
+              onClick={() => navigate(contractPath(contract.tenantId, contract.id), { state: { from: "/krewereview" } })}
             >
               <div className={styles.recentLeft}>
                 <Text weight="semibold">{contract.title}</Text>

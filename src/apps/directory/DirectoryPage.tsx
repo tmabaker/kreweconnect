@@ -322,7 +322,7 @@ export function DirectoryPage() {
               key={emp.id}
               employee={emp}
               aim={aim}
-              onClick={() => navigate(`/directory/${emp.id}`)}
+              onClick={() => navigate(`/kreweconnect/directory/${emp.id}`)}
             />
           ))}
         </div>

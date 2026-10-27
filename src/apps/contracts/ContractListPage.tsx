@@ -120,7 +120,7 @@ export function ContractListPage() {
   }, [loading, contracts.length]);
   const open = (tenantId: string, id: string) => {
     saveScroll(VIEW);
-    navigate(contractPath(tenantId, id), { state: { from: "/contracts/all" } });
+    navigate(contractPath(tenantId, id), { state: { from: "/krewereview/all" } });
   };
 
   const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, showArchived].filter(Boolean).length;
@@ -148,7 +148,7 @@ export function ContractListPage() {
             {selectedTenant.tenantId === "all" ? "Agreements across every client" : `Agreements for ${selectedTenant.displayName}`}
           </Text>
         </div>
-        <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/contracts/new")}>
+        <Button icon={<Add24Regular />} appearance="primary" onClick={() => navigate("/krewereview/new")}>
           Upload Agreement
         </Button>
       </div>

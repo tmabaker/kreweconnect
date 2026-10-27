@@ -133,7 +133,7 @@ export function ClientDetailPage() {
     <div className={styles.page}>
       {isMspAdmin && (
         <div>
-          <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/governance/clients")}>
+          <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/krewegovernance/clients")}>
             All clients
           </Button>
         </div>
@@ -210,7 +210,7 @@ export function ClientDetailPage() {
             appearance="primary"
             icon={<PlayCircle24Regular />}
             disabled={!wizardPolicyId}
-            onClick={() => navigate(`/governance/policies/${wizardPolicyId}/wizard?client=${client.id}`)}
+            onClick={() => navigate(`/krewegovernance/policies/${wizardPolicyId}/wizard?client=${client.id}`)}
           >
             Open wizard
           </Button>
@@ -240,7 +240,7 @@ export function ClientDetailPage() {
                 <tr
                   key={item.id}
                   className={styles.row}
-                  onClick={() => navigate(`/governance/assembled/${item.id}`)}
+                  onClick={() => navigate(`/krewegovernance/assembled/${item.id}`)}
                 >
                   <td className={styles.td}><Text weight="semibold" size={300}>{item.policyTitle}</Text></td>
                   <td className={styles.td}><Text size={300}>{formatDateTime(item.assembledAt)}</Text></td>

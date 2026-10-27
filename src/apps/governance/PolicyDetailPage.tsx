@@ -78,7 +78,7 @@ export function PolicyDetailPage() {
   return (
     <div className={styles.page}>
       <div>
-        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/governance")}>
+        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/krewegovernance")}>
           Policy Library
         </Button>
       </div>
@@ -100,16 +100,16 @@ export function PolicyDetailPage() {
           <Button
             appearance="primary"
             icon={<PlayCircle24Regular />}
-            onClick={() => navigate(`/governance/policies/${policy.id}/wizard`)}
+            onClick={() => navigate(`/krewegovernance/policies/${policy.id}/wizard`)}
           >
             Run Wizard
           </Button>
-          <Button icon={<Edit24Regular />} onClick={() => navigate(`/governance/policies/${policy.id}/edit`)}>
+          <Button icon={<Edit24Regular />} onClick={() => navigate(`/krewegovernance/policies/${policy.id}/edit`)}>
             Edit
           </Button>
           <Button
             icon={<FormNew24Regular />}
-            onClick={() => navigate(`/governance/policies/${policy.id}/variables`)}
+            onClick={() => navigate(`/krewegovernance/policies/${policy.id}/variables`)}
           >
             Edit Variables
           </Button>
