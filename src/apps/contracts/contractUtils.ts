@@ -69,7 +69,7 @@ export const CONTRACT_TAGS: readonly { name: string; color: string }[] = [
 
 /** Where an agreement lives in the app. Tenant is part of the path so "All Tenants" links resolve. */
 export function contractPath(tenantId: string, id: string, action?: "edit" | "renew"): string {
-  return `/contracts/${encodeURIComponent(tenantId)}/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+  return `/krewereview/${encodeURIComponent(tenantId)}/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
 }
 
 // ─── Schema v2 (KreweReview) ──────────────────────────────────────

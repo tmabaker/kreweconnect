@@ -37,6 +37,8 @@ export interface AimLesson {
   status: "new" | "done";
   feedback: "helped" | "not_helpful" | null;
   note: string | null;
+  thread?: { from: "you" | "coach"; text: string; at: string }[];
+  revisedAt?: string;
 }
 
 export type AimQuiz =
@@ -75,3 +77,9 @@ export const submitSkillsCheck = (answers: Record<string, number>, selfRating: R
 export const nextLesson = () => read("/kreweaim/me/lessons", json({}));
 export const updateLesson = (id: string, update: { status?: "done"; feedback?: "helped" | "not_helpful"; note?: string }) =>
   read(`/kreweaim/me/lessons/${encodeURIComponent(id)}`, json(update));
+/** Work a lesson through with the coach: questions, a missing step, a different angle. */
+export const askCoach = (id: string, message: string) =>
+  read(`/kreweaim/me/lessons/${encodeURIComponent(id)}/coach`, json({ message }));
+/** Rewrite the lesson from that conversation, plus an optional change. */
+export const reworkLesson = (id: string, request: string) =>
+  read(`/kreweaim/me/lessons/${encodeURIComponent(id)}/rework`, json({ request }));

@@ -130,7 +130,7 @@ export function EmployeeDetailPage() {
       <div className={styles.notFound}>
         <Person24Regular style={{ fontSize: "48px", color: tokens.colorNeutralForeground3 }} />
         <Title2>Employee not found</Title2>
-        <Button appearance="primary" onClick={() => navigate("/directory")}>
+        <Button appearance="primary" onClick={() => navigate("/kreweconnect/directory")}>
           Back to Directory
         </Button>
       </div>
@@ -143,7 +143,7 @@ export function EmployeeDetailPage() {
         className={styles.backButton}
         appearance="subtle"
         icon={<ArrowLeft24Regular />}
-        onClick={() => navigate("/directory")}
+        onClick={() => navigate("/kreweconnect/directory")}
       >
         Back to Directory
       </Button>
@@ -267,7 +267,7 @@ export function EmployeeDetailPage() {
           </div>
           <div
             className={styles.personCard}
-            onClick={() => navigate(`/directory/${employee.manager!.id}`)}
+            onClick={() => navigate(`/kreweconnect/directory/${employee.manager!.id}`)}
           >
             <AimMark active={aim.has(employee.manager.id)} size={40}>
               <Avatar
@@ -303,7 +303,7 @@ export function EmployeeDetailPage() {
               <div
                 key={dr.id}
                 className={styles.personCard}
-                onClick={() => navigate(`/directory/${dr.id}`)}
+                onClick={() => navigate(`/kreweconnect/directory/${dr.id}`)}
               >
                 <AimMark active={aim.has(dr.id)} size={36}>
                   <Avatar

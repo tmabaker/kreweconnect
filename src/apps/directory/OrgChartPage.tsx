@@ -220,7 +220,7 @@ export function OrgChartPage() {
             node={orgChart}
             matchedIds={matchedIds}
             aim={aim}
-            onNavigate={(id) => navigate(`/directory/${id}`)}
+            onNavigate={(id) => navigate(`/kreweconnect/directory/${id}`)}
             depth={0}
           />
         </div>

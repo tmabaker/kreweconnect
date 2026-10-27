@@ -52,7 +52,7 @@ export function ClientsPage() {
   // A client-tenant user only ever gets one company back — skip the list.
   useEffect(() => {
     if (!isMspAdmin && clients && clients.length === 1) {
-      navigate(`/governance/clients/${clients[0].id}`, { replace: true });
+      navigate(`/krewegovernance/clients/${clients[0].id}`, { replace: true });
     }
   }, [isMspAdmin, clients, navigate]);
 
@@ -65,7 +65,7 @@ export function ClientsPage() {
     setSaveError(null);
     try {
       const created = await createGovClient({ name: name.trim(), industry: industry || undefined });
-      navigate(`/governance/clients/${created.id}`);
+      navigate(`/krewegovernance/clients/${created.id}`);
     } catch (err) {
       setSaveError(errorMessage(err));
       setSaving(false);
@@ -132,7 +132,7 @@ export function ClientsPage() {
           <Card
             key={client.id}
             className={styles.clientCard}
-            onClick={() => navigate(`/governance/clients/${client.id}`)}
+            onClick={() => navigate(`/krewegovernance/clients/${client.id}`)}
           >
             <div className={styles.cardTitle}>
               <Building24Regular />

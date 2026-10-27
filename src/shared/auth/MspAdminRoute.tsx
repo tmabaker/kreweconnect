@@ -12,7 +12,7 @@ import { detectUserTenantContext } from "../../services/tenantService";
 export function MspAdminRoute({ children }: { children: ReactNode }) {
   const { isMspAdmin } = detectUserTenantContext();
   if (!isMspAdmin) {
-    return <Navigate to="/directory" replace />;
+    return <Navigate to="/kreweconnect/directory" replace />;
   }
   return <>{children}</>;
 }

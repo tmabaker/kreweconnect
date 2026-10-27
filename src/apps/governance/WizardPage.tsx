@@ -176,7 +176,7 @@ export function WizardPage() {
     setSaving(true);
     try {
       const outcome = await assemblePolicy(policyId!, clientId, userDisplayName);
-      navigate(`/governance/assembled/${outcome.assembledPolicyId}`, {
+      navigate(`/krewegovernance/assembled/${outcome.assembledPolicyId}`, {
         state: { missingVariables: outcome.missingVariables },
       });
     } catch (err) {
@@ -194,7 +194,7 @@ export function WizardPage() {
           appearance="subtle"
           icon={<ArrowLeft24Regular />}
           onClick={() =>
-            isMspAdmin ? navigate(`/governance/policies/${policyId}`) : navigate("/governance/clients")
+            isMspAdmin ? navigate(`/krewegovernance/policies/${policyId}`) : navigate("/krewegovernance/clients")
           }
         >
           Back

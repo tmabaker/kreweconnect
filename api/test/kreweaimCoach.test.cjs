@@ -171,3 +171,49 @@ test("free-form feedback notes never reach the model; unmeasured tools start low
   assert.match(user, /Old .*did NOT help/);
   assert.match(user, /Skill not measured yet for: Copilot Chat/);
 });
+
+const lessonFixture = {
+  id: "l1", createdAt: "2026-10-27", platform: "m365_copilot", title: "Summarize your backup exports", level: 2, minutes: 10,
+  why: "You review backups weekly.", body: "Open the export in your Reports folder.", tryIt: { instructions: "Try it.", prompt: "Summarize [export]" },
+  takeaway: "Check weekly.", model: "claude-opus-5-5", policyVersion: "x", status: "new", feedback: null, note: null,
+  thread: [{ from: "you", text: "I do not run these exports yet.", at: "t" }, { from: "coach", text: "Start in the portal.", at: "t" }],
+};
+
+test("the coach answers inside the lesson, with the conversation so far and the company rules", async () => {
+  let sent;
+  global.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return claudeReply({ reply: "First, set up the export — then save it weekly." });
+  };
+  const reply = await coach.coachReply(profile, { quiz: null, skill: { m365_copilot: 2 }, lessons: [] }, lessonFixture, "Where is that setting?");
+  assert.equal(reply, "First, set up the export, then save it weekly.");
+  const user = sent.messages[0].content;
+  assert.match(user, /Summarize your backup exports/);
+  assert.match(user, /Learner: I do not run these exports yet\.\n\nCoach: Start in the portal\./);
+  assert.match(user, /Learner: Where is that setting\?$/);
+  assert.match(sent.system, /Never paste client financials/);
+  assert.match(sent.system, /Rework this lesson/);
+});
+
+test("a reworked lesson is built from the conversation, never assumes a setup, and stays on the person's tools", async () => {
+  let sent;
+  global.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return claudeReply({
+      platform: "copilot_chat", title: "Set up your first export — then summarize it", level: 1, minutes: 12,
+      why: "", body: "", tryIt: { instructions: "", prompt: "" }, takeaway: "",
+    });
+  };
+  const revised = await coach.reworkLesson(profile, { quiz: null, skill: {}, lessons: [] }, lessonFixture, "Start me from scratch");
+  assert.deepEqual(sent.output_config.format.schema.properties.platform.enum, ["m365_copilot", "copilot_chat"]);
+  assert.match(sent.system, /Never assume a setup/);
+  assert.match(sent.messages[0].content, /I do not run these exports yet/);
+  assert.match(sent.messages[0].content, /What they want changed: Start me from scratch/);
+  assert.equal(revised.title, "Set up your first export, then summarize it");
+  assert.equal(revised.platform, "copilot_chat");
+  assert.equal(revised.policyVersion, coach.policyVersion(profile));
+
+  global.fetch = async () =>
+    claudeReply({ platform: "gemini", title: "x", level: 1, minutes: 5, why: "", body: "", tryIt: { instructions: "", prompt: "" }, takeaway: "" });
+  await assert.rejects(coach.reworkLesson(profile, { quiz: null, skill: {}, lessons: [] }, lessonFixture, ""), /tool you do not have/);
+});

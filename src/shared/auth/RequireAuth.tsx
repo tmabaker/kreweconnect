@@ -41,7 +41,10 @@ function RequireAuthMsal({ children }: { children: ReactNode }) {
     // loginRedirect returns a promise that rejects if MSAL can't even start the
     // redirect (e.g. misconfigured redirect URI / interaction already in
     // progress). Surface it instead of letting the failure vanish silently.
-    instance.loginRedirect(loginRequest).catch((error) => {
+    // Entra always returns to the one registered redirect URI; `state` carries the page the
+    // person opened (each app has its own address) so startup can put them back there.
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    instance.loginRedirect({ ...loginRequest, state: returnTo }).catch((error) => {
       console.error("KreweConnect login failed to start:", error);
     });
   };

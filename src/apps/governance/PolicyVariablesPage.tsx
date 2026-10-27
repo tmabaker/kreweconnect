@@ -106,7 +106,7 @@ export function PolicyVariablesPage() {
         id!,
         rows.map((row, index) => ({ ...row, key: row.key.trim(), sortOrder: index }))
       );
-      navigate(`/governance/policies/${id}`);
+      navigate(`/krewegovernance/policies/${id}`);
     } catch (err) {
       setSaveError(errorMessage(err));
       setSaving(false);
@@ -125,7 +125,7 @@ export function PolicyVariablesPage() {
   return (
     <div className={styles.page}>
       <div>
-        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate(`/governance/policies/${id}`)}>
+        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate(`/krewegovernance/policies/${id}`)}>
           Back to policy
         </Button>
       </div>
@@ -237,7 +237,7 @@ export function PolicyVariablesPage() {
         <Button appearance="primary" icon={<Save24Regular />} disabled={saving} onClick={handleSave}>
           {saving ? "Saving…" : "Save variables"}
         </Button>
-        <Button onClick={() => navigate(`/governance/policies/${id}`)}>Cancel</Button>
+        <Button onClick={() => navigate(`/krewegovernance/policies/${id}`)}>Cancel</Button>
       </div>
     </div>
   );

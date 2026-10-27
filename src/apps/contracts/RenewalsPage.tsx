@@ -82,7 +82,7 @@ export function RenewalsPage() {
       <div className={styles.header}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/contracts")} />
+            <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate("/krewereview")} />
             <Title2>Upcoming Renewals</Title2>
           </div>
           <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3, marginTop: "4px", marginLeft: "44px" }}>
@@ -121,7 +121,7 @@ export function RenewalsPage() {
               <Card
                 key={c.id}
                 className={styles.renewalCard}
-                onClick={() => navigate(contractPath(c.tenantId, c.id), { state: { from: "/contracts/renewals" } })}
+                onClick={() => navigate(contractPath(c.tenantId, c.id), { state: { from: "/krewereview/renewals" } })}
               >
                 <div className={styles.renewalLeft}>
                   <Text weight="semibold" size={400}>{c.title}</Text>

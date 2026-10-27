@@ -107,9 +107,9 @@ const useStyles = makeStyles({
 });
 
 const BACK_TARGETS = [
-  { path: "/contracts/all", label: "All Agreements" },
-  { path: "/contracts/renewals", label: "Renewals" },
-  { path: "/contracts", label: "Dashboard" },
+  { path: "/krewereview/all", label: "All Agreements" },
+  { path: "/krewereview/renewals", label: "Renewals" },
+  { path: "/krewereview", label: "Dashboard" },
 ];
 
 export function ContractDetailPage() {
@@ -170,7 +170,7 @@ export function ContractDetailPage() {
     run(async () => {
       await deleteContractPermanently(tenantId, id);
       setShowDelete(false);
-      navigate("/contracts/all");
+      navigate("/krewereview/all");
     });
 
   if (loading) return <Spinner label="Loading agreement…" />;
@@ -186,7 +186,7 @@ export function ContractDetailPage() {
       <div className={styles.notFound}>
         <DocumentText24Regular style={{ fontSize: "48px", color: tokens.colorNeutralForeground3 }} />
         <Title2>Agreement Not Found</Title2>
-        <Button appearance="primary" onClick={() => navigate("/contracts/all")}>Back to Agreements</Button>
+        <Button appearance="primary" onClick={() => navigate("/krewereview/all")}>Back to Agreements</Button>
       </div>
     );
   }

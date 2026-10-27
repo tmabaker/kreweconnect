@@ -21,12 +21,17 @@ import {
   Checkmark24Regular,
   ThumbLike24Regular,
   ThumbDislike24Regular,
+  Chat24Regular,
+  ArrowSync24Regular,
+  Send24Regular,
 } from "@fluentui/react-icons";
 import { isDemoMode } from "../../shared/auth/demoMode";
 import { Fleur } from "../../shared/components/AimMark";
 import {
+  askCoach,
   fetchMyAim,
   nextLesson,
+  reworkLesson,
   startSkillsCheck,
   submitSkillsCheck,
   updateLesson,
@@ -53,6 +58,11 @@ const useStyles = makeStyles({
   markOff: { backgroundColor: tokens.colorNeutralBackground3, color: tokens.colorNeutralForeground3 },
   section: { display: "flex", flexDirection: "column", gap: "12px" },
   question: { display: "flex", flexDirection: "column", gap: "6px" },
+  step: { color: tokens.colorBrandForeground1, fontWeight: tokens.fontWeightSemibold },
+  missing: {
+    paddingLeft: "10px",
+    borderLeft: `3px solid ${tokens.colorPaletteMarigoldBorderActive}`,
+  },
   lessonBody: { display: "flex", flexDirection: "column", gap: "8px", lineHeight: "1.5" },
   tryIt: {
     padding: "12px 16px",
@@ -70,7 +80,36 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
   },
   done: { opacity: 0.75 },
+  coach: {
+    padding: "12px 16px",
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  you: {
+    alignSelf: "flex-end",
+    maxWidth: "85%",
+    padding: "8px 12px",
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorBrandBackground2,
+    whiteSpace: "pre-wrap",
+  },
+  coachSays: {
+    maxWidth: "95%",
+    padding: "8px 12px",
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
 });
+
+const STARTERS = [
+  "I'm not set up for this yet. Walk me through getting started.",
+  "Make this simpler.",
+  "Take this a step further.",
+  "Fit this to a different task I do.",
+];
 
 const RATINGS = ["New to it", "Getting started", "Comfortable", "Power user"];
 const LEVELS = ["", "Getting started", "Building", "Confident", "Power user"];
@@ -113,6 +152,8 @@ export function KreweAimPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  // Set when "See my results" is pressed with something unanswered, so the gaps are marked.
+  const [tried, setTried] = useState(false);
   // Set right after a skills check is submitted, so the results show before the lessons.
   const [showResults, setShowResults] = useState(false);
 
@@ -271,10 +312,28 @@ export function KreweAimPage() {
   if (quiz.status !== "done") {
     const inProgress = quiz.status === "in_progress" ? quiz : null;
     const newTools = quiz.status === "new_tools" ? quiz.platforms.map(labelFor).join(", ") : null;
-    const complete =
-      !!inProgress &&
-      inProgress.questions.every((q) => answers[q.id] !== undefined) &&
-      inProgress.platforms.every((p) => ratings[p] !== undefined);
+    // Every comfort rating and every question, in page order, so the first gap is the one to scroll to.
+    const items = inProgress
+      ? inProgress.platforms.flatMap((p) => [
+          { id: `aim-rate-${p}`, platform: p, rating: true, done: ratings[p] !== undefined },
+          ...inProgress.questions
+            .filter((q) => q.platform === p)
+            .map((q) => ({ id: `aim-q-${q.id}`, platform: p, rating: false, done: answers[q.id] !== undefined })),
+        ])
+      : [];
+    const gaps = items.filter((i) => !i.done);
+    const complete = !!inProgress && gaps.length === 0;
+    const isGap = (id: string) => tried && gaps.some((g) => g.id === id);
+    const stillNeeded = (inProgress?.platforms ?? [])
+      .map((p) => {
+        const parts: string[] = [];
+        if (gaps.some((g) => g.platform === p && g.rating)) parts.push("your comfort level");
+        const n = gaps.filter((g) => g.platform === p && !g.rating).length;
+        if (n) parts.push(`${n} ${n === 1 ? "question" : "questions"}`);
+        return parts.length ? `${labelFor(p)}: ${parts.join(" and ")}` : null;
+      })
+      .filter(Boolean)
+      .join("; ");
     return (
       <div className={styles.page}>
         {header}
@@ -303,11 +362,18 @@ export function KreweAimPage() {
           </Card>
         ) : (
           <>
+            <MessageBar intent="info">
+              <MessageBarBody>
+                Each tool below has two steps. First pick how comfortable you feel with it, then answer its questions.
+                Answer both for every tool to see your results.
+              </MessageBarBody>
+            </MessageBar>
             {inProgress.platforms.map((platform) => (
               <Card key={platform}>
                 <div className={styles.section}>
                   <Title3>{labelFor(platform)}</Title3>
-                  <div className={styles.question}>
+                  <div id={`aim-rate-${platform}`} className={`${styles.question} ${isGap(`aim-rate-${platform}`) ? styles.missing : ""}`}>
+                    <Text className={styles.step}>Step 1 of 2: your comfort level</Text>
                     <Text weight="semibold">How comfortable are you with {labelFor(platform)} today?</Text>
                     <RadioGroup
                       layout="horizontal"
@@ -319,10 +385,11 @@ export function KreweAimPage() {
                       ))}
                     </RadioGroup>
                   </div>
+                  <Text className={styles.step}>Step 2 of 2: a few quick questions</Text>
                   {inProgress.questions
                     .filter((q) => q.platform === platform)
                     .map((q) => (
-                      <div key={q.id} className={styles.question}>
+                      <div key={q.id} id={`aim-q-${q.id}`} className={`${styles.question} ${isGap(`aim-q-${q.id}`) ? styles.missing : ""}`}>
                         <Text weight="semibold">{q.question}</Text>
                         <RadioGroup
                           value={answers[q.id] !== undefined ? String(answers[q.id]) : ""}
@@ -337,16 +404,30 @@ export function KreweAimPage() {
                 </div>
               </Card>
             ))}
+            {tried && !complete && (
+              <MessageBar intent="warning">
+                <MessageBarBody>Almost there. Still needed: {stillNeeded}. The missing items are marked above.</MessageBarBody>
+              </MessageBar>
+            )}
             <div className={styles.row}>
               <Button
                 appearance="primary"
-                disabled={!complete || !!busy}
+                disabled={!!busy}
                 onClick={async () => {
+                  if (!complete) {
+                    // Show what is left and take the person to it, rather than leaving a gray button.
+                    setTried(true);
+                    document.getElementById(gaps[0].id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    return;
+                  }
                   if (await run("answers", () => submitSkillsCheck(answers, ratings))) setShowResults(true);
                 }}
               >
                 See my results
               </Button>
+              <Text className={styles.muted}>
+                {items.length - gaps.length} of {items.length} answered
+              </Text>
               {busy === "answers" && <Spinner size="small" />}
             </div>
           </>
@@ -388,7 +469,16 @@ export function KreweAimPage() {
       </Card>
 
       {me.lessons.map((lesson) => (
-        <LessonCard key={lesson.id} lesson={lesson} label={labelFor(lesson.platform)} busy={!!busy} onUpdate={(u) => run(`l:${lesson.id}`, () => updateLesson(lesson.id, u))} />
+        <LessonCard
+          key={lesson.id}
+          lesson={lesson}
+          label={labelFor(lesson.platform)}
+          busy={!!busy}
+          working={busy?.startsWith(`c:${lesson.id}`) ? "coach" : busy?.startsWith(`r:${lesson.id}`) ? "rework" : null}
+          onUpdate={(u) => run(`l:${lesson.id}`, () => updateLesson(lesson.id, u))}
+          onCoach={(message) => run(`c:${lesson.id}`, () => askCoach(lesson.id, message))}
+          onRework={(request) => run(`r:${lesson.id}`, () => reworkLesson(lesson.id, request))}
+        />
       ))}
     </div>
   );
@@ -398,14 +488,29 @@ function LessonCard({
   lesson,
   label,
   busy,
+  working,
   onUpdate,
+  onCoach,
+  onRework,
 }: {
   lesson: AimLesson;
   label: string;
   busy: boolean;
+  working: "coach" | "rework" | null;
   onUpdate: (u: { status?: "done"; feedback?: "helped" | "not_helpful"; note?: string }) => void;
+  onCoach: (message: string) => Promise<boolean>;
+  onRework: (request: string) => Promise<boolean>;
 }) {
   const styles = useStyles();
+  const thread = lesson.thread ?? [];
+  const [coachOpen, setCoachOpen] = useState(thread.length > 0);
+  const [draft, setDraft] = useState("");
+  const send = async () => {
+    if (draft.trim() && (await onCoach(draft.trim()))) setDraft("");
+  };
+  const rework = async () => {
+    if (await onRework(draft.trim())) setDraft("");
+  };
   const [copied, setCopied] = useState(false);
   const [askNote, setAskNote] = useState(false);
   const [note, setNote] = useState("");
@@ -427,6 +532,7 @@ function LessonCard({
             {LEVELS[lesson.level]} · {lesson.minutes} min
           </Text>
           {lesson.status === "done" && <Badge appearance="tint" color="success">Done</Badge>}
+          {lesson.revisedAt && <Badge appearance="tint" color="brand">Reworked for you</Badge>}
         </div>
         <Title3>{lesson.title}</Title3>
         <Text italic>{lesson.why}</Text>
@@ -446,6 +552,58 @@ function LessonCard({
           )}
         </div>
         <Text weight="semibold">{lesson.takeaway}</Text>
+        {!coachOpen ? (
+          <div>
+            <Button appearance="primary" icon={<Chat24Regular />} onClick={() => setCoachOpen(true)}>
+              Work on this with your coach
+            </Button>
+          </div>
+        ) : (
+          <div className={styles.coach}>
+            <Text weight="semibold">Work on this with your coach</Text>
+            <Text size={200} className={styles.muted}>
+              Ask a question, say what doesn't fit how you work, or take the idea further. When it's right, rework the lesson
+              so it matches. Don't share passwords or client confidential details.
+            </Text>
+            {thread.map((t, i) =>
+              t.from === "you" ? (
+                <div key={i} className={styles.you}>
+                  <Text>{t.text}</Text>
+                </div>
+              ) : (
+                <div key={i} className={styles.coachSays}>
+                  <LessonText text={t.text} />
+                </div>
+              )
+            )}
+            {!thread.length && (
+              <div className={styles.row}>
+                {STARTERS.map((s) => (
+                  <Button key={s} size="small" appearance="outline" onClick={() => setDraft(s)}>
+                    {s}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <Textarea
+              value={draft}
+              onChange={(_, d) => setDraft(d.value)}
+              placeholder="For example: I don't run those exports yet. Where would I start?"
+              resize="vertical"
+              maxLength={1500}
+            />
+            <div className={styles.row}>
+              <Button appearance="primary" icon={<Send24Regular />} disabled={busy || !draft.trim()} onClick={send}>
+                Ask your coach
+              </Button>
+              <Button icon={<ArrowSync24Regular />} disabled={busy || (!draft.trim() && !thread.length)} onClick={rework}>
+                Rework this lesson
+              </Button>
+              {working === "coach" && <Spinner size="small" label="Your coach is thinking..." />}
+              {working === "rework" && <Spinner size="small" label="Reworking your lesson..." />}
+            </div>
+          </div>
+        )}
         {lesson.feedback ? (
           <Text size={200} className={styles.muted}>
             {lesson.feedback === "helped" ? "You said this helped." : "You said this did not help. Your next lessons take that into account."}

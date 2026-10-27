@@ -192,33 +192,30 @@ function history(profile: LearnerProfile, state: LearnerState): string {
   return `Lessons they already have (never repeat one; build on what helped, fix what did not):\n${recent.join("\n")}${olderBlock}`;
 }
 
-export async function generateLesson(profile: LearnerProfile, state: LearnerState): Promise<Omit<Lesson, "status" | "feedback" | "note">> {
-  const version = policyVersion(profile);
-  const platforms = profile.platforms.map((p) => p.key);
-  const guidance = profile.guidance.length
+const LESSON_RULES = [
+  "Teach only tools on their list. Use their tool's real name. Match the level to their skill on that tool, stepping up once a level is mastered.",
+  "Make it practical: a real task from their job, the exact way to do it, and a prompt they can paste today.",
+  "Never assume a setup, export, folder, report or habit they have not told you about. When the task needs one, the first step shows how to get it.",
+  "If you are not sure a feature exists in their version of a tool, teach the durable skill instead of the feature.",
+  "Never ask them to paste passwords, client confidential details or personal data anywhere.",
+  "Voice: warm, plain, confident. Write without dashes as punctuation, never start a sentence with And, But, Or, So or Yet, and vary sentence length.",
+];
+
+function guidanceBlock(profile: LearnerProfile): string {
+  return profile.guidance.length
     ? `NOIT guidance that fits this person. Use it as grounding, do not copy it:\n${profile.guidance
         .map((g) => `- [${g.platform}] ${g.title}: ${g.summary}`)
         .join("\n")}`
     : "";
-  const instructions = [
-    "You are the KreweAIM coach. Write the single next lesson for one person, built for them alone.",
-    "Pick the tool and topic that will pay off most in their actual work right now, given their role, apps, skill and history.",
-    "Teach only tools on their list. Use their tool's real name. Match the level to their skill on that tool, stepping up once a level is mastered.",
-    "Make it practical: a real task from their job, the exact way to do it, and a prompt they can paste today.",
-    "If you are not sure a feature exists in their version of a tool, teach the durable skill instead of the feature.",
-    "Never ask them to paste passwords, client confidential details or personal data anywhere.",
-    "Voice: warm, plain, confident. Write without dashes as punctuation, never start a sentence with And, But, Or, So or Yet, and vary sentence length.",
-    "",
-    policyBlock(profile),
-    guidance,
-  ].join("\n");
-  const user = `The person:\n${describeLearner(profile, state)}\n\n${history(profile, state)}`;
-  const { text, model } = await callClaudeWithModel(instructions, user, lessonSchema(platforms));
-  const raw = JSON.parse(text) as Omit<Lesson, "id" | "createdAt" | "model" | "policyVersion" | "status" | "feedback" | "note">;
+}
+
+type LessonContent = Omit<Lesson, "id" | "createdAt" | "model" | "policyVersion" | "status" | "feedback" | "note" | "thread" | "revisedAt">;
+
+/** Checks a generated lesson against the person's tools and NOIT's writing rules. */
+function cleanLesson(text: string, platforms: string[]): LessonContent {
+  const raw = JSON.parse(text) as LessonContent;
   if (!platforms.includes(raw.platform)) throw new ServiceUnavailableError("The lesson came back for a tool you do not have. Try again.");
   return {
-    id: randomUUID(),
-    createdAt: new Date().toISOString(),
     platform: raw.platform,
     title: tidy(raw.title),
     level: Math.max(1, Math.min(4, Math.round(raw.level))),
@@ -227,9 +224,112 @@ export async function generateLesson(profile: LearnerProfile, state: LearnerStat
     body: tidy(raw.body),
     tryIt: { instructions: tidy(raw.tryIt.instructions), prompt: raw.tryIt.prompt.trim() },
     takeaway: tidy(raw.takeaway),
+  };
+}
+
+function lessonText(profile: LearnerProfile, lesson: Lesson): string {
+  return [
+    `Title: ${lesson.title} (${label(profile, lesson.platform)}, level ${lesson.level}, ${lesson.minutes} minutes)`,
+    `Why: ${lesson.why}`,
+    lesson.body,
+    `Try it: ${lesson.tryIt.instructions}`,
+    `Prompt: ${lesson.tryIt.prompt}`,
+    `Takeaway: ${lesson.takeaway}`,
+  ].join("\n\n");
+}
+
+function threadText(thread: Lesson["thread"]): string {
+  return (thread ?? []).map((t) => `${t.from === "you" ? "Learner" : "Coach"}: ${t.text}`).join("\n\n");
+}
+
+export async function generateLesson(profile: LearnerProfile, state: LearnerState): Promise<Omit<Lesson, "status" | "feedback" | "note">> {
+  const version = policyVersion(profile);
+  const platforms = profile.platforms.map((p) => p.key);
+  const instructions = [
+    "You are the KreweAIM coach. Write the single next lesson for one person, built for them alone.",
+    "Pick the tool and topic that will pay off most in their actual work right now, given their role, apps, skill and history.",
+    ...LESSON_RULES,
+    "",
+    policyBlock(profile),
+    guidanceBlock(profile),
+  ].join("\n");
+  const user = `The person:\n${describeLearner(profile, state)}\n\n${history(profile, state)}`;
+  const { text, model } = await callClaudeWithModel(instructions, user, lessonSchema(platforms));
+  const raw = cleanLesson(text, platforms);
+  return {
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    ...raw,
     model,
     policyVersion: version,
   };
+}
+
+// ─── Working a lesson through with the coach ─────────────────────
+
+/** Turns a person may send on one lesson, so a conversation stays a lesson and not open chat. */
+export const MAX_COACH_TURNS = 12;
+export const MAX_COACH_MESSAGE = 1500;
+
+/**
+ * The coach's answer to the person, about this lesson: develop the idea, fill in a missing
+ * step, adapt it to their setup, or pivot to a nearby task. It stays inside their tools and
+ * their company's AI rules, and it does not change the lesson itself.
+ */
+export async function coachReply(profile: LearnerProfile, state: LearnerState, lesson: Lesson, message: string): Promise<string> {
+  const instructions = [
+    "You are the KreweAIM coach, working one lesson through with the person it was written for.",
+    "Help them develop the idea, fill in a step they are missing, adapt it to how they actually work, or pivot to a nearby task that fits them better.",
+    "If the lesson assumed something they do not have yet, start from where they really are and walk them to it.",
+    "Be concrete and brief: under 200 words, short paragraphs or '- ' bullets, **bold** sparingly. End with the one next thing to do.",
+    "When they want the lesson itself changed, help, and tell them they can press Rework this lesson to rewrite it from this conversation.",
+    "Stay on their AI tools and their work. Teach only tools on their list; steer away from tools the company has not approved.",
+    "If they share a password, a client confidential detail or personal data, do not repeat it and remind them not to share it.",
+    "Voice: warm, plain, confident. Write without dashes as punctuation and never start a sentence with And, But, Or, So or Yet.",
+    "",
+    policyBlock(profile),
+  ].join("\n");
+  const soFar = threadText(lesson.thread);
+  const user = [
+    `The person:\n${describeLearner(profile, state)}`,
+    `The lesson:\n${lessonText(profile, lesson)}`,
+    soFar ? `Your conversation so far:\n${soFar}` : "",
+    `Learner: ${message}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const { text } = await callClaudeWithModel(instructions, user, object({ reply: { type: "string" } }));
+  return tidy((JSON.parse(text) as { reply: string }).reply);
+}
+
+/** The lesson rewritten from the person's conversation with the coach and any change they asked for. */
+export async function reworkLesson(
+  profile: LearnerProfile,
+  state: LearnerState,
+  lesson: Lesson,
+  request: string
+): Promise<Pick<Lesson, "platform" | "title" | "level" | "minutes" | "why" | "body" | "tryIt" | "takeaway" | "model" | "policyVersion">> {
+  const platforms = profile.platforms.map((p) => p.key);
+  const instructions = [
+    "You are the KreweAIM coach. Rewrite one lesson for the person it was written for, using what they told you.",
+    "Keep what worked about the original. Change what they said does not fit: their real starting point, their setup, the task they care about, the depth they want.",
+    "A pivot to a different task or tool on their list is fine when that is what they asked for.",
+    ...LESSON_RULES,
+    "",
+    policyBlock(profile),
+    guidanceBlock(profile),
+  ].join("\n");
+  const soFar = threadText(lesson.thread);
+  const user = [
+    `The person:\n${describeLearner(profile, state)}`,
+    `The lesson as it stands:\n${lessonText(profile, lesson)}`,
+    soFar ? `Your conversation about it:\n${soFar}` : "",
+    request ? `What they want changed: ${request}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const { text, model } = await callClaudeWithModel(instructions, user, lessonSchema(platforms));
+  return { ...cleanLesson(text, platforms), model, policyVersion: policyVersion(profile) };
 }
 
 // ─── Writing rules ───────────────────────────────────────────────
