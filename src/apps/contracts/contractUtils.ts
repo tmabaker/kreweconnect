@@ -78,7 +78,7 @@ export const AGREEMENT_CATEGORIES: readonly AgreementCategory[] = [
   "VendorService", "MasterServices", "StatementOfWork", "SoftwareLicense", "SaaSSubscription",
   "InsurancePolicy", "CertificateOfInsurance", "Lease", "Maintenance", "Warranty",
   "ProfessionalServices", "Membership", "Certification", "Telecom", "Utility",
-  "Financing", "FranchiseOrDealer", "PayerContract", "Confidentiality", "Other",
+  "Financing", "FranchiseOrDealer", "PayerContract", "Confidentiality", "Rebate", "License", "Other",
 ] as const;
 
 export const RENEWAL_TYPES: readonly RenewalType[] = [
@@ -114,6 +114,8 @@ const CATEGORY_LABELS: Record<AgreementCategory, string> = {
   FranchiseOrDealer: "Franchise / Dealer",
   PayerContract: "Payer Contract",
   Confidentiality: "Confidentiality (NDA)",
+  Rebate: "Rebate",
+  License: "License (Occupational / Dealer / MVC)",
   Other: "Other",
 };
 

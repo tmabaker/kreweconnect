@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   makeStyles,
@@ -28,6 +28,9 @@ import {
 import { useTenantContext } from "../../shared/hooks/useTenantContext";
 import { useContracts } from "../../shared/hooks/useContracts";
 import { useIsMobile } from "../../shared/hooks/useIsMobile";
+import { useSessionState, saveScroll, restoreScroll } from "../../shared/hooks/useSessionState";
+
+const VIEW = "kr.list";
 import {
   getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_STATUSES, AGREEMENT_CATEGORIES,
   getCategoryLabel, getRenewalTypeLabel, contractPath,
@@ -93,8 +96,8 @@ export function ContractListPage() {
   const navigate = useNavigate();
   const { selectedTenant } = useTenantContext();
   const isMobile = useIsMobile();
-  const [showFilters, setShowFilters] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showFilters, setShowFilters] = useSessionState(`${VIEW}.showFilters`, false);
+  const [showArchived, setShowArchived] = useSessionState(`${VIEW}.showArchived`, false);
   const {
     contracts, totalCount, vendors, locations, allContracts, loading, error, reload,
     searchQuery, setSearchQuery,
@@ -105,7 +108,20 @@ export function ContractListPage() {
     needsReviewOnly, setNeedsReviewOnly,
     sortBy, setSortBy,
     sortDir, setSortDir,
-  } = useContracts(selectedTenant.tenantId, { includeArchived: showArchived });
+  } = useContracts(selectedTenant.tenantId, { includeArchived: showArchived, viewKey: VIEW });
+
+  // Coming back from an agreement: return to where the list was scrolled.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!loading && contracts.length && !restored.current) {
+      restored.current = true;
+      requestAnimationFrame(() => restoreScroll(VIEW));
+    }
+  }, [loading, contracts.length]);
+  const open = (tenantId: string, id: string) => {
+    saveScroll(VIEW);
+    navigate(contractPath(tenantId, id), { state: { from: "/contracts/all" } });
+  };
 
   const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, showArchived].filter(Boolean).length;
 
@@ -250,7 +266,7 @@ export function ContractListPage() {
             />
           </div>
           {contracts.map((c) => (
-            <Card key={c.id} className={styles.mobileCard} onClick={() => navigate(contractPath(c.tenantId, c.id))}>
+            <Card key={c.id} className={styles.mobileCard} onClick={() => open(c.tenantId, c.id)}>
               <Text weight="semibold" className={styles.mobileTitle}>{c.title}</Text>
               <Text size={200} className={styles.mobileMeta}>
                 {[c.vendorName, getCategoryLabel(c.agreementCategory), c.location].filter(Boolean).join(" · ")}
@@ -300,7 +316,7 @@ export function ContractListPage() {
             </thead>
             <tbody>
               {contracts.map((c) => (
-                <tr key={c.id} className={styles.row} onClick={() => navigate(contractPath(c.tenantId, c.id))}>
+                <tr key={c.id} className={styles.row} onClick={() => open(c.tenantId, c.id)}>
                   <td className={styles.td}>
                     <Text weight="semibold">{c.title}</Text>
                     <Text size={200} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>

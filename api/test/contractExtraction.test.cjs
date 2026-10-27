@@ -69,6 +69,23 @@ test('a request carries the document, the schema, and the fallback setting', asy
   }
 });
 
+test('review questions are capped at what a save accepts', async () => {
+  process.env.ANTHROPIC_API_KEY = 'test-key';
+  const original = Anthropic.default.Beta.Messages.prototype.create;
+  const many = Array.from({ length: 30 }, (_, i) => `Question ${i + 1}?`);
+  Anthropic.default.Beta.Messages.prototype.create = async () => ({
+    model: 'm', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ title: 'Lease', reviewQuestions: many }) }],
+  });
+  try {
+    const out = await extractContractFields(Buffer.from('x'), 'text/plain', picklist, null);
+    assert.equal(out.fields.reviewQuestions.length, 20);
+    assert.equal(out.fields.reviewQuestions[0], 'Question 1?');
+  } finally {
+    Anthropic.default.Beta.Messages.prototype.create = original;
+    delete process.env.ANTHROPIC_API_KEY;
+  }
+});
+
 test('a refusal becomes a readable error, not a crash', async () => {
   process.env.ANTHROPIC_API_KEY = 'test-key';
   const original = Anthropic.default.Beta.Messages.prototype.create;

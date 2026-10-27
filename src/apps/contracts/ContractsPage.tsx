@@ -143,7 +143,7 @@ export function ContractsPage() {
               <Card
                 key={alert.id}
                 className={styles.alertCard}
-                onClick={() => navigate(contractPath(alert.tenantId ?? selectedTenant.tenantId, alert.contractId))}
+                onClick={() => navigate(contractPath(alert.tenantId ?? selectedTenant.tenantId, alert.contractId), { state: { from: "/contracts" } })}
               >
                 <div className={styles.alertHeader}>
                   <div>
@@ -189,7 +189,7 @@ export function ContractsPage() {
             <div
               key={contract.id}
               className={styles.recentItem}
-              onClick={() => navigate(contractPath(contract.tenantId, contract.id))}
+              onClick={() => navigate(contractPath(contract.tenantId, contract.id), { state: { from: "/contracts" } })}
             >
               <div className={styles.recentLeft}>
                 <Text weight="semibold">{contract.title}</Text>

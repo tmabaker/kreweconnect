@@ -121,7 +121,7 @@ export function RenewalsPage() {
               <Card
                 key={c.id}
                 className={styles.renewalCard}
-                onClick={() => navigate(contractPath(c.tenantId, c.id))}
+                onClick={() => navigate(contractPath(c.tenantId, c.id), { state: { from: "/contracts/renewals" } })}
               >
                 <div className={styles.renewalLeft}>
                   <Text weight="semibold" size={400}>{c.title}</Text>

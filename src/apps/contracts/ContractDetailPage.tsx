@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   makeStyles,
   tokens,
@@ -53,8 +53,12 @@ import {
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "24px" },
-  topBar: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  actions: { display: "flex", gap: "8px" },
+  topBar: {
+    display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px",
+    // Phones: title on its own line, actions wrap underneath.
+    "@media (max-width: 768px)": { flexDirection: "column", alignItems: "stretch" },
+  },
+  actions: { display: "flex", gap: "8px", flexWrap: "wrap" },
   grid: { display: "grid", gridTemplateColumns: "1fr 340px", gap: "24px", "@media (max-width: 900px)": { gridTemplateColumns: "1fr" } },
   mainCol: { display: "flex", flexDirection: "column", gap: "20px" },
   sideCol: { display: "flex", flexDirection: "column", gap: "20px" },
@@ -102,10 +106,20 @@ const useStyles = makeStyles({
   notFound: { display: "flex", flexDirection: "column", alignItems: "center", padding: "64px", gap: "12px" },
 });
 
+const BACK_TARGETS = [
+  { path: "/contracts/all", label: "All Agreements" },
+  { path: "/contracts/renewals", label: "Renewals" },
+  { path: "/contracts", label: "Dashboard" },
+];
+
 export function ContractDetailPage() {
   const styles = useStyles();
   const { tenantId = "", id = "" } = useParams<{ tenantId: string; id: string }>();
   const navigate = useNavigate();
+  // Back goes to the list the agreement was opened from (passed as route
+  // state); a direct link or a return from Edit falls back to All Agreements.
+  const from = (useLocation().state as { from?: string } | null)?.from;
+  const back = BACK_TARGETS.find((t) => t.path === from) ?? BACK_TARGETS[0];
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,8 +196,15 @@ export function ContractDetailPage() {
       {/* Top Bar */}
       <div className={styles.topBar}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={() => navigate(-1)} aria-label="Back" />
           <div>
+            <Button
+              appearance="subtle"
+              icon={<ArrowLeft24Regular />}
+              onClick={() => navigate(back.path)}
+              style={{ display: "flex", marginLeft: "-8px", marginBottom: "4px" }}
+            >
+              Back to {back.label}
+            </Button>
             <Title2>{contract.title}</Title2>
             <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>
               {contract.vendorName} · {contract.tenantDisplayName}

@@ -28,6 +28,8 @@ const DEFAULT_MODEL = "claude-opus-5-5";
 // SWA managed functions stop a request at about 45 seconds; leave headroom
 // so a slow extraction returns a clean error instead of a platform timeout.
 const REQUEST_TIMEOUT_MS = 38_000;
+/** Same cap parseContractFields applies to reviewQuestions on save. */
+const MAX_REVIEW_QUESTIONS = 20;
 
 export const EXTRACTABLE_TYPES: Record<string, "pdf" | "image" | "docx" | "text"> = {
   "application/pdf": "pdf",
@@ -130,9 +132,9 @@ function instructions(picklist: TenantPicklist, today: string, renewalOf: Contra
     `Today is ${today}. Write every date as YYYY-MM-DD.`,
     "Fill every field the document supports. Work out values it implies: an end date from a start or signing date plus a stated term, a total value from a periodic payment times the term, a payment amount from a total and its schedule, a renewal type from the renewal or termination language.",
     'Leave a field empty ("" for text, dates and list picks; null for numbers) only when the document gives nothing to base it on. Never invent a value with no basis in the document.',
-    "Every value you worked out rather than read directly must appear in reviewQuestions with how you got it, so a person can confirm it with one answer. Set confidenceTier to B when any key field was worked out.",
+    `Every value you worked out rather than read directly must appear in reviewQuestions with how you got it, so a person can confirm it with one answer. Combine related items so there are at most ${MAX_REVIEW_QUESTIONS} questions. A worked-out key field lowers confidenceTier from A to B; a document that is only evidence of an agreement stays C.`,
     "description: two or three sentences on what the agreement covers, the parties, and the commercial terms a client would want at a glance.",
-    "Pick agreementCategory from the allowed list. Use Other only when nothing else fits.",
+    "Pick agreementCategory from the allowed list. Use Rebate for rebate, incentive, volume bonus or co-op funding programs. Use License for government-issued business licenses: occupational licenses, motor vehicle commission licenses and dealer licenses (not software licenses). Use Other only when nothing else fits.",
     picklist.locations.length
       ? `Set location only when the document names one of these locations or an address that clearly belongs to one: ${picklist.locations.join("; ")}.`
       : 'location must be "".',
@@ -250,6 +252,9 @@ export async function extractContractFields(
   let fields: Record<string, unknown>;
   try {
     fields = emptyToNull(JSON.parse(text)) as Record<string, unknown>;
+    // The save validator rejects more than MAX_REVIEW_QUESTIONS; never hand
+    // the reviewer a draft that cannot be saved.
+    if (Array.isArray(fields.reviewQuestions)) fields.reviewQuestions = fields.reviewQuestions.slice(0, MAX_REVIEW_QUESTIONS);
   } catch {
     throw new ServiceUnavailableError("The automatic reading returned an unusable answer. Enter the details by hand.");
   }
