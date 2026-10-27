@@ -53,6 +53,11 @@ const useStyles = makeStyles({
   markOff: { backgroundColor: tokens.colorNeutralBackground3, color: tokens.colorNeutralForeground3 },
   section: { display: "flex", flexDirection: "column", gap: "12px" },
   question: { display: "flex", flexDirection: "column", gap: "6px" },
+  step: { color: tokens.colorBrandForeground1, fontWeight: tokens.fontWeightSemibold },
+  missing: {
+    paddingLeft: "10px",
+    borderLeft: `3px solid ${tokens.colorPaletteMarigoldBorderActive}`,
+  },
   lessonBody: { display: "flex", flexDirection: "column", gap: "8px", lineHeight: "1.5" },
   tryIt: {
     padding: "12px 16px",
@@ -113,6 +118,8 @@ export function KreweAimPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  // Set when "See my results" is pressed with something unanswered, so the gaps are marked.
+  const [tried, setTried] = useState(false);
   // Set right after a skills check is submitted, so the results show before the lessons.
   const [showResults, setShowResults] = useState(false);
 
@@ -271,10 +278,28 @@ export function KreweAimPage() {
   if (quiz.status !== "done") {
     const inProgress = quiz.status === "in_progress" ? quiz : null;
     const newTools = quiz.status === "new_tools" ? quiz.platforms.map(labelFor).join(", ") : null;
-    const complete =
-      !!inProgress &&
-      inProgress.questions.every((q) => answers[q.id] !== undefined) &&
-      inProgress.platforms.every((p) => ratings[p] !== undefined);
+    // Every comfort rating and every question, in page order, so the first gap is the one to scroll to.
+    const items = inProgress
+      ? inProgress.platforms.flatMap((p) => [
+          { id: `aim-rate-${p}`, platform: p, rating: true, done: ratings[p] !== undefined },
+          ...inProgress.questions
+            .filter((q) => q.platform === p)
+            .map((q) => ({ id: `aim-q-${q.id}`, platform: p, rating: false, done: answers[q.id] !== undefined })),
+        ])
+      : [];
+    const gaps = items.filter((i) => !i.done);
+    const complete = !!inProgress && gaps.length === 0;
+    const isGap = (id: string) => tried && gaps.some((g) => g.id === id);
+    const stillNeeded = (inProgress?.platforms ?? [])
+      .map((p) => {
+        const parts: string[] = [];
+        if (gaps.some((g) => g.platform === p && g.rating)) parts.push("your comfort level");
+        const n = gaps.filter((g) => g.platform === p && !g.rating).length;
+        if (n) parts.push(`${n} ${n === 1 ? "question" : "questions"}`);
+        return parts.length ? `${labelFor(p)}: ${parts.join(" and ")}` : null;
+      })
+      .filter(Boolean)
+      .join("; ");
     return (
       <div className={styles.page}>
         {header}
@@ -303,11 +328,18 @@ export function KreweAimPage() {
           </Card>
         ) : (
           <>
+            <MessageBar intent="info">
+              <MessageBarBody>
+                Each tool below has two steps. First pick how comfortable you feel with it, then answer its questions.
+                Answer both for every tool to see your results.
+              </MessageBarBody>
+            </MessageBar>
             {inProgress.platforms.map((platform) => (
               <Card key={platform}>
                 <div className={styles.section}>
                   <Title3>{labelFor(platform)}</Title3>
-                  <div className={styles.question}>
+                  <div id={`aim-rate-${platform}`} className={`${styles.question} ${isGap(`aim-rate-${platform}`) ? styles.missing : ""}`}>
+                    <Text className={styles.step}>Step 1 of 2: your comfort level</Text>
                     <Text weight="semibold">How comfortable are you with {labelFor(platform)} today?</Text>
                     <RadioGroup
                       layout="horizontal"
@@ -319,10 +351,11 @@ export function KreweAimPage() {
                       ))}
                     </RadioGroup>
                   </div>
+                  <Text className={styles.step}>Step 2 of 2: a few quick questions</Text>
                   {inProgress.questions
                     .filter((q) => q.platform === platform)
                     .map((q) => (
-                      <div key={q.id} className={styles.question}>
+                      <div key={q.id} id={`aim-q-${q.id}`} className={`${styles.question} ${isGap(`aim-q-${q.id}`) ? styles.missing : ""}`}>
                         <Text weight="semibold">{q.question}</Text>
                         <RadioGroup
                           value={answers[q.id] !== undefined ? String(answers[q.id]) : ""}
@@ -337,16 +370,30 @@ export function KreweAimPage() {
                 </div>
               </Card>
             ))}
+            {tried && !complete && (
+              <MessageBar intent="warning">
+                <MessageBarBody>Almost there. Still needed: {stillNeeded}. The missing items are marked above.</MessageBarBody>
+              </MessageBar>
+            )}
             <div className={styles.row}>
               <Button
                 appearance="primary"
-                disabled={!complete || !!busy}
+                disabled={!!busy}
                 onClick={async () => {
+                  if (!complete) {
+                    // Show what is left and take the person to it, rather than leaving a gray button.
+                    setTried(true);
+                    document.getElementById(gaps[0].id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    return;
+                  }
                   if (await run("answers", () => submitSkillsCheck(answers, ratings))) setShowResults(true);
                 }}
               >
                 See my results
               </Button>
+              <Text className={styles.muted}>
+                {items.length - gaps.length} of {items.length} answered
+              </Text>
               {busy === "answers" && <Spinner size="small" />}
             </div>
           </>
