@@ -41,6 +41,8 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
   const [vendorFilter, setVendorFilter] = useSessionState<string | null>(k("vendor"), null);
   const [locationFilter, setLocationFilter] = useSessionState<string | null>(k("location"), null);
   const [needsReviewOnly, setNeedsReviewOnly] = useSessionState(k("needsReview"), false);
+  // "", "overdue", "30", "60", "90": narrow to what is coming due by decision date (else expiry).
+  const [dueFilter, setDueFilter] = useSessionState<string>(k("due"), "");
   const [sortBy, setSortBy] = useSessionState<string>(k("sortBy"), "title");
   const [sortDir, setSortDir] = useSessionState<"asc" | "desc">(k("sortDir"), "asc");
 
@@ -88,6 +90,24 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
     if (vendorFilter) list = list.filter((c) => c.vendorName === vendorFilter);
     if (locationFilter) list = list.filter((c) => c.location === locationFilter);
     if (needsReviewOnly) list = list.filter((c) => c.needsReview);
+    if (dueFilter) {
+      const now = new Date();
+      const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const daysUntil = (d: string | null | undefined): number | null => {
+        const m = d ? /^(\d{4})-(\d{2})-(\d{2})/.exec(d) : null;
+        return m ? Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - todayUtc) / 86400000) : null;
+      };
+      list = list.filter((c) => {
+        // The soonest action: the decision deadline, or the expiry if no decision date.
+        const candidates = [daysUntil(c.latestRenewalDecisionDate), daysUntil(c.endDate)]
+          .filter((x): x is number => x !== null);
+        if (candidates.length === 0) return false;
+        const soonest = Math.min(...candidates);
+        if (dueFilter === "overdue") return soonest < 0;
+        const within = Number(dueFilter);
+        return Number.isFinite(within) && soonest >= 0 && soonest <= within;
+      });
+    }
 
     list.sort((a, b) => {
       let cmp = 0;
@@ -109,7 +129,7 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
       return sortDir === "desc" ? -cmp : cmp;
     });
     return list;
-  }, [all, searchQuery, statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, sortBy, sortDir]);
+  }, [all, searchQuery, statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, dueFilter, sortBy, sortDir]);
 
   const vendors = useMemo(() => [...new Set(all.map((c) => c.vendorName))].sort(), [all]);
   const locations = useMemo(
@@ -175,6 +195,7 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
     vendorFilter, setVendorFilter,
     locationFilter, setLocationFilter,
     needsReviewOnly, setNeedsReviewOnly,
+    dueFilter, setDueFilter,
     sortBy, setSortBy,
     sortDir, setSortDir,
   };

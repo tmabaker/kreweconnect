@@ -107,9 +107,19 @@ export function ContractListPage() {
     vendorFilter, setVendorFilter,
     locationFilter, setLocationFilter,
     needsReviewOnly, setNeedsReviewOnly,
+    dueFilter, setDueFilter,
     sortBy, setSortBy,
     sortDir, setSortDir,
   } = useContracts(selectedTenant.tenantId, { includeArchived: showArchived, viewKey: VIEW });
+
+  const DUE_OPTIONS: { value: string; label: string }[] = [
+    { value: "", label: "Any time" },
+    { value: "overdue", label: "Overdue" },
+    { value: "30", label: "Due in 30 days" },
+    { value: "60", label: "Due in 60 days" },
+    { value: "90", label: "Due in 90 days" },
+  ];
+  const dueLabel = (v: string) => DUE_OPTIONS.find((o) => o.value === v)?.label ?? "Any time";
 
   // Coming back from an agreement: return to where the list was scrolled.
   const restored = useRef(false);
@@ -124,7 +134,7 @@ export function ContractListPage() {
     navigate(contractPath(tenantId, id), { state: { from: "/krewereview/all" } });
   };
 
-  const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, showArchived].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, dueFilter, showArchived].filter(Boolean).length;
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -185,6 +195,15 @@ export function ContractListPage() {
           >
             <Option value="">All Statuses</Option>
             {CONTRACT_STATUSES.map((s) => <Option key={s} value={s}>{getStatusLabel(s)}</Option>)}
+          </Dropdown>
+          <Dropdown
+            className={styles.filterDropdown}
+            placeholder="Coming due"
+            value={dueLabel(dueFilter)}
+            selectedOptions={[dueFilter]}
+            onOptionSelect={(_, d) => setDueFilter(d.optionValue ?? "")}
+          >
+            {DUE_OPTIONS.map((o) => <Option key={o.value || "any"} value={o.value}>{o.label}</Option>)}
           </Dropdown>
           <Dropdown
             className={styles.filterDropdown}
