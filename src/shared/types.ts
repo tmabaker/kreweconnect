@@ -214,6 +214,8 @@ export interface ContractListItem {
   renewalDate: string | null;
   autoRenew: boolean;
   value: number | null;
+  /** Read only. recurringAmount x frequency, else totalValue / term years. Detail always sets it; list rows may omit it. */
+  annualizedValue?: number | null;
   currency: string;
   status: ContractStatus;
   daysUntilExpiry: number | null;
