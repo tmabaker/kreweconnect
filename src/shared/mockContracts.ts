@@ -36,6 +36,7 @@ const MOCK_TAGS: TagItem[] = [
   { id: "t6", name: "Infrastructure", color: "#004E8C" },
   { id: "t7", name: "Compliance", color: "#C239B3" },
   { id: "t8", name: "Cloud", color: "#00BCF2" },
+  { id: "t9", name: "OEM", color: "#986F0B" },
 ];
 
 /** Fields that existed before schema v2. The v2 list fields are merged in from V2_META below. */

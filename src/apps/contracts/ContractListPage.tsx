@@ -84,6 +84,7 @@ const MOBILE_SORTS = [
   { field: "endDate", label: "Expires" },
   { field: "decisionDate", label: "Latest decision date" },
   { field: "value", label: "Value" },
+  { field: "annualized", label: "Annualized value" },
   { field: "status", label: "Status" },
   { field: "category", label: "Category" },
   { field: "renewalType", label: "Renewal type" },
@@ -106,9 +107,19 @@ export function ContractListPage() {
     vendorFilter, setVendorFilter,
     locationFilter, setLocationFilter,
     needsReviewOnly, setNeedsReviewOnly,
+    dueFilter, setDueFilter,
     sortBy, setSortBy,
     sortDir, setSortDir,
   } = useContracts(selectedTenant.tenantId, { includeArchived: showArchived, viewKey: VIEW });
+
+  const DUE_OPTIONS: { value: string; label: string }[] = [
+    { value: "", label: "Any time" },
+    { value: "overdue", label: "Overdue" },
+    { value: "30", label: "Due in 30 days" },
+    { value: "60", label: "Due in 60 days" },
+    { value: "90", label: "Due in 90 days" },
+  ];
+  const dueLabel = (v: string) => DUE_OPTIONS.find((o) => o.value === v)?.label ?? "Any time";
 
   // Coming back from an agreement: return to where the list was scrolled.
   const restored = useRef(false);
@@ -123,7 +134,7 @@ export function ContractListPage() {
     navigate(contractPath(tenantId, id), { state: { from: "/krewereview/all" } });
   };
 
-  const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, showArchived].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, categoryFilter, vendorFilter, locationFilter, needsReviewOnly, dueFilter, showArchived].filter(Boolean).length;
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -184,6 +195,15 @@ export function ContractListPage() {
           >
             <Option value="">All Statuses</Option>
             {CONTRACT_STATUSES.map((s) => <Option key={s} value={s}>{getStatusLabel(s)}</Option>)}
+          </Dropdown>
+          <Dropdown
+            className={styles.filterDropdown}
+            placeholder="Coming due"
+            value={dueLabel(dueFilter)}
+            selectedOptions={[dueFilter]}
+            onOptionSelect={(_, d) => setDueFilter(d.optionValue ?? "")}
+          >
+            {DUE_OPTIONS.map((o) => <Option key={o.value || "any"} value={o.value}>{o.label}</Option>)}
           </Dropdown>
           <Dropdown
             className={styles.filterDropdown}
@@ -281,6 +301,7 @@ export function ContractListPage() {
                 {c.needsReview && <Badge appearance="outline" color="severe" size="small">Review</Badge>}
                 {c.isArchived && <Badge appearance="tint" color="subtle" size="small">Archived</Badge>}
                 {c.value ? <Text size={200} weight="semibold">{formatCurrency(c.value)}</Text> : null}
+                {c.annualizedValue != null ? <Text size={200}>{formatCurrency(c.annualizedValue)}/yr</Text> : null}
               </div>
               {c.endDate && (
                 <Text size={200} className={styles.mobileMeta}>
@@ -307,6 +328,7 @@ export function ContractListPage() {
                 <th className={styles.th}>Tenant</th>
                 <th className={styles.th} onClick={() => handleSort("location")}>Location <SortIcon field="location" /></th>
                 <th className={styles.th} onClick={() => handleSort("value")}>Value <SortIcon field="value" /></th>
+                <th className={styles.th} onClick={() => handleSort("annualized")}>Annualized value <SortIcon field="annualized" /></th>
                 <th className={styles.th} onClick={() => handleSort("status")}>Status <SortIcon field="status" /></th>
                 <th className={styles.th} onClick={() => handleSort("endDate")}>Expires <SortIcon field="endDate" /></th>
                 <th className={styles.th} onClick={() => handleSort("decisionDate")}>Latest decision date <SortIcon field="decisionDate" /></th>
@@ -332,6 +354,9 @@ export function ContractListPage() {
                   <td className={styles.td}><Text size={200}>{c.location ?? "—"}</Text></td>
                   <td className={styles.td}>
                     <Text weight="semibold">{c.value ? formatCurrency(c.value) : "—"}</Text>
+                  </td>
+                  <td className={styles.td}>
+                    <Text>{c.annualizedValue != null ? formatCurrency(c.annualizedValue) : "—"}</Text>
                   </td>
                   <td className={styles.td}>
                     <Badge appearance="filled" color={getStatusColor(c.status)} size="small">

@@ -67,6 +67,7 @@ export const CONTRACT_TAGS = [
   "Infrastructure",
   "Compliance",
   "Cloud",
+  "OEM",
 ] as const;
 
 export type AgreementCategory = (typeof AGREEMENT_CATEGORIES)[number];

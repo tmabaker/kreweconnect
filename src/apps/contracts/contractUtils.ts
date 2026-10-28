@@ -65,6 +65,7 @@ export const CONTRACT_TAGS: readonly { name: string; color: string }[] = [
   { name: "Infrastructure", color: "#004E8C" },
   { name: "Compliance", color: "#C239B3" },
   { name: "Cloud", color: "#00BCF2" },
+  { name: "OEM", color: "#986F0B" },
 ];
 
 /** Where an agreement lives in the app. Tenant is part of the path so "All Tenants" links resolve. */
