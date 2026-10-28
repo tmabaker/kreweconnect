@@ -94,6 +94,7 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
       switch (sortBy) {
         case "vendor": cmp = a.vendorName.localeCompare(b.vendorName); break;
         case "value": cmp = (a.value ?? 0) - (b.value ?? 0); break;
+        case "annualized": cmp = (a.annualizedValue ?? 0) - (b.annualizedValue ?? 0); break;
         case "endDate": cmp = (a.endDate || "9999-12-31").localeCompare(b.endDate || "9999-12-31"); break;
         case "status": cmp = a.status.localeCompare(b.status); break;
         case "category": cmp = (a.agreementCategory ?? "").localeCompare(b.agreementCategory ?? ""); break;

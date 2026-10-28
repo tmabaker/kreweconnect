@@ -84,6 +84,7 @@ const MOBILE_SORTS = [
   { field: "endDate", label: "Expires" },
   { field: "decisionDate", label: "Latest decision date" },
   { field: "value", label: "Value" },
+  { field: "annualized", label: "Annualized value" },
   { field: "status", label: "Status" },
   { field: "category", label: "Category" },
   { field: "renewalType", label: "Renewal type" },
@@ -281,6 +282,7 @@ export function ContractListPage() {
                 {c.needsReview && <Badge appearance="outline" color="severe" size="small">Review</Badge>}
                 {c.isArchived && <Badge appearance="tint" color="subtle" size="small">Archived</Badge>}
                 {c.value ? <Text size={200} weight="semibold">{formatCurrency(c.value)}</Text> : null}
+                {c.annualizedValue != null ? <Text size={200}>{formatCurrency(c.annualizedValue)}/yr</Text> : null}
               </div>
               {c.endDate && (
                 <Text size={200} className={styles.mobileMeta}>
@@ -307,6 +309,7 @@ export function ContractListPage() {
                 <th className={styles.th}>Tenant</th>
                 <th className={styles.th} onClick={() => handleSort("location")}>Location <SortIcon field="location" /></th>
                 <th className={styles.th} onClick={() => handleSort("value")}>Value <SortIcon field="value" /></th>
+                <th className={styles.th} onClick={() => handleSort("annualized")}>Annualized value <SortIcon field="annualized" /></th>
                 <th className={styles.th} onClick={() => handleSort("status")}>Status <SortIcon field="status" /></th>
                 <th className={styles.th} onClick={() => handleSort("endDate")}>Expires <SortIcon field="endDate" /></th>
                 <th className={styles.th} onClick={() => handleSort("decisionDate")}>Latest decision date <SortIcon field="decisionDate" /></th>
@@ -332,6 +335,9 @@ export function ContractListPage() {
                   <td className={styles.td}><Text size={200}>{c.location ?? "—"}</Text></td>
                   <td className={styles.td}>
                     <Text weight="semibold">{c.value ? formatCurrency(c.value) : "—"}</Text>
+                  </td>
+                  <td className={styles.td}>
+                    <Text>{c.annualizedValue != null ? formatCurrency(c.annualizedValue) : "—"}</Text>
                   </td>
                   <td className={styles.td}>
                     <Badge appearance="filled" color={getStatusColor(c.status)} size="small">
