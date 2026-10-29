@@ -1,5 +1,6 @@
+import { CompactArea } from "./shared/components/CompactArea";
 import { lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import {
   FluentProvider,
   webDarkTheme,
@@ -100,14 +101,16 @@ function App() {
                 <Route path="/kreweconnect/directory/:id" element={<EmployeeDetailPage />} />
                 <Route path="/kreweconnect/org-chart" element={<OrgChartPage />} />
                 {/* KreweReview / Contracts + Settings — MSP-admin only. */}
-                <Route path="/krewereview" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
-                <Route path="/krewereview/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
-                <Route path="/krewereview/new" element={<MspAdminRoute><ContractFormPage mode="new" /></MspAdminRoute>} />
-                <Route path="/krewereview/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
-                <Route path="/krewereview/lists" element={<MspAdminRoute><PicklistsPage /></MspAdminRoute>} />
-                <Route path="/krewereview/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
-                <Route path="/krewereview/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
-                <Route path="/krewereview/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
+                <Route element={<CompactArea><Outlet /></CompactArea>}>
+                  <Route path="/krewereview" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/new" element={<MspAdminRoute><ContractFormPage mode="new" /></MspAdminRoute>} />
+                  <Route path="/krewereview/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/lists" element={<MspAdminRoute><PicklistsPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
+                </Route>
                 <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
                 {/* KREWE Governance — library management is MSP-only; the wizard,
                     client profile, and assembled viewer are client-reachable

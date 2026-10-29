@@ -31,19 +31,19 @@ const useStyles = makeStyles({
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
   branding: { display: "flex", flexDirection: "column", gap: "4px" },
   statsRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" },
-  statCard: { padding: "20px", textAlign: "center" as const },
-  statValue: { display: "block", fontSize: "32px", fontWeight: "bold" as const, lineHeight: "1.2" },
+  statCard: { padding: "12px", textAlign: "center" as const },
+  statValue: { display: "block", fontSize: "20px", fontWeight: "bold" as const, lineHeight: "1.2" },
   statLabel: { display: "block", marginTop: "4px", color: tokens.colorNeutralForeground3 },
   section: { display: "flex", flexDirection: "column", gap: "12px" },
   sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   alertGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" },
-  alertCard: { padding: "16px", cursor: "pointer", ":hover": { boxShadow: tokens.shadow8 } },
+  alertCard: { padding: "10px 12px", cursor: "pointer", ":hover": { boxShadow: tokens.shadow8 } },
   alertHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" },
   alertVendor: { fontWeight: "bold" as const },
   recentList: { display: "flex", flexDirection: "column", gap: "8px" },
   recentItem: {
     display: "flex", justifyContent: "space-between", alignItems: "center",
-    padding: "12px 16px", borderRadius: tokens.borderRadiusMedium,
+    padding: "8px 12px", borderRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground2,
     cursor: "pointer", ":hover": { backgroundColor: tokens.colorNeutralBackground2Hover },
   },
@@ -95,28 +95,28 @@ export function ContractsPage() {
       {/* Stats Row */}
       <div className={styles.statsRow}>
         <Card className={styles.statCard}>
-          <DocumentText24Regular style={{ color: tokens.colorBrandForeground1, fontSize: "28px" }} />
+          <DocumentText24Regular style={{ color: tokens.colorBrandForeground1, fontSize: "22px" }} />
           <Text className={styles.statValue} style={{ color: tokens.colorBrandForeground1 }}>
             {dashboard.totalContracts}
           </Text>
           <Text className={styles.statLabel} size={200}>Total Contracts</Text>
         </Card>
         <Card className={styles.statCard}>
-          <CheckmarkCircle24Regular style={{ color: "#107C10", fontSize: "28px" }} />
+          <CheckmarkCircle24Regular style={{ color: "#107C10", fontSize: "22px" }} />
           <Text className={styles.statValue} style={{ color: "#107C10" }}>
             {dashboard.activeContracts}
           </Text>
           <Text className={styles.statLabel} size={200}>Active</Text>
         </Card>
         <Card className={styles.statCard}>
-          <Warning24Regular style={{ color: "#D13438", fontSize: "28px" }} />
+          <Warning24Regular style={{ color: "#D13438", fontSize: "22px" }} />
           <Text className={styles.statValue} style={{ color: "#D13438" }}>
             {dashboard.expiringSoon}
           </Text>
           <Text className={styles.statLabel} size={200}>Expiring Soon</Text>
         </Card>
         <Card className={styles.statCard}>
-          <Money24Regular style={{ color: "#8764B8", fontSize: "28px" }} />
+          <Money24Regular style={{ color: "#8764B8", fontSize: "22px" }} />
           <Text className={styles.statValue} style={{ color: "#8764B8" }}>
             {formatCurrency(dashboard.totalValue)}
           </Text>

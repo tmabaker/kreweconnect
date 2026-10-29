@@ -62,10 +62,10 @@ const useStyles = makeStyles({
   grid: { display: "grid", gridTemplateColumns: "1fr 340px", gap: "24px", "@media (max-width: 900px)": { gridTemplateColumns: "1fr" } },
   mainCol: { display: "flex", flexDirection: "column", gap: "20px" },
   sideCol: { display: "flex", flexDirection: "column", gap: "20px" },
-  metaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px", padding: "16px" },
+  metaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: "10px", padding: "12px" },
   metaItem: { display: "flex", flexDirection: "column", gap: "2px" },
-  metaLabel: { fontSize: "11px", textTransform: "uppercase" as const, letterSpacing: "0.5px", color: tokens.colorNeutralForeground3 },
-  section: { padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
+  metaLabel: { fontSize: "9px", textTransform: "uppercase" as const, letterSpacing: "0.5px", color: tokens.colorNeutralForeground3 },
+  section: { padding: "12px", display: "flex", flexDirection: "column", gap: "8px" },
   sectionTitle: { display: "flex", alignItems: "center", gap: "8px" },
   timeline: { display: "flex", flexDirection: "column", gap: "12px", padding: "0 8px" },
   timelineItem: {
