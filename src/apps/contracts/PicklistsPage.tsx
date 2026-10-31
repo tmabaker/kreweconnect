@@ -26,7 +26,7 @@ import { getPicklist, savePicklist, type Picklist } from "../../services/contrac
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "24px", maxWidth: "860px" },
-  section: { padding: "20px", display: "flex", flexDirection: "column", gap: "12px" },
+  section: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px" },
   chips: { display: "flex", flexWrap: "wrap", gap: "8px" },
   chip: {
     display: "inline-flex", alignItems: "center", gap: "4px",
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground3,
   },
   addRow: { display: "flex", gap: "8px", flexWrap: "wrap" },
-  hint: { fontSize: "12px", color: tokens.colorNeutralForeground3 },
+  hint: { fontSize: "9px", color: tokens.colorNeutralForeground3 },
 });
 
 interface ListEditorProps {

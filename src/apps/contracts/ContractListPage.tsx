@@ -47,25 +47,30 @@ const useStyles = makeStyles({
   },
   filterBar: {
     display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap",
-    padding: "12px 16px", backgroundColor: tokens.colorNeutralBackground2,
+    padding: "8px 12px", backgroundColor: tokens.colorNeutralBackground2,
     borderRadius: tokens.borderRadiusMedium,
   },
   filterDropdown: { minWidth: "160px" },
   table: { width: "100%", borderCollapse: "collapse" as const },
   th: {
-    textAlign: "left" as const, padding: "12px 16px", borderBottom: `2px solid ${tokens.colorNeutralStroke2}`,
-    color: tokens.colorNeutralForeground3, fontSize: "12px", fontWeight: "600" as const,
+    textAlign: "left" as const, padding: "6px 10px", borderBottom: `2px solid ${tokens.colorNeutralStroke2}`,
+    color: tokens.colorNeutralForeground3, fontSize: "9px", fontWeight: "600" as const,
     textTransform: "uppercase" as const, letterSpacing: "0.5px", cursor: "pointer",
     userSelect: "none" as const,
   },
   td: {
-    padding: "12px 16px", borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    padding: "5px 10px", borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     verticalAlign: "middle" as const,
+    // Short values stay on one line so rows stay one line tall; only the
+    // title and vendor wrap.
+    whiteSpace: "nowrap" as const,
+    "& .fui-Text": { whiteSpace: "nowrap" },
   },
+  tdWrap: { whiteSpace: "normal" as const, minWidth: "220px", maxWidth: "360px", "& .fui-Text": { whiteSpace: "normal" } },
   row: { cursor: "pointer", ":hover": { backgroundColor: tokens.colorNeutralBackground1Hover } },
   sortIcon: { marginLeft: "4px", verticalAlign: "middle" },
   vendorCell: { display: "flex", flexDirection: "column", gap: "2px" },
-  tagsCell: { display: "flex", flexWrap: "wrap", gap: "4px" },
+  tagsCell: { display: "flex", flexWrap: "nowrap", gap: "4px" },
   emptyState: { display: "flex", flexDirection: "column", alignItems: "center", padding: "64px", gap: "12px" },
   // Phone layout: one card per agreement so the title gets the full width.
   cardList: { display: "flex", flexDirection: "column", gap: "8px" },
@@ -339,13 +344,13 @@ export function ContractListPage() {
             <tbody>
               {contracts.map((c) => (
                 <tr key={c.id} className={styles.row} onClick={() => open(c.tenantId, c.id)}>
-                  <td className={styles.td}>
+                  <td className={`${styles.td} ${styles.tdWrap}`}>
                     <Text weight="semibold">{c.title}</Text>
                     <Text size={200} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>
                       {[c.department, c.autoRenew ? "Auto-renew" : null, c.isArchived ? "Archived" : null].filter(Boolean).join(" · ")}
                     </Text>
                   </td>
-                  <td className={styles.td}><Text>{c.vendorName}</Text></td>
+                  <td className={`${styles.td} ${styles.tdWrap}`} style={{ minWidth: "110px", maxWidth: "180px" }}><Text>{c.vendorName}</Text></td>
                   <td className={styles.td}><Text size={200}>{getCategoryLabel(c.agreementCategory)}</Text></td>
                   <td className={styles.td}><Text size={200}>{getRenewalTypeLabel(c.renewalType)}</Text></td>
                   <td className={styles.td}>

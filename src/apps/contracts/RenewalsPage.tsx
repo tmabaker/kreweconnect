@@ -31,7 +31,7 @@ const useStyles = makeStyles({
   },
   renewalCard: {
     display: "flex", justifyContent: "space-between", alignItems: "center",
-    padding: "16px", cursor: "pointer",
+    padding: "10px 12px", cursor: "pointer",
     ":hover": { boxShadow: tokens.shadow8 },
   },
   renewalLeft: { display: "flex", flexDirection: "column", gap: "4px", flex: 1 },
