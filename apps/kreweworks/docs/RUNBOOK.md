@@ -28,6 +28,22 @@ checks out this engine, copies the client's profile and logo into the package, r
 against that profile, then uploads `app/` and `api/` with the client's SWA deployment token
 (`KREWEWORKS_SWA_TOKEN_<SLUG>`).
 
+### B1. Help and training videos
+
+The Help page (`#/help`) lists the videos named in the client profile:
+
+```json
+"help": { "intro": "Short videos that walk through the portal.",
+  "videos": [ { "id": "new-hire", "title": "Hiring a new employee", "description": "…", "file": "new-hire.mp4",
+                "poster": "new-hire.jpg", "duration": "5 min", "roles": ["manager", "hr"] } ] }
+```
+
+The files live in the private repo next to the profile, in `kreweworks/clients/<slug>/help/`, and the deploy copies
+that folder to `app/help/`. `/help/*` requires the `portal` role like every other page, so only invited users can
+watch. `roles` is optional (omit it for everyone; admins always see all). File names must be plain names
+(letters, digits, `.`, `_`, `-`); anything else is dropped. Keep videos H.264 MP4 with `+faststart` so they start
+playing before they finish downloading. Never put real people's data in a training video.
+
 ## C. First sign-in and access
 
 1. Open the default host and sign in with a bootstrap admin.

@@ -40,6 +40,7 @@ app.http('config', { methods: ['GET'], authLevel: 'anonymous', route: 'config', 
     packetEnabled: !!data.packet, packetVendor: (data.packet && data.packet.backgroundScreen && data.packet.backgroundScreen.vendor) || '', packetVendorPhone: (data.packet && data.packet.backgroundScreen && data.packet.backgroundScreen.phone) || '',
     vocab: data.vocab, branding: data.branding, features: data.features, itPartner: data.itPartner,
     termination: { hrChecks: data.termination.hrChecks, itChecks: data.termination.itChecks },
+    help: require('../lib/help').forCaller(data.help, caller.role),
     directoryAvailable: graph.configured(), mailEnabled: config.mail.enabled,
     me: { upn: caller.upn, name: caller.name, role: caller.role, stores: caller.stores }
   });

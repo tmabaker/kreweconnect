@@ -38,7 +38,7 @@
   var routes = [
     [/^#\/?$/, home], [/^#\/requests\/?$/, requestsList], [/^#\/requests\/([^/]+)$/, requestDetail],
     [/^#\/people\/?$/, peopleList], [/^#\/people\/([^/]+)$/, personDetail],
-    [/^#\/hire\/new$/, hireNew], [/^#\/change\/new$/, changeNew], [/^#\/terminate\/new$/, terminateNew], [/^#\/admin$/, admin]
+    [/^#\/hire\/new$/, hireNew], [/^#\/change\/new$/, changeNew], [/^#\/terminate\/new$/, terminateNew], [/^#\/admin$/, admin], [/^#\/help\/?$/, helpPage]
   ];
   function navigate() {
     var h = location.hash || '#/';
@@ -419,6 +419,27 @@
   }
 
   // ---------- admin: access ----------
+  // ---------- help and training ----------
+  function helpPage(_, q) {
+    var help = state.cfg.help || { intro: '', videos: [] }; var vids = help.videos || [];
+    var c = state.cfg.client || {}; var hd = c.helpdesk || {}; var hr = c.hr || {};
+    var current = vids.find(function (v) { return v.id === (q && q.v); }) || vids[0];
+    var contact = '<div class="card"><h2>Need a hand?</h2><p>' + (hd.email ? 'Email <a href="mailto:' + esc(hd.email) + '">' + esc(hd.email) + '</a>' + (hd.phone ? ' or call ' + esc(hd.phone) : '') + ' for sign-in, access or IT questions.' : '') + (hr.email ? ' For hiring and payroll questions, email HR at <a href="mailto:' + esc(hr.email) + '">' + esc(hr.email) + '</a>.' : '') + '</p></div>';
+    if (!vids.length) { $main.innerHTML = '<div class="page-head"><div><h1>Help</h1><p class="muted">' + esc(help.intro) + '</p></div></div>' + contact; return; }
+    $main.innerHTML = '<div class="page-head"><div><h1>Help and training</h1><p class="muted">' + esc(help.intro || 'Short videos that walk through each part of the portal.') + '</p></div></div>' +
+      '<div class="card help-player"><video id="helpVideo" controls preload="metadata" playsinline></video><div class="help-now"><h2 id="helpTitle"></h2><p class="muted" id="helpDesc"></p></div></div>' +
+      '<div class="help-grid">' + vids.map(function (v) { return '<button type="button" class="help-card" data-vid="' + esc(v.id) + '">' + (v.poster ? '<img src="' + esc(v.poster) + '" alt="" loading="lazy">' : '<span class="help-noposter">▶</span>') + '<span class="help-card-body"><strong>' + esc(v.title) + '</strong>' + (v.duration ? '<span class="dim">' + esc(v.duration) + '</span>' : '') + '<span class="small muted">' + esc(v.description) + '</span></span></button>'; }).join('') + '</div>' + contact;
+    var video = document.getElementById('helpVideo');
+    function show(v, play) {
+      video.poster = v.poster || ''; video.src = v.src; document.getElementById('helpTitle').textContent = v.title; document.getElementById('helpDesc').textContent = v.description;
+      $main.querySelectorAll('.help-card').forEach(function (b) { b.classList.toggle('active', b.dataset.vid === v.id); });
+      if (play) { video.play().catch(function () {}); document.querySelector('.help-player').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      history.replaceState(null, '', '#/help?v=' + encodeURIComponent(v.id));
+    }
+    $main.querySelectorAll('.help-card').forEach(function (b) { b.addEventListener('click', function () { show(vids.find(function (v) { return v.id === b.dataset.vid; }), true); }); });
+    show(current, false);
+  }
+
   function admin() {
     if (!can('hr') && !can('it')) { $main.innerHTML = '<div class="alert warn">Access management is for HR and IT.</div>'; return; }
     return api('GET', 'access').then(function (r) {
