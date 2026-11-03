@@ -54,6 +54,7 @@ function normalize(raw, source) {
   p.itPartner = raw.itPartner || null;
   p.techtools = raw.techtools || null;
   p.initialAccess = Array.isArray(raw.initialAccess) ? raw.initialAccess : [];
+  p.help = require('./help').normalize(raw.help);
   return p;
 }
 

@@ -156,3 +156,22 @@ test('directory sync adds licensed staff, refreshes them, flags leavers and neve
     assert.equal(res.status, 200); assert.equal(res.body.connected, true); assert.equal(res.body.last.missing.length, 1);
   } finally { Object.assign(graph, orig); }
 });
+
+test('help: profile videos are validated, filtered by role and served from /help/', async () => {
+  const help = require('../src/lib/help');
+  const h = help.normalize({ intro: 'Training', videos: [
+    { title: 'Hiring', file: 'new-hire.mp4', poster: 'new-hire.jpg', duration: '5 min', roles: ['manager', 'hr'] },
+    { title: 'For everyone', file: 'welcome.mp4' },
+    { title: 'Bad path', file: '../secret.mp4' },
+    { title: 'Bad poster', file: 'ok.mp4', poster: '/etc/passwd' }
+  ] });
+  assert.deepEqual(h.videos.map(v => v.id), ['new-hire', 'welcome']);
+  assert.deepEqual(help.forCaller(h, 'manager').videos.map(v => v.src), ['/help/new-hire.mp4', '/help/welcome.mp4']);
+  assert.equal(help.forCaller(h, 'manager').videos[0].poster, '/help/new-hire.jpg');
+  assert.deepEqual(help.forCaller(h, 'it').videos.map(v => v.id), ['welcome']);
+  assert.equal(help.forCaller(h, 'admin').videos.length, 2);
+  assert.deepEqual(help.normalize(undefined), { intro: '', videos: [] });
+  const r = await call('GET', 'config', null, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.help, { intro: '', videos: [] });
+});

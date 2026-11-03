@@ -35,7 +35,7 @@ api/                 Azure Functions (Node 20)
   src/lib/profile.js loads the client profile (see docs/ARCHITECTURE.md)
   src/profiles/      demo.json (fictional, committed); active.json (written by the private deploy, gitignored)
   test/              node --test; runs against the demo profile
-app/                 static SPA, no build step; branding and wording come from /api/config
+app/                 static SPA, no build step; branding, wording and Help videos come from /api/config
 infra/provision.sh   one client's SWA + storage + settings, driven by its profile
 docs/                ARCHITECTURE.md, RUNBOOK.md
 ```

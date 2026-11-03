@@ -29,6 +29,7 @@
     { "route": "/assets/*", "allowedRoles": ["anonymous", "authenticated"] },
     { "route": "/styles.css", "allowedRoles": ["anonymous", "authenticated"] },
     { "route": "/no-access.js", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/help/*", "allowedRoles": ["portal"], "headers": { "Cache-Control": "private, max-age=86400" } },
     { "route": "/*", "allowedRoles": ["portal"] }
   ],
   "responseOverrides": {
