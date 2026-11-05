@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { config } from "./config";
-import { encryptCallRailPayload, getVendorJobStatus, submitCallRailDelivery, submitLifecycleFailureAlert } from "./vendorQueue";
+import { submitLifecycleFailureAlert } from "./vendorQueue";
 import { graphRequest } from "./graphClient";
 import { validateApprovedPassword } from "./userAdmin";
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const CALLRAIL_BASE = "https://api.callrail.com/v3";
 const TOKEN_SCOPE = "https://graph.microsoft.com/.default";
 let mailToken: { value: string; expiresAt: number } | null = null;
 
@@ -39,7 +40,10 @@ function safeMessage(err: unknown, fallback: string): string {
 
 function callRailSettingsError(): string | null {
   const missing = [
-    ["CALLRAIL_WORKER_PUBLIC_KEY", config.callRailWorkerPublicKey],
+    ["CALLRAIL_API_KEY", config.callRailApiKey],
+    ["CALLRAIL_ACCOUNT_ID", config.callRailAccountId],
+    ["CALLRAIL_TRACKING_NUMBER", config.callRailTrackingNumber],
+    ["CALLRAIL_COMPANY_ID", config.callRailCompanyId],
   ].filter(([, value]) => !value).map(([name]) => name);
   return missing.length
     ? `Required CallRail settings are missing: ${missing.join(", ")}.`
@@ -120,62 +124,78 @@ async function queueDeliveryEscalation(input: {
 }
 
 
+/** The only approved new hire message. Do not change the wording without Tammy's approval. */
+export function approvedCallRailMessage(password: string): string {
+  validateApprovedPassword(password);
+  return `Welcome to Geaux Automotive! Your temporary password is ${password}. You'll need this to access your email and information. Please check your welcome email for information about your dealership groups and support contacts. For IT help, email support@geauxautomotive.com.`;
+}
+
+const CALLRAIL_SEND_ATTEMPTS = 3;
+
+/**
+ * Text the temporary password through the CallRail API (Tammy, 2026-11-05).
+ *
+ * Sender: the Geaux support number 504-285-9030 (CALLRAIL_TRACKING_NUMBER),
+ * which lives under the Brita, LLC company in CallRail. The send must carry
+ * that company's id: without company_id CallRail answers HTTP 403 "You do not
+ * have permission", which is what pushed delivery into the browser on
+ * 2026-10-02. A response is retried only when CallRail never accepted it, so a
+ * password is never texted twice.
+ */
 export async function sendCallRailPassword(
   mobilePhone: string,
   password: string,
-  jobId = randomUUID()
+  _jobId = randomUUID()
 ): Promise<DeliveryStep> {
   const settingError = callRailSettingsError();
   if (settingError) return { status: "failed", destinationLast4: mobilePhone.slice(-4), error: settingError };
+  let content: string;
   try {
-    validateApprovedPassword(password);
-    const existing = await getVendorJobStatus(jobId);
-    if (!existing) {
-      await submitCallRailDelivery({
-        id: jobId,
-        kind: "callrail_delivery",
-        encryptedPayload: encryptCallRailPayload(mobilePhone, password),
-        submittedAt: new Date().toISOString(),
-      });
-    }
-    for (let poll = 0; poll < 180; poll += 1) {
-      const status = await getVendorJobStatus(jobId);
-      if (status?.state === "completed") {
-        const receipt = (status.receipt || {}) as Record<string, unknown>;
-        if (receipt.verified === true && receipt.status === "sent" && receipt.messageId) {
-          return {
-            status: "sent",
-            accepted: true,
-            attempts: Number(status.attempt || 1),
-            destinationLast4: String(receipt.destinationLast4 || mobilePhone.slice(-4)),
-            messageId: String(receipt.messageId),
-            sender: String(receipt.sender || ""),
-          };
-        }
-      }
-      if (status?.state === "failed" || status?.state === "manual_action_required") {
-        return {
-          status: "failed",
-          attempts: Number(status.attempt || 1),
-          destinationLast4: mobilePhone.slice(-4),
-          error: String(status.message || "CallRail delivery did not verify."),
-        };
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-    return {
-      status: "failed",
-      accepted: true,
-      destinationLast4: mobilePhone.slice(-4),
-      error: "CallRail worker did not return a verified receipt before the delivery timeout.",
-    };
+    content = approvedCallRailMessage(password);
   } catch (err) {
-    return {
-      status: "failed",
-      destinationLast4: mobilePhone.slice(-4),
-      error: safeMessage(err, "CallRail credential delivery failed."),
-    };
+    return { status: "failed", destinationLast4: mobilePhone.slice(-4), error: safeMessage(err, "Password is not in the approved format.") };
   }
+  let last: DeliveryStep = { status: "failed", destinationLast4: mobilePhone.slice(-4), error: "CallRail delivery did not run." };
+  for (let attempt = 1; attempt <= CALLRAIL_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(
+        `${CALLRAIL_BASE}/a/${encodeURIComponent(config.callRailAccountId)}/text-messages.json`,
+        {
+          method: "POST",
+          headers: { Authorization: `Token token=${config.callRailApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            company_id: config.callRailCompanyId,
+            tracking_number: config.callRailTrackingNumber,
+            customer_phone_number: mobilePhone,
+            content,
+          }),
+        }
+      );
+      let body: Record<string, unknown> = {};
+      try {
+        body = (await response.json()) as Record<string, unknown>;
+      } catch {
+        // Never surface a provider body: it can echo message content.
+      }
+      if (response.ok) {
+        const messageId = String(body.id || body.message_id || "");
+        return messageId
+          ? { status: "sent", accepted: true, attempts: attempt, destinationLast4: mobilePhone.slice(-4), messageId, sender: config.callRailTrackingNumber.slice(-4) }
+          : { status: "failed", accepted: true, attempts: attempt, destinationLast4: mobilePhone.slice(-4), error: "CallRail accepted the text without a message id." };
+      }
+      last = { status: "failed", attempts: attempt, destinationLast4: mobilePhone.slice(-4), error: `CallRail rejected credential delivery with HTTP ${response.status}.` };
+      // Only a 429 is retried: CallRail refused it outright. Any other answer may
+      // already have texted the employee, and a password must not go out twice.
+      if (response.status !== 429) return last;
+    } catch (err) {
+      // The request may have reached CallRail before the connection failed, so do not resend.
+      return { status: "failed", attempts: attempt, destinationLast4: mobilePhone.slice(-4), error: safeMessage(err, "CallRail credential delivery failed.") };
+    }
+    if (attempt < CALLRAIL_SEND_ATTEMPTS && DELIVERY_RETRY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, DELIVERY_RETRY_MS));
+    }
+  }
+  return last;
 }
 
 export async function sendManagerCredentialEmail(

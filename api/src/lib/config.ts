@@ -167,6 +167,26 @@ export const config = {
   },
 
   /* ── Geaux credential delivery (required in production) ─────────── */
+  get callRailApiKey(): string {
+    return process.env.CALLRAIL_API_KEY || "";
+  },
+  get callRailAccountId(): string {
+    return process.env.CALLRAIL_ACCOUNT_ID || "";
+  },
+  /** Geaux support number 504-285-9030 ("Geaux Automotive and Taila"). */
+  get callRailTrackingNumber(): string {
+    return process.env.CALLRAIL_TRACKING_NUMBER || "+15042859030";
+  },
+  /**
+   * CallRail company that owns the tracking number. Required on every send.
+   * Geaux texts send from 504-285-9030, which is filed under the Brita, LLC
+   * company in CallRail, so they use Brita's company ID. This is intentional
+   * (Tammy, 2026-11-05). If the number moves into the Geaux Auto company,
+   * set CALLRAIL_COMPANY_ID to that company's ID at the same time.
+   */
+  get callRailCompanyId(): string {
+    return process.env.CALLRAIL_COMPANY_ID || "COM33d5bce50ba54d8798a69fb1b10486f6";
+  },
   get callRailWorkerPublicKey(): string {
     return process.env.CALLRAIL_WORKER_PUBLIC_KEY || "";
   },
