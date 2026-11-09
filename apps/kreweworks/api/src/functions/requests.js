@@ -95,7 +95,7 @@ app.http('requests-get', { methods: ['GET'], authLevel: 'anonymous', route: 'req
     if (pages.addUser) links.addUser = `${tt}/${pages.addUser}?${q.toString()}`;
   }
   if (r.type === 'change' && person && pages.modifyUser) links.modifyUser = `${tt}/${pages.modifyUser}?${new URLSearchParams({ upn: person.workEmail || '', ref: r.id }).toString()}`;
-  if (r.type === 'termination' && person && pages.removeUser) links.removeUser = `${tt}/${pages.removeUser}?${new URLSearchParams({ upn: person.workEmail || '', ref: r.id }).toString()}`;
+  if (r.type === 'termination' && person && pages.removeUser) links.removeUser = `${tt}/${pages.removeUser}?${new URLSearchParams({ upn: person.workEmail || '', ref: r.id, tenant: config.tenantId, endpoint: r.termination.deviceEndpointName || '', lastDay: r.termination.lastDay || '' }).toString()}`;
   const packetInfo = r.type === 'hire' ? { status: packet.inviteStatus(r), link: (r.hire.packet.invite && packet.inviteStatus(r) === 'active') ? `${config.baseUrl}/apply.html?t=${r.hire.packet.invite.token}` : '', expiresAt: r.hire.packet.invite ? r.hire.packet.invite.expiresAt : '', sentTo: r.hire.packet.invite ? r.hire.packet.invite.sentTo : '', submittedAt: r.hire.packet.submission ? r.hire.packet.submission.submittedAt : '', purgedAt: r.hire.packet.submission ? r.hire.packet.submission.purgedAt : '' } : null;
   return ok({ request: workflow.redact(r, caller), person: people.redact(person, caller), packet: packetInfo, events: evs.filter(e => !e.hrOnly || caller.can('hr')), stage: { label: def.label, owner: def.owner, help: def.help || '', step: def.step }, actions: workflow.allowedActions(r, caller), links, canComment: true });
 }) });

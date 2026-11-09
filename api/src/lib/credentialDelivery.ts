@@ -65,7 +65,7 @@ function mailSettingsError(): string | null {
     : null;
 }
 
-async function getMailSendToken(tenantId: string): Promise<string> {
+export async function getMailSendToken(tenantId: string): Promise<string> {
   if (mailToken && Date.now() < mailToken.expiresAt - 120_000) return mailToken.value;
   const body = new URLSearchParams({
     client_id: config.geauxMailClientId,

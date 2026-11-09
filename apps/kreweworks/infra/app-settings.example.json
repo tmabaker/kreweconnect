@@ -10,6 +10,7 @@
   "PORTAL_BOOTSTRAP_ADMINS": "<comma-separated MSP admin UPNs>",
   "PORTAL_STORAGE_CONNECTION": "<connection string of this client's own storage account>",
   "PORTAL_MAIL_ENABLED": "false until the pilot is approved",
+  "PORTAL_SERVICE_KEY": "<shared key Tech Tools uses to record IT work; same as KREWEWORKS_SERVICE_KEY on krewesuite>",
   "PORTAL_MAIL_FROM": "<client support mailbox>",
   "PORTAL_HR_EMAIL": "<client HR mailbox>",
   "PORTAL_IT_EMAIL": "<IT intake mailbox (opens the ticket)>",

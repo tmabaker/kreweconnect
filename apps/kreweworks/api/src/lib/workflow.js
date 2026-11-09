@@ -414,6 +414,42 @@ async function applyAction(r, action, payload, actor) {
   return { request: r, event: ev, effects, person: person ? await people.get(person.id) : null };
 }
 
+// NOIT Tech Tools reports IT work as it happens (offboarding actions, device wipe, phone vendor notice).
+// It appends one timeline entry, ticks the IT checks the work satisfied (never unticks one) and moves a
+// waiting request into IT progress. It never completes or closes a request: IT reviews and does that here.
+const TECHTOOLS_START = { termination: ['submitted', 'hr_processed'], change: ['it_queue'], hire: ['it_queue'] };
+async function recordTechTools(r, body) {
+  if (model.isTerminal(r.stage)) throw new HttpError(409, 'This request is closed.');
+  const a = body.actor || {};
+  const upn = clean(a.upn, 120).toLowerCase();
+  if (!upn) throw new HttpError(400, 'actor.upn is required.');
+  const actor = { upn, name: `${clean(a.name, 120) || upn} (Tech Tools)`, role: 'it' };
+  const items = (Array.isArray(body.items) ? body.items : []).slice(0, 40)
+    .map(i => ({ text: clean(i && i.text, 400).replace(/[\r\n]+/g, ' '), ok: !!(i && i.ok === true) })).filter(i => i.text);
+  if (!items.length) throw new HttpError(400, 'Nothing to record.');
+
+  const fromStage = r.stage;
+  const it = r.type === 'termination' ? r.termination.it : r.type === 'change' ? r.change.it : r.hire.it;
+  const checksSet = [];
+  if (r.type === 'termination') {
+    const allowed = new Set(data.termination.itChecks.map(c => c.key));
+    for (const k of Array.isArray(body.itChecks) ? body.itChecks : []) {
+      if (allowed.has(k) && !r.termination.it[k]) { r.termination.it[k] = true; checksSet.push(k); }
+    }
+  }
+  if ((TECHTOOLS_START[r.type] || []).includes(r.stage)) {
+    r.stage = 'it_in_progress';
+    it.startedAt = it.startedAt || nowIso();
+  }
+  it.assignedTo = it.assignedTo || upn;
+  const lines = items.map(i => `${i.ok ? 'Done' : 'Failed'}: ${i.text}`);
+  const note = clean(body.note, 1000);
+  if (note) lines.push(note);
+  await save(r);
+  const ev = await addEvent(r, actor, 'techtools_update', lines.join('\n'), { fromStage, toStage: r.stage, source: 'techtools', checksSet });
+  return { request: r, event: ev, checksSet };
+}
+
 // The candidate submits the online packet. Validated and encrypted in packet.normalizeSubmission.
 async function submitPacket(r, body, meta) {
   const h = r.hire;
@@ -447,4 +483,4 @@ function redact(r, caller) {
   return copy;
 }
 
-module.exports = { IT_STAGES, submitPacket, listAll, get, save, events, addEvent, visibleTo, createHire, createChange, createTermination, allowedActions, applyAction, redact, normalizeChecklist, checklistComplete, PK };
+module.exports = { IT_STAGES, recordTechTools, submitPacket, listAll, get, save, events, addEvent, visibleTo, createHire, createChange, createTermination, allowedActions, applyAction, redact, normalizeChecklist, checklistComplete, PK };
