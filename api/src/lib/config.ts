@@ -193,6 +193,49 @@ export const config = {
   get geauxSupportMailbox(): string {
     return process.env.GEAUX_SUPPORT_MAILBOX || "support@geauxautomotive.com";
   },
+
+  /* ── Endpoint handover (Remove User page) ───────────────────────── */
+  /**
+   * Intune and Autopilot identity for Geaux: the single-tenant "NOIT Autopilot
+   * (Geaux)" app. It is the only
+   * identity there holding DeviceManagementManagedDevices.PrivilegedOperations.All,
+   * which Graph requires for an app-only wipe (verified live 2026-11-09).
+   */
+  get geauxIntuneClientId(): string {
+    return process.env.GEAUX_INTUNE_CLIENT_ID || "";
+  },
+  get geauxIntuneClientSecret(): string {
+    return process.env.GEAUX_INTUNE_CLIENT_SECRET || "";
+  },
+  /** Group tag stamped on a hash imported from VSA X (read from an existing Geaux record 2026-09-21). */
+  get geauxAutopilotGroupTag(): string {
+    return process.env.GEAUX_AUTOPILOT_GROUP_TAG ?? "Geaux Corporate";
+  },
+  /** VSA X API. The Autopilot hash rides in device custom fields there. */
+  get vsaxApiKey(): string {
+    return process.env.VSAX_API_KEY || "";
+  },
+  get vsaxApiSecret(): string {
+    return process.env.VSAX_API_SECRET || "";
+  },
+  get vsaxBaseUrl(): string {
+    return (process.env.VSAX_BASE_URL || "https://noitgroup.vsax.net").replace(/\/$/, "");
+  },
+  get vsaxApiVersion(): string {
+    return process.env.VSAX_API_VERSION || "v3";
+  },
+  get geauxVsaxOrganizationId(): number {
+    return parseInt(process.env.GEAUX_VSAX_ORG_ID || "89", 10);
+  },
+
+  /**
+   * Shared key the suite presents to a client's KreweWorks portal when Tech
+   * Tools records work on a request. The same value is PORTAL_SERVICE_KEY on
+   * that portal's Static Web App.
+   */
+  get kreweworksServiceKey(): string {
+    return process.env.KREWEWORKS_SERVICE_KEY || "";
+  },
   get geauxMailClientId(): string {
     return process.env.GEAUX_MAIL_CLIENT_ID || "";
   },

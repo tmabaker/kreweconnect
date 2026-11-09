@@ -5,3 +5,4 @@ require('./functions/people');
 require('./functions/requests');
 require('./functions/admin');
 require('./functions/apply');
+require('./functions/service');

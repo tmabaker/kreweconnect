@@ -38,6 +38,8 @@ const config = {
     bcc: list(env.PORTAL_MAIL_BCC, '')
   },
   baseUrl: (env.PORTAL_BASE_URL || p.deploy.baseUrl || '').replace(/\/$/, ''),
+  // Shared key NOIT Tech Tools presents (through the KreweConnect API) to record IT work on a request.
+  serviceKey: env.PORTAL_SERVICE_KEY || '',
   techtoolsBase: (env.TECHTOOLS_BASE_URL || 'https://techtools.noitgroup.com').replace(/\/$/, ''),
   maxAttachmentBytes: parseInt(env.PORTAL_MAX_ATTACHMENT_BYTES || String(8 * 1024 * 1024), 10),
   // Local development only: a fake signed-in principal (JSON: {upn,name,tid}). Ignored when a real SWA principal header is present.
