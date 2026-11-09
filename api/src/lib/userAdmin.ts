@@ -194,7 +194,7 @@ export async function registerMobilePhoneAuthenticationMethod(
         tenantId,
         "POST",
         `/users/${encodeURIComponent(userId)}/authentication/phoneMethods`,
-        { phoneNumber, phoneType: "mobile" }
+        { phoneNumber: toGraphAuthPhoneNumber(phoneNumber), phoneType: "mobile" }
       );
       return method!;
     } catch (err) {
@@ -208,6 +208,73 @@ export async function registerMobilePhoneAuthenticationMethod(
     }
   }
   throw lastError;
+}
+
+/** Fixed Graph id of the "mobile" phone authentication method. */
+export const MOBILE_PHONE_METHOD_ID = "3179e48a-750b-4051-897c-87b9720928f7";
+
+/**
+ * Graph documents authentication phone numbers as "+{country code} {number}"
+ * and may reject other shapes. NANP numbers split cleanly after "+1"; other
+ * country codes have variable length, so those pass through as E.164.
+ */
+export function toGraphAuthPhoneNumber(e164: string): string {
+  return /^\+1\d{10}$/.test(e164) ? `+1 ${e164.slice(2)}` : e164;
+}
+
+export type MobilePhoneMethodAction = "added" | "updated" | "unchanged";
+
+/**
+ * Decide how to make the user's mobile MFA number equal `e164`. Graph allows
+ * only one mobile phone method per user, so an existing one must be updated
+ * in place (POST would be rejected). Comparison is digits-only because Graph
+ * returns numbers as "+1 2254907649".
+ */
+export function planMobilePhoneMethodWrite(
+  existing: Pick<PhoneAuthenticationMethod, "id" | "phoneNumber" | "phoneType">[],
+  e164: string
+): { action: MobilePhoneMethodAction; methodId?: string } {
+  const current = existing.find((m) => m.phoneType === "mobile");
+  if (!current) return { action: "added" };
+  const digits = (v: string) => (v || "").replace(/\D/g, "");
+  if (digits(current.phoneNumber) === digits(e164)) {
+    return { action: "unchanged", methodId: current.id };
+  }
+  return { action: "updated", methodId: current.id || MOBILE_PHONE_METHOD_ID };
+}
+
+/**
+ * Add or update the user's mobile MFA phone method so it matches
+ * `mobilePhone`. Used by Modify User when the tech opts to carry a new
+ * mobile number into MFA, and as the retry path after onboarding.
+ */
+export async function setMobilePhoneAuthenticationMethod(
+  tenantId: string,
+  userId: string,
+  mobilePhone: string
+): Promise<{ action: MobilePhoneMethodAction; method: PhoneAuthenticationMethod }> {
+  const phoneNumber = normalizeE164(mobilePhone);
+  if (!phoneNumber) throw new BadRequestError("mobilePhone is required for MFA registration.");
+
+  const base = `/users/${encodeURIComponent(userId)}/authentication/phoneMethods`;
+  const list = await graphRequest<{ value?: PhoneAuthenticationMethod[] }>(tenantId, "GET", base);
+  const plan = planMobilePhoneMethodWrite(list?.value || [], phoneNumber);
+
+  if (plan.action === "added") {
+    const method = await registerMobilePhoneAuthenticationMethod(tenantId, userId, phoneNumber);
+    return { action: "added", method };
+  }
+  if (plan.action === "updated") {
+    // PATCH returns 204 No Content, so the method is described from the request.
+    await graphRequest(tenantId, "PATCH", `${base}/${encodeURIComponent(plan.methodId!)}`, {
+      phoneNumber: toGraphAuthPhoneNumber(phoneNumber),
+      phoneType: "mobile",
+    });
+  }
+  return {
+    action: plan.action,
+    method: { id: plan.methodId!, phoneNumber, phoneType: "mobile" },
+  };
 }
 
 export async function createUser(
