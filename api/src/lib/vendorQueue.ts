@@ -27,6 +27,9 @@ export type VendorLifecycleJob = {
     jobTitle: string;
     mobilePhone?: string;
     employeeId?: string;
+    // Run RouteOne's store sweep even when the role has no RouteOne access.
+    // The sweep only sets users inactive. NOIT technicians only.
+    forceRouteOne?: boolean;
   };
 };
 

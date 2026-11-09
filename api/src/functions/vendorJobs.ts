@@ -30,6 +30,18 @@ app.http("vendorLifecycleSubmit", {
     if (operation === "disable" && !caller.isMspAdmin) {
       return { status: 403, jsonBody: { code: "auth_error", message: "Vendor disable requires a NOIT technician." } };
     }
+    const forceRouteOne = body.forceRouteOne === true;
+    if (forceRouteOne && (operation === "add" || !caller.isMspAdmin)) {
+      return {
+        status: forceRouteOne && operation === "add" ? 400 : 403,
+        jsonBody: {
+          code: operation === "add" ? "bad_request" : "auth_error",
+          message: operation === "add"
+            ? "Forcing RouteOne applies only to a change or a removal."
+            : "Forcing RouteOne requires a NOIT technician.",
+        },
+      };
+    }
     const job: VendorLifecycleJob = {
       id: randomUUID(),
       operation,
@@ -45,6 +57,7 @@ app.http("vendorLifecycleSubmit", {
         jobTitle: value(body, "jobTitle"),
         mobilePhone: value(body, "mobilePhone", false),
         employeeId: value(body, "employeeId", false),
+        ...(forceRouteOne ? { forceRouteOne: true } : {}),
       },
     };
     await submitVendorJob(job);
