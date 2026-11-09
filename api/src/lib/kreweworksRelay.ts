@@ -63,8 +63,14 @@ export async function relayToKreweWorks(
     method: "POST",
     headers: { "Content-Type": "application/json", "X-KreweWorks-Service-Key": config.kreweworksServiceKey },
     body: JSON.stringify({ actor: { upn: actor.upn, name: actor.name }, items: body.items, itChecks: body.itChecks, note: body.note }),
+    // The portal's sign-in rules turn some refusals into a redirect to a login page that answers 200.
+    // Never follow one: only the portal's own JSON reply, naming the event it wrote, counts as recorded.
+    redirect: "manual",
   });
-  const reply = (await response.json().catch(() => ({}))) as { stage?: string; checksSet?: string[]; error?: string; message?: string };
+  const reply = (await response.json().catch(() => ({}))) as { stage?: string; checksSet?: string[]; eventId?: string; error?: string; message?: string };
+  if (response.ok && !reply.eventId) {
+    return { recorded: false, requestId: body.requestId, detail: `KreweWorks answered HTTP ${response.status} without recording the update. Check PORTAL_SERVICE_KEY on the portal.` };
+  }
   if (!response.ok) {
     return { recorded: false, requestId: body.requestId, detail: `KreweWorks refused the update with HTTP ${response.status}${reply.error || reply.message ? `: ${reply.error || reply.message}` : "."}` };
   }

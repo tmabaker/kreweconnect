@@ -149,11 +149,15 @@ def main():
         "PORTAL_DIRECTORY_ENABLED": "false" if p.get("deploy", {}).get("directory") is False else "true",
         "TECHTOOLS_BASE_URL": "https://techtools.noitgroup.com",
         "PORTAL_PII_KEY": existing.get("PORTAL_PII_KEY") or base64.b64encode(secrets.token_bytes(32)).decode(),
+        # Kept once set: KREWEWORKS_SERVICE_KEY on krewesuite must hold the same value for Tech Tools updates.
+        "PORTAL_SERVICE_KEY": existing.get("PORTAL_SERVICE_KEY") or secrets.token_urlsafe(48),
     }
     if conn:
         want["PORTAL_STORAGE_CONNECTION"] = conn
     merged = dict(existing); merged.update({k: v for k, v in want.items() if v != ""})
     changed = sorted(k for k in merged if existing.get(k) != merged[k])
+    if "PORTAL_SERVICE_KEY" in changed:
+        print("  a new PORTAL_SERVICE_KEY will be set: copy it to KREWEWORKS_SERVICE_KEY on krewesuite so Tech Tools can update requests")
     print(f"  app settings to set: {', '.join(changed) or 'none'} (values not shown; mail stays {merged['PORTAL_MAIL_ENABLED']})")
     if a.apply and changed:
         call(arm, "PUT", f"{rg}/providers/Microsoft.Web/staticSites/{swa}/config/appsettings?api-version=2022-09-01", {"properties": merged})
