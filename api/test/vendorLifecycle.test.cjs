@@ -26,3 +26,13 @@ test('vendor lifecycle API exposes submit and authoritative status routes', () =
   assert.match(source, /route: "tenants\/\{tenantId\}\/vendor-lifecycle\/jobs\/\{jobId\}"/);
   assert.match(source, /getVendorJobStatus\(jobId\)/);
 });
+
+test('vendor lifecycle API passes forceRouteOne through for NOIT technicians only', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'functions', 'vendorJobs.ts'), 'utf8');
+  assert.match(source, /const forceRouteOne = body\.forceRouteOne === true;/);
+  assert.match(source, /Forcing RouteOne requires a NOIT technician/);
+  assert.match(source, /Forcing RouteOne applies only to a change or a removal/);
+  assert.match(source, /\.\.\.\(forceRouteOne \? \{ forceRouteOne: true \} : \{\}\)/);
+  const queue = readFileSync(join(__dirname, '..', 'src', 'lib', 'vendorQueue.ts'), 'utf8');
+  assert.match(queue, /forceRouteOne\?: boolean;/);
+});
