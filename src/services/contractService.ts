@@ -29,6 +29,9 @@ export interface ContractRecord {
   vendorName: string;
   counterpartyName: string | null;
   agreementCategory: AgreementCategory;
+  /** Every site the agreement covers. */
+  locations: string[];
+  /** The first of `locations`; kept for older readers. */
   location: string | null;
   department: string | null;
   status: ContractStatus;
@@ -76,7 +79,7 @@ export interface ContractRecord {
 /** The editable part of a record, as the form sends it. */
 export type ContractInput = Pick<
   ContractRecord,
-  | "title" | "vendorName" | "counterpartyName" | "agreementCategory" | "location" | "department" | "status"
+  | "title" | "vendorName" | "counterpartyName" | "agreementCategory" | "locations" | "department" | "status"
   | "startDate" | "endDate" | "renewalDate" | "renewalType" | "noticePeriodDays" | "renewalTermMonths"
   | "earliestRenewalDecisionDate" | "latestRenewalDecisionDate" | "totalValue" | "recurringAmount"
   | "billingFrequency" | "description" | "slaTerms" | "notes" | "terminationTerms" | "clientInternalOwner"
@@ -89,6 +92,8 @@ export interface Picklist {
   tenantDisplayName: string;
   locations: string[];
   departments: string[];
+  /** Closed or sold sites older agreements may still name. */
+  formerLocations: string[];
   locationSource: "entra" | "list";
   departmentSource: "entra" | "list";
   warning: string | null;
@@ -125,8 +130,11 @@ function daysUntil(date: string | null): number | null {
 
 export function toDetail(r: ContractRecord): ContractDetail {
   const computed = computeDecisionDates(r.endDate ?? "", r.noticePeriodDays, r.renewalType ?? "Unknown");
+  const locations = Array.isArray(r.locations) ? r.locations : r.location ? [r.location] : [];
   return {
     ...r,
+    locations,
+    location: locations[0] ?? null,
     startDate: r.startDate ?? "",
     endDate: r.endDate ?? "",
     autoRenew: r.renewalType === "AutoRenew",
@@ -187,6 +195,15 @@ export async function renewContract(tenantId: string, id: string, input: Contrac
   );
 }
 
+export async function amendContract(tenantId: string, id: string, input: ContractInput, etag: string, extras: SaveExtras) {
+  return saved(
+    await apiSend(`/tenants/${enc(tenantId)}/contracts/${enc(id)}/amend`, {
+      method: "POST",
+      ...json({ ...input, ...extras, etag }),
+    })
+  );
+}
+
 export async function setArchived(tenantId: string, id: string, archived: boolean) {
   return saved(
     await apiSend(`/tenants/${enc(tenantId)}/contracts/${enc(id)}/archive`, { method: "POST", ...json({ archived }) })
@@ -206,10 +223,15 @@ export async function uploadContractFile(tenantId: string, file: File): Promise<
   return ((await res.json()) as { file: UploadedFile }).file;
 }
 
-export async function extractContractFile(tenantId: string, fileId: string, renewalOf?: string): Promise<Extraction> {
+/** Read an uploaded file. Pass the agreement it renews or amends so the reader works from the record on file. */
+export async function extractContractFile(
+  tenantId: string,
+  fileId: string,
+  related?: { renewalOf?: string; amendmentOf?: string }
+): Promise<Extraction> {
   const res = await apiSend(`/tenants/${enc(tenantId)}/contract-files/${enc(fileId)}/extract`, {
     method: "POST",
-    ...json(renewalOf ? { renewalOf } : {}),
+    ...json(related ?? {}),
   });
   return (await res.json()) as Extraction;
 }
@@ -232,11 +254,12 @@ export async function getPicklist(tenantId: string): Promise<Picklist> {
 export async function savePicklist(
   tenantId: string,
   locations: { source: "entra" | "list"; values: string[] },
-  departments: { source: "entra" | "list"; values: string[] }
+  departments: { source: "entra" | "list"; values: string[] },
+  formerLocations: string[] = []
 ): Promise<Picklist> {
   const res = await apiSend(`/tenants/${enc(tenantId)}/contract-picklist`, {
     method: "PUT",
-    ...json({ locations, departments }),
+    ...json({ locations, departments, formerLocations }),
   });
   return (await res.json()) as Picklist;
 }

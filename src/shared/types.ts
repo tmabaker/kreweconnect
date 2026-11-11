@@ -226,7 +226,9 @@ export interface ContractListItem {
   earliestRenewalDecisionDate: string | null;
   confidenceTier: ConfidenceTier | null;
   needsReview: boolean;
-  /** From the tenant's location pick list. */
+  /** Every site the agreement covers, from the tenant's current or former location list. */
+  locations: string[];
+  /** The first of `locations`. */
   location: string | null;
   /** From the tenant's department pick list. */
   department: string | null;
@@ -249,7 +251,7 @@ export interface ContractDocumentItem {
   contentType: string;
   uploadedById: string | null;
   uploadedAt: string;
-  kind?: "original" | "renewal" | "supporting";
+  kind?: "original" | "renewal" | "amendment" | "supporting";
 }
 
 export type ApprovalStatus = "Pending" | "Approved" | "Rejected";

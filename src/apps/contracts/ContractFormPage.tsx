@@ -37,6 +37,7 @@ import {
   getContract,
   getPicklist,
   renewContract,
+  amendContract,
   updateContract,
   uploadContractFile,
   type ContractInput,
@@ -59,6 +60,7 @@ import {
   annualizeValue,
   formatCurrency,
   contractPath,
+  sitesOf,
 } from "./contractUtils";
 import type {
   AgreementCategory,
@@ -93,7 +95,7 @@ interface FormState {
   vendorName: string;
   counterpartyName: string;
   agreementCategory: AgreementCategory | "";
-  location: string;
+  locations: string[];
   department: string;
   status: ContractStatus;
   description: string;
@@ -134,7 +136,7 @@ function stateFrom(c: ContractDetail | null): FormState {
     vendorName: s(c?.vendorName),
     counterpartyName: s(c?.counterpartyName),
     agreementCategory: c?.agreementCategory ?? "",
-    location: s(c?.location),
+    locations: c ? sitesOf(c) : [],
     department: s(c?.department),
     status: c?.status ?? "Draft",
     description: s(c?.description),
@@ -163,7 +165,7 @@ function stateFrom(c: ContractDetail | null): FormState {
 }
 
 /** Merge an extraction into the form. Only fields the document supported are overwritten. */
-function applyExtraction(prev: FormState, f: Extraction["fields"], picklist: Picklist | null): FormState {
+function applyExtraction(prev: FormState, f: Extraction["fields"], picklist: Picklist | null, keepSites = false): FormState {
   const next = { ...prev, contacts: { ...prev.contacts } };
   const setStr = (key: keyof FormState, v: unknown) => {
     if (typeof v === "string" && v.trim()) (next as unknown as Record<string, unknown>)[key] = v.trim();
@@ -173,7 +175,13 @@ function applyExtraction(prev: FormState, f: Extraction["fields"], picklist: Pic
   setStr("vendorName", f.vendorName);
   setStr("counterpartyName", f.counterpartyName);
   if (f.agreementCategory && AGREEMENT_CATEGORIES.includes(f.agreementCategory)) next.agreementCategory = f.agreementCategory;
-  if (f.location && picklist?.locations.includes(f.location)) next.location = f.location;
+  // Sites the reader found that are on the tenant's current or former list.
+  // An amendment keeps every site already on file and adds the new ones; a
+  // site it drops is removed by hand, so nothing disappears unreviewed.
+  const known = [...(picklist?.locations ?? []), ...(picklist?.formerLocations ?? [])];
+  const found = (Array.isArray(f.locations) ? f.locations : []).filter((l) => known.includes(l));
+  if (keepSites) next.locations = [...new Set([...prev.locations, ...found])];
+  else if (found.length) next.locations = [...new Set(found)];
   if (f.department && picklist?.departments.includes(f.department)) next.department = f.department;
   if (f.status && (CONTRACT_STATUSES as readonly string[]).includes(f.status)) next.status = f.status;
   setStr("description", f.description);
@@ -225,7 +233,7 @@ function toInput(f: FormState, existing: ContractDetail | null): ContractInput {
     vendorName: f.vendorName.trim(),
     counterpartyName: t(f.counterpartyName),
     agreementCategory: f.agreementCategory as AgreementCategory,
-    location: t(f.location),
+    locations: f.locations,
     department: t(f.department),
     status: f.status,
     startDate: t(f.startDate),
@@ -288,7 +296,7 @@ type UploadState =
   | { step: "reading"; file: UploadedFile }
   | { step: "done"; file: UploadedFile; extraction: Extraction | null; note: string | null };
 
-export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
+export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" | "amend" }) {
   const styles = useStyles();
   const navigate = useNavigate();
   const params = useParams<{ tenantId: string; id: string }>();
@@ -351,7 +359,7 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
     getPicklist(tenantId)
       .then((p) => !cancelled && setPicklist(p))
       .catch(() => !cancelled && setPicklist({
-        tenantId, tenantDisplayName: "", locations: [], departments: [],
+        tenantId, tenantDisplayName: "", locations: [], departments: [], formerLocations: [],
         locationSource: "list", departmentSource: "list",
         warning: "Could not load this tenant's location and department lists.",
       }));
@@ -377,8 +385,12 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
     }
     setUpload({ step: "reading", file: uploaded });
     try {
-      const extraction = await extractContractFile(tenantId, uploaded.id, mode === "renew" ? existing?.id : undefined);
-      setForm((f) => applyExtraction(f, extraction.fields, picklist));
+      const related =
+        mode === "renew" && existing ? { renewalOf: existing.id }
+        : mode === "amend" && existing ? { amendmentOf: existing.id }
+        : undefined;
+      const extraction = await extractContractFile(tenantId, uploaded.id, related);
+      setForm((f) => applyExtraction(f, extraction.fields, picklist, mode === "amend"));
       const note = extraction.fields.isExecutedAgreement === false
         ? "This document does not look like a signed agreement. Check the status and tier."
         : null;
@@ -414,9 +426,10 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
     if (!form.title.trim()) m.push("title");
     if (!form.vendorName.trim()) m.push("vendor");
     if (!form.agreementCategory) m.push("category");
-    if (picklist && picklist.locations.length > 0 && !form.location) m.push("location");
+    if (picklist && picklist.locations.length > 0 && form.locations.length === 0) m.push("location");
     if (picklist && picklist.departments.length > 0 && !form.department) m.push("department");
     if (mode === "renew" && !uploadedFile) m.push("the renewed agreement upload");
+    if (mode === "amend" && !uploadedFile) m.push("the amendment upload");
     return m;
   }, [tenantId, form, picklist, mode, uploadedFile]);
 
@@ -440,7 +453,9 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
           ? await createContract(tenantId, input, extras)
           : mode === "renew"
             ? await renewContract(tenantId, existing!.id, input, etag, extras)
-            : await updateContract(tenantId, existing!.id, input, etag);
+            : mode === "amend"
+              ? await amendContract(tenantId, existing!.id, input, etag, extras)
+              : await updateContract(tenantId, existing!.id, input, etag);
       navigate(contractPath(result.contract.tenantId, result.contract.id));
     } catch (err) {
       setSaveError(isGraphError(err) ? err.message : "Saving failed. Please try again.");
@@ -458,7 +473,21 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
     );
   }
 
-  const heading = mode === "new" ? "New Agreement" : mode === "renew" ? `Renew: ${existing?.title ?? ""}` : "Edit Agreement";
+  const heading =
+    mode === "new" ? "New Agreement"
+    : mode === "renew" ? `Renew: ${existing?.title ?? ""}`
+    : mode === "amend" ? `Add Amendment: ${existing?.title ?? ""}`
+    : "Edit Agreement";
+
+  // Current sites, then former ones, then any site already on this agreement
+  // that has since left both lists, so an older agreement still shows it.
+  const currentSites = picklist?.locations ?? [];
+  const formerSites = picklist?.formerLocations ?? [];
+  const onFileSites = (existing ? sitesOf(existing) : []).filter((l) => !currentSites.includes(l) && !formerSites.includes(l));
+  const siteChoices = [
+    ...currentSites.map((l) => ({ value: l, label: l })),
+    ...[...formerSites, ...onFileSites].map((l) => ({ value: l, label: `${l} (former)` })),
+  ];
 
   return (
     <div className={styles.page}>
@@ -487,7 +516,7 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
                 selectedOptions={tenantId ? [tenantId] : []}
                 onOptionSelect={(_, d) => {
                   setTenantId(d.optionValue ?? "");
-                  setForm((f) => ({ ...f, location: "", department: "" }));
+                  setForm((f) => ({ ...f, locations: [], department: "" }));
                 }}
                 disabled={upload.step !== "idle"}
               >
@@ -501,7 +530,7 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
         {mode !== "edit" && (
           <Card className={styles.section}>
             <Text weight="semibold" size={400}>
-              {mode === "renew" ? "Upload the renewed agreement" : "Upload the agreement"}
+              {mode === "renew" ? "Upload the renewed agreement" : mode === "amend" ? "Upload the amendment" : "Upload the agreement"}
             </Text>
             <Text className={styles.hint}>
               The document is read automatically and the fields below are filled in for you to review.
@@ -609,16 +638,22 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
           </div>
           <div className={styles.fieldRow}>
             <div className={styles.field}>
-              <Label className={styles.label} required={!!picklist?.locations.length}>Location</Label>
+              <Label className={styles.label} required={!!picklist?.locations.length}>Locations</Label>
               <Dropdown
-                placeholder={!tenantId ? "Choose the tenant first" : picklist?.locations.length ? "Choose a location" : "No locations set up"}
-                disabled={!picklist?.locations.length}
-                value={form.location}
-                selectedOptions={form.location ? [form.location] : []}
-                onOptionSelect={(_, d) => set("location", d.optionValue ?? "")}
+                multiselect
+                placeholder={!tenantId ? "Choose the tenant first" : siteChoices.length ? "Choose every site this covers" : "No locations set up"}
+                disabled={siteChoices.length === 0}
+                value={form.locations.join(", ")}
+                selectedOptions={form.locations}
+                onOptionSelect={(_, d) => {
+                  // Keep the order sites were picked in, so the first stays first.
+                  const chosen = d.selectedOptions;
+                  set("locations", [...form.locations.filter((l) => chosen.includes(l)), ...chosen.filter((l) => !form.locations.includes(l))]);
+                }}
               >
-                {(picklist?.locations ?? []).map((l) => <Option key={l} value={l}>{l}</Option>)}
+                {siteChoices.map((o) => <Option key={o.value} value={o.value} text={o.value}>{o.label}</Option>)}
               </Dropdown>
+              <Text className={styles.hint}>Pick every site the agreement covers. Former sites are ones the client no longer operates.</Text>
             </div>
             <div className={styles.field}>
               <Label className={styles.label} required={!!picklist?.departments.length}>Department</Label>
@@ -833,7 +868,7 @@ export function ContractFormPage({ mode }: { mode: "new" | "edit" | "renew" }) {
         <div className={styles.actions}>
           <Button appearance="subtle" onClick={() => navigate(-1)}>Cancel</Button>
           <Button appearance="primary" icon={<Save24Regular />} disabled={!canSave} onClick={save}>
-            {saving ? "Saving…" : mode === "new" ? "Create Agreement" : mode === "renew" ? "Save Renewal" : "Save Changes"}
+            {saving ? "Saving…" : mode === "new" ? "Create Agreement" : mode === "renew" ? "Save Renewal" : mode === "amend" ? "Save Amendment" : "Save Changes"}
           </Button>
         </div>
       </div>

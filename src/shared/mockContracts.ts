@@ -42,7 +42,7 @@ const MOCK_TAGS: TagItem[] = [
 /** Fields that existed before schema v2. The v2 list fields are merged in from V2_META below. */
 type BaseContract = Omit<
   ContractListItem,
-  "agreementCategory" | "renewalType" | "latestRenewalDecisionDate" | "earliestRenewalDecisionDate" | "confidenceTier" | "needsReview" | "location" | "department"
+  "agreementCategory" | "renewalType" | "latestRenewalDecisionDate" | "earliestRenewalDecisionDate" | "confidenceTier" | "needsReview" | "location" | "locations" | "department"
 >;
 
 const BASE_CONTRACTS: BaseContract[] = [
@@ -282,7 +282,7 @@ const V2_META: Record<string, V2Meta> = {
 const buildListItem = (c: BaseContract): ContractListItem => {
   const m = V2_META[c.id];
   if (!m) {
-    return { ...c, agreementCategory: null, renewalType: null, latestRenewalDecisionDate: null, earliestRenewalDecisionDate: null, confidenceTier: null, needsReview: true, location: null, department: null };
+    return { ...c, agreementCategory: null, renewalType: null, latestRenewalDecisionDate: null, earliestRenewalDecisionDate: null, confidenceTier: null, needsReview: true, location: null, locations: [], department: null };
   }
   const dates = m.statedDecisionDates ?? computeDecisionDates(c.endDate, m.noticePeriodDays, m.renewalType);
   return {
@@ -296,6 +296,7 @@ const buildListItem = (c: BaseContract): ContractListItem => {
     confidenceTier: m.tier,
     needsReview: m.needsReview ?? false,
     location: null,
+    locations: [],
     department: null,
   };
 };

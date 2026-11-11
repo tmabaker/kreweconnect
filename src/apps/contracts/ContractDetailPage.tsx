@@ -28,6 +28,7 @@ import {
   DocumentText24Regular,
   ArrowDownload24Regular,
   ArrowSync24Regular,
+  DocumentAdd24Regular,
   Delete24Regular,
   Warning24Regular,
   Tag24Regular,
@@ -49,6 +50,8 @@ import type { ContractDetail } from "../../shared/types";
 import {
   getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, formatFileSize,
   getCategoryLabel, getRenewalTypeLabel, getBillingFrequencyLabel, getContactRoleLabel, contractPath,
+  formatSites,
+  sitesOf,
 } from "./contractUtils";
 
 const useStyles = makeStyles({
@@ -208,12 +211,13 @@ export function ContractDetailPage() {
             <Title2>{contract.title}</Title2>
             <Text size={300} style={{ display: "block", color: tokens.colorNeutralForeground3 }}>
               {contract.vendorName} · {contract.tenantDisplayName}
-              {contract.location ? ` · ${contract.location}` : ""}
+              {formatSites(contract) ? ` · ${formatSites(contract)}` : ""}
             </Text>
           </div>
         </div>
         <div className={styles.actions}>
           <Button icon={<Edit24Regular />} disabled={isDemoMode || busy} onClick={() => navigate(contractPath(tenantId, id, "edit"))}>Edit</Button>
+          <Button icon={<DocumentAdd24Regular />} disabled={isDemoMode || busy} onClick={() => navigate(contractPath(tenantId, id, "amend"))}>Add Amendment</Button>
           <Button icon={<ArrowSync24Regular />} disabled={isDemoMode || busy} onClick={() => navigate(contractPath(tenantId, id, "renew"))}>Renew</Button>
           <Button icon={<Archive24Regular />} appearance="subtle" disabled={isDemoMode || busy} onClick={toggleArchive}>
             {contract.isArchived ? "Restore" : "Archive"}
@@ -262,8 +266,8 @@ export function ContractDetailPage() {
             <Divider />
             <div className={styles.metaGrid}>
               <div className={styles.metaItem}>
-                <Text className={styles.metaLabel}>Location</Text>
-                <Text weight="semibold">{contract.location ?? "—"}</Text>
+                <Text className={styles.metaLabel}>{sitesOf(contract).length > 1 ? "Locations" : "Location"}</Text>
+                <Text weight="semibold">{formatSites(contract) ?? "—"}</Text>
               </div>
               <div className={styles.metaItem}>
                 <Text className={styles.metaLabel}>Department</Text>
@@ -399,7 +403,7 @@ export function ContractDetailPage() {
                     <div className={styles.docInfo}>
                       <Text weight="semibold" style={{ overflowWrap: "anywhere" }}>{doc.fileName}</Text>
                       <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                        {doc.kind === "renewal" ? "Renewal · " : ""}
+                        {doc.kind === "renewal" ? "Renewal · " : doc.kind === "amendment" ? "Amendment · " : ""}
                         {notStored ? "Kept in the client's SharePoint" : formatFileSize(doc.fileSize)}
                         {" · "}{new Date(doc.uploadedAt).toLocaleDateString()}
                       </Text>

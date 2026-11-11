@@ -82,7 +82,11 @@ export function extractionSchema(picklist: TenantPicklist): Record<string, unkno
     vendorName: { type: "string", description: "Brand name of the other party." },
     counterpartyName: optionalString,
     agreementCategory: { type: "string", enum: [...AGREEMENT_CATEGORIES] },
-    location: optionalEnum(picklist.locations),
+    locations: {
+      type: "array",
+      description: "Every listed site the agreement covers. Empty when it names none.",
+      items: optionalEnum([...picklist.locations, ...(picklist.formerLocations ?? [])]),
+    },
     department: optionalEnum(picklist.departments),
     status: { type: "string", enum: [...CONTRACT_STATUSES] },
     startDate: optionalDate,
@@ -126,7 +130,12 @@ export function extractionSchema(picklist: TenantPicklist): Record<string, unkno
   });
 }
 
-function instructions(picklist: TenantPicklist, today: string, renewalOf: ContractRecord | null): string {
+function instructions(
+  picklist: TenantPicklist,
+  today: string,
+  renewalOf: ContractRecord | null,
+  amendmentOf: ContractRecord | null = null
+): string {
   const lines = [
     "You read one business agreement for an IT managed service provider and fill in a contract record for its client.",
     `Today is ${today}. Write every date as YYYY-MM-DD.`,
@@ -135,9 +144,9 @@ function instructions(picklist: TenantPicklist, today: string, renewalOf: Contra
     `Every value you worked out rather than read directly must appear in reviewQuestions with how you got it, so a person can confirm it with one answer. Combine related items so there are at most ${MAX_REVIEW_QUESTIONS} questions. A worked-out key field lowers confidenceTier from A to B; a document that is only evidence of an agreement stays C.`,
     "description: two or three sentences on what the agreement covers, the parties, and the commercial terms a client would want at a glance.",
     "Pick agreementCategory from the allowed list. Use Rebate for rebate, incentive, volume bonus or co-op funding programs. Use License for government-issued business licenses: occupational licenses, motor vehicle commission licenses and dealer licenses (not software licenses). Use Other only when nothing else fits.",
-    picklist.locations.length
-      ? `Set location only when the document names one of these locations or an address that clearly belongs to one: ${picklist.locations.join("; ")}.`
-      : 'location must be "".',
+    picklist.locations.length || picklist.formerLocations?.length
+      ? `Set locations to every site the agreement covers, but only sites the document names or whose address clearly belongs to one of: ${[...picklist.locations, ...(picklist.formerLocations ?? [])].join("; ")}. An agreement can cover several sites.${picklist.formerLocations?.length ? ` These are former sites the client no longer operates, still valid for older agreements: ${picklist.formerLocations.join("; ")}.` : ""}`
+      : "locations must be an empty list.",
     picklist.departments.length
       ? `Set department only when the document clearly ties the agreement to one of: ${picklist.departments.join("; ")}.`
       : 'department must be "".',
@@ -153,6 +162,15 @@ function instructions(picklist: TenantPicklist, today: string, renewalOf: Contra
     lines.push(
       "This upload renews an agreement already on file. Describe the renewed term: the new dates and pricing from this document.",
       `The agreement on file: title "${renewalOf.title}", vendor "${renewalOf.vendorName}", category ${renewalOf.agreementCategory}, term ${renewalOf.startDate ?? "?"} to ${renewalOf.endDate ?? "?"}.`
+    );
+  }
+  if (amendmentOf) {
+    const sites = amendmentOf.locations?.length ? amendmentOf.locations.join("; ") : "none recorded";
+    lines.push(
+      "This upload amends an agreement already on file. Describe the agreement as amended: start from the values on file and change only what this amendment changes.",
+      `The agreement on file: title "${amendmentOf.title}", vendor "${amendmentOf.vendorName}", category ${amendmentOf.agreementCategory}, term ${amendmentOf.startDate ?? "?"} to ${amendmentOf.endDate ?? "?"}, sites: ${sites}.`,
+      "locations: keep every site on file unless the amendment removes it, and add every site the amendment adds. Name each added or removed site in reviewQuestions so a person can confirm it.",
+      "Keep the title and vendor on file unless the amendment renames the agreement or a party."
     );
   }
   return lines.join("\n");
@@ -196,7 +214,8 @@ export async function extractContractFields(
   data: Buffer,
   contentType: string,
   picklist: TenantPicklist,
-  renewalOf: ContractRecord | null
+  renewalOf: ContractRecord | null,
+  amendmentOf: ContractRecord | null = null
 ): Promise<ExtractionResult> {
   if (!extractionConfigured()) {
     throw new ServiceUnavailableError(
@@ -218,7 +237,7 @@ export async function extractContractFields(
         effort: "low",
         format: { type: "json_schema", schema: extractionSchema(picklist) },
       },
-      system: instructions(picklist, today, renewalOf),
+      system: instructions(picklist, today, renewalOf, amendmentOf),
       messages: [
         {
           role: "user",

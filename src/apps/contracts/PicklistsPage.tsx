@@ -47,7 +47,8 @@ interface ListEditorProps {
   onValues: (v: string[]) => void;
 }
 
-function ListEditor({ title, entraLabel, source, values, resolved, onSource, onValues }: ListEditorProps) {
+/** Removable chips plus an add box. */
+function ChipList({ values, onValues, empty }: { values: string[]; onValues: (v: string[]) => void; empty: string }) {
   const styles = useStyles();
   const [draft, setDraft] = useState("");
   const add = () => {
@@ -56,6 +57,33 @@ function ListEditor({ title, entraLabel, source, values, resolved, onSource, onV
     setDraft("");
   };
   return (
+    <>
+      <div className={styles.chips}>
+        {values.length === 0 && <Text className={styles.hint}>{empty}</Text>}
+        {values.map((v) => (
+          <span key={v} className={styles.chip}>
+            <Text size={200}>{v}</Text>
+            <Button
+              size="small"
+              appearance="transparent"
+              icon={<Dismiss16Regular />}
+              aria-label={`Remove ${v}`}
+              onClick={() => onValues(values.filter((x) => x !== v))}
+            />
+          </span>
+        ))}
+      </div>
+      <div className={styles.addRow}>
+        <Input value={draft} onChange={(_, d) => setDraft(d.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Add an entry" />
+        <Button icon={<Add24Regular />} onClick={add} disabled={!draft.trim()}>Add</Button>
+      </div>
+    </>
+  );
+}
+
+function ListEditor({ title, entraLabel, source, values, resolved, onSource, onValues }: ListEditorProps) {
+  const styles = useStyles();
+  return (
     <Card className={styles.section}>
       <Text weight="semibold" size={400}>{title}</Text>
       <RadioGroup value={source} onChange={(_, d) => onSource(d.value as "entra" | "list")} layout="horizontal">
@@ -63,27 +91,7 @@ function ListEditor({ title, entraLabel, source, values, resolved, onSource, onV
         <Radio value="entra" label={`Use ${entraLabel} from the client's directory`} />
       </RadioGroup>
       {source === "list" ? (
-        <>
-          <div className={styles.chips}>
-            {values.length === 0 && <Text className={styles.hint}>No entries. The field is hidden on agreements until you add some.</Text>}
-            {values.map((v) => (
-              <span key={v} className={styles.chip}>
-                <Text size={200}>{v}</Text>
-                <Button
-                  size="small"
-                  appearance="transparent"
-                  icon={<Dismiss16Regular />}
-                  aria-label={`Remove ${v}`}
-                  onClick={() => onValues(values.filter((x) => x !== v))}
-                />
-              </span>
-            ))}
-          </div>
-          <div className={styles.addRow}>
-            <Input value={draft} onChange={(_, d) => setDraft(d.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Add an entry" />
-            <Button icon={<Add24Regular />} onClick={add} disabled={!draft.trim()}>Add</Button>
-          </div>
-        </>
+        <ChipList values={values} onValues={onValues} empty="No entries. The field is hidden on agreements until you add some." />
       ) : (
         <>
           <Text className={styles.hint}>Current values in the directory ({resolved.length}):</Text>
@@ -107,6 +115,7 @@ export function PicklistsPage() {
   const [locValues, setLocValues] = useState<string[]>([]);
   const [depSource, setDepSource] = useState<"entra" | "list">("list");
   const [depValues, setDepValues] = useState<string[]>([]);
+  const [formerValues, setFormerValues] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ intent: "success" | "error"; text: string } | null>(null);
@@ -121,6 +130,7 @@ export function PicklistsPage() {
     setLocValues(p.locationSource === "list" ? p.locations : []);
     setDepSource(p.departmentSource);
     setDepValues(p.departmentSource === "list" ? p.departments : []);
+    setFormerValues(p.formerLocations ?? []);
   };
 
   useEffect(() => {
@@ -138,7 +148,7 @@ export function PicklistsPage() {
     setSaving(true);
     setMessage(null);
     try {
-      load(await savePicklist(tenantId, { source: locSource, values: locValues }, { source: depSource, values: depValues }));
+      load(await savePicklist(tenantId, { source: locSource, values: locValues }, { source: depSource, values: depValues }, formerValues));
       setMessage({ intent: "success", text: "Saved. New and edited agreements now use these lists." });
     } catch (err) {
       setMessage({ intent: "error", text: isGraphError(err) ? err.message : "Saving failed." });
@@ -190,6 +200,13 @@ export function PicklistsPage() {
             onSource={setLocSource}
             onValues={setLocValues}
           />
+          <Card className={styles.section}>
+            <Text weight="semibold" size={400}>Former locations</Text>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+              Sites the client has closed or sold. Agreements can still name them, and they show as former in the picker.
+            </Text>
+            <ChipList values={formerValues} onValues={setFormerValues} empty="No former locations." />
+          </Card>
           <ListEditor
             title="Departments"
             entraLabel="Department"

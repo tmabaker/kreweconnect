@@ -110,6 +110,7 @@ function App() {
                   <Route path="/krewereview/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
                   <Route path="/krewereview/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
                   <Route path="/krewereview/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id/amend" element={<MspAdminRoute><ContractFormPage mode="amend" /></MspAdminRoute>} />
                 </Route>
                 <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
                 {/* KREWE Governance — library management is MSP-only; the wizard,
