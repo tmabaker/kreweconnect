@@ -53,7 +53,7 @@ function fakeFetch(world) {
     if (u.includes("vsax.net/api/v3/devices")) return reply(200, { Data: world.vsaxDevices || [] });
     if (u.includes("/managedDevices?")) return reply(200, { value: world.managed || [] });
     if (/\/managedDevices\/[^/?]+\/wipe$/.test(u)) { world.wiped = (world.wiped || 0) + 1; return reply(204); }
-    if (/\/managedDevices\/[^/?]+\?/.test(u)) return reply(200, { id: "md1", deviceActionResults: world.wiped ? [{ actionName: "wipe", actionState: "pending", startDateTime: "2026-11-09T12:00:00Z" }] : (world.actions || []) });
+    if (/\/managedDevices\/[^/?]+\?/.test(u)) return reply(200, { id: "md1", deviceActionResults: (world.actions || []).concat(world.wiped ? [{ actionName: "wipe", actionState: "pending", startDateTime: new Date().toISOString() }] : []) });
     if (u.includes("windowsAutopilotDeviceIdentities")) {
       if (world.autopilotError) return reply(403, { error: { code: "Forbidden", message: "no" } });
       return reply(200, { value: world.autopilot || [] });
@@ -214,7 +214,7 @@ test("KreweWorks relay sends the service key and the tech's name", async () => {
   const { relay } = load();
   const original = global.fetch;
   let seen;
-  global.fetch = async (url, init) => { seen = { url: String(url), init }; return { ok: true, status: 200, json: async () => ({ stage: "it_in_progress", checksSet: ["signInBlocked"] }) }; };
+  global.fetch = async (url, init) => { seen = { url: String(url), init }; return { ok: true, status: 200, json: async () => ({ stage: "it_in_progress", checksSet: ["signInBlocked"], eventId: "ev1" }) }; };
   try {
     const r = await relay.relayToKreweWorks(GEAUX, { upn: "tech@noitgroup.com", name: "tech@noitgroup.com" }, { requestId: "T-20261109-ABC123", items: [{ text: "Block sign-in", ok: true }], itChecks: ["signInBlocked", "bad key!"] });
     assert.equal(r.recorded, true);
@@ -225,4 +225,51 @@ test("KreweWorks relay sends the service key and the tech's name", async () => {
   assert.deepEqual(body.itChecks, ["signInBlocked"]);
   assert.equal(body.actor.upn, "tech@noitgroup.com");
   assert.throws(() => relay.normalizeRelay({ requestId: "../../x", items: [{ text: "a" }] }), /request reference/);
+});
+
+test("an old wipe in the device history never confirms the new one", async () => {
+  const { eh } = load();
+  const old = [{ actionName: "wipe", actionState: "done", startDateTime: "2025-01-02T00:00:00Z" }];
+  const world = { managed: [managedDevice], autopilot: [{ id: "ap1", serialNumber: "SER123" }], vsaxDevices: [vsaxDevice], fields: captureFields(), actions: old };
+  const f = fakeFetch(world);
+  const original = global.fetch;
+  // Intune accepts the wipe but its history still shows only last year's finished wipe.
+  global.fetch = async (url, init) => {
+    if (world.wiped && /\/managedDevices\/[^/?]+\?/.test(String(url))) {
+      const body = { id: "md1", deviceActionResults: old };
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    }
+    return f.fn(url, init);
+  };
+  try {
+    const r = await eh.wipeEndpoint(GEAUX, "GA-BTRC-PC2", "GA-BTRC-PC2");
+    assert.equal(world.wiped, 1);
+    assert.equal(r.accepted, true);
+    assert.equal(r.verified, false);
+    assert.equal(r.actionState, "unknown");
+  } finally { global.fetch = original; }
+});
+
+test("a short or malformed fingerprint is refused instead of matching a prefix", () => {
+  const { eh } = load();
+  const fields = captureFields();
+  fields[0].Value = `v1|SER123|PID-1|2|${FP.slice(0, 1)}|2026-11-01`;
+  assert.throws(() => eh.reassembleHash(fields), /16 character fingerprint/);
+  fields[0].Value = `v1|SER123|PID-1|2|zzzzzzzzzzzzzzzz|2026-11-01`;
+  assert.throws(() => eh.reassembleHash(fields), /16 character fingerprint/);
+});
+
+test("a redirect or a reply without an event id is never reported as recorded", async () => {
+  const { relay } = load();
+  const original = global.fetch;
+  let init;
+  global.fetch = async (u, i) => { init = i; return { ok: true, status: 200, json: async () => { throw new Error("html"); } }; };
+  try {
+    const r = await relay.relayToKreweWorks(GEAUX, { upn: "t@noitgroup.com", name: "t" }, { requestId: "T-20261109-ABC123", items: [{ text: "x", ok: true }] });
+    assert.equal(r.recorded, false);
+    assert.equal(init.redirect, "manual");
+    global.fetch = async () => ({ ok: false, status: 0, json: async () => ({}) });
+    const r2 = await relay.relayToKreweWorks(GEAUX, { upn: "t@noitgroup.com", name: "t" }, { requestId: "T-20261109-ABC123", items: [{ text: "x", ok: true }] });
+    assert.equal(r2.recorded, false);
+  } finally { global.fetch = original; }
 });

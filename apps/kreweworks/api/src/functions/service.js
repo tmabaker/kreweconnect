@@ -12,7 +12,8 @@ function requireServiceKey(request) {
   if (!config.serviceKey) throw new HttpError(503, 'PORTAL_SERVICE_KEY is not set on this portal.');
   const given = Buffer.from(String(request.headers.get('x-kreweworks-service-key') || ''));
   const want = Buffer.from(config.serviceKey);
-  if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) throw new HttpError(401, 'Service key required.');
+  // 403, not 401: the portal's SWA rules turn a 401 into a sign-in redirect, which a caller could mistake for success.
+  if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) throw new HttpError(403, 'Service key required.');
 }
 
 // POST /api/service/requests/{id}/techtools  { actor: { upn, name }, items: [{ text, ok }], itChecks: [key], note }

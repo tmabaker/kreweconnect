@@ -30,8 +30,8 @@ test.beforeEach(() => resetStore(new MemoryStore('')));
 test('Tech Tools updates need the service key', async () => {
   const r = await termination();
   const body = { actor: { upn: 'tech@noitgroup.com' }, items: [{ text: 'Block sign-in', ok: true }] };
-  assert.equal((await post(`service/requests/${r.id}/techtools`, body)).status, 401);
-  assert.equal((await post(`service/requests/${r.id}/techtools`, body, 'wrong-key-of-same-len')).status, 401);
+  assert.equal((await post(`service/requests/${r.id}/techtools`, body)).status, 403);
+  assert.equal((await post(`service/requests/${r.id}/techtools`, body, 'wrong-key-of-same-len')).status, 403);
   assert.equal((await post('service/requests/T-missing/techtools', body, 'test-service-key')).status, 404);
   assert.equal((await workflow.events(r.id)).filter(e => e.action === 'techtools_update').length, 0);
 });

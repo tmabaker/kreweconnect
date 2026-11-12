@@ -186,9 +186,14 @@ export function reassembleHash(fields: VsaxField[]): VerifiedHash {
     throw new EndpointError(`${stale.join(", ")} still hold an earlier capture. Clear them or re-run the capture task.`);
   }
   const hardwareHash = chunks.join("");
-  const fingerprint = meta[4];
-  const actual = createHash("sha256").update(hardwareHash).digest("hex").slice(0, fingerprint.length);
-  if (!fingerprint || actual !== fingerprint) {
+  // The capture script records the first 16 hex characters of the SHA-256. Anything shorter would weaken
+  // the check to a prefix match, so a fingerprint of any other shape is refused outright.
+  const fingerprint = (meta[4] || "").toLowerCase();
+  if (!/^[0-9a-f]{16}$/.test(fingerprint)) {
+    throw new EndpointError("The Autopilot metadata field has no valid 16 character fingerprint. Re-run the capture task.");
+  }
+  const actual = createHash("sha256").update(hardwareHash).digest("hex").slice(0, 16);
+  if (actual !== fingerprint) {
     throw new EndpointError("The reassembled hash does not match its recorded fingerprint. Re-run the capture task.");
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(hardwareHash) || hardwareHash.length % 4 !== 0) {
@@ -380,6 +385,9 @@ export async function wipeEndpoint(tenantId: string, name: unknown, confirmDevic
     throw new ConflictError(`Wipe refused for ${state.endpointName}. ${state.reasons.join(" ") || "The device must be managed in Intune and registered in Autopilot."}`);
   }
   // A full wipe: the user's data goes, and the Autopilot record brings the machine back enrolled for the next user.
+  // Only an action Intune started after this request counts as the wipe we sent; an older wipe or reset
+  // in the device's history must never read as confirmation. A minute of slack covers clock skew.
+  const submittedAt = Date.now() - 60_000;
   await intune(tenantId, "POST", `/v1.0/deviceManagement/managedDevices/${encodeURIComponent(managed.id)}/wipe`,
     { keepEnrollmentData: false, keepUserData: false });
 
@@ -389,7 +397,8 @@ export async function wipeEndpoint(tenantId: string, name: unknown, confirmDevic
     try {
       const detail = await intune<ManagedDevice>(tenantId, "GET",
         `/v1.0/deviceManagement/managedDevices/${encodeURIComponent(managed.id)}?$select=id,deviceActionResults`);
-      const action = (detail?.deviceActionResults || []).filter((a) => WIPE_ACTIONS.has(a.actionName || ""))
+      const action = (detail?.deviceActionResults || [])
+        .filter((a) => WIPE_ACTIONS.has(a.actionName || "") && Date.parse(a.startDateTime || "") >= submittedAt)
         .sort((x, y) => String(y.startDateTime || "").localeCompare(String(x.startDateTime || "")))[0];
       if (action && action.actionState) actionState = action.actionState;
     } catch {

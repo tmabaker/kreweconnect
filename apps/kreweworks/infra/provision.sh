@@ -48,6 +48,10 @@ echo "   default host: https://$HOST"
 PII_KEY=$(az staticwebapp appsettings list -n "$SWA_NAME" -g "$RG" --query "properties.PORTAL_PII_KEY" -o tsv 2>/dev/null || true)
 [ -z "$PII_KEY" ] && PII_KEY=$(openssl rand -base64 32) && echo "   new PORTAL_PII_KEY generated (first run)"
 
+# The Tech Tools service key is created once and kept, because KREWEWORKS_SERVICE_KEY on krewesuite must match it.
+SERVICE_KEY=$(az staticwebapp appsettings list -n "$SWA_NAME" -g "$RG" --query "properties.PORTAL_SERVICE_KEY" -o tsv 2>/dev/null || true)
+[ -z "$SERVICE_KEY" ] && SERVICE_KEY=$(openssl rand -base64 48 | tr -d '\n=+/' ) && echo "   new PORTAL_SERVICE_KEY generated: copy it to KREWEWORKS_SERVICE_KEY on krewesuite"
+
 echo "== app settings (secret values are passed through, never printed)"
 az staticwebapp appsettings set -n "$SWA_NAME" -g "$RG" --setting-names \
   "AZURE_CLIENT_ID=$CLIENT_ID" \
@@ -66,6 +70,7 @@ az staticwebapp appsettings set -n "$SWA_NAME" -g "$RG" --setting-names \
   "PORTAL_IT_CC=$MAIL_ITCC" \
   "PORTAL_BASE_URL=$BASE_URL" \
   "PORTAL_PII_KEY=$PII_KEY" \
+  "PORTAL_SERVICE_KEY=$SERVICE_KEY" \
   "TECHTOOLS_BASE_URL=https://techtools.noitgroup.com" \
   -o none
 echo "   mail starts DISABLED. Set MAIL_ENABLED=true (or flip PORTAL_MAIL_ENABLED) once the pilot is approved."
