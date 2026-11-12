@@ -8,6 +8,9 @@ const {
   validateApprovedPassword,
   validateManagerIdentity,
   normalizeEndpointName,
+  planMobilePhoneMethodWrite,
+  toGraphAuthPhoneNumber,
+  MOBILE_PHONE_METHOD_ID,
 } = require('../dist/src/lib/userAdmin.js');
 test('generated passwords satisfy the approved composition policy', () => {
   for (let i = 0; i < 100; i += 1) {
@@ -122,4 +125,35 @@ test('Geaux creation and modification persist Endpoint Name in extensionAttribut
   assert.ok(source.includes("body.onPremisesExtensionAttributes = { extensionAttribute1: endpointName }"));
   assert.ok(source.includes("hasOwnProperty.call(input, \"endpointName\")"));
   assert.ok(source.includes("extensionAttribute1: normalizeEndpointName(input.endpointName) || null"));
+});
+
+test('MFA phone numbers use the Graph "+1 number" format for NANP and pass others through', () => {
+  assert.equal(toGraphAuthPhoneNumber('+12254907649'), '+1 2254907649');
+  assert.equal(toGraphAuthPhoneNumber('+442079460958'), '+442079460958');
+});
+
+test('MFA phone write adds when no mobile method exists', () => {
+  assert.deepEqual(planMobilePhoneMethodWrite([], '+12254907649'), { action: 'added' });
+  assert.deepEqual(
+    planMobilePhoneMethodWrite([{ id: 'e37fc753-ff3b-4958-9484-eaa9425c82bc', phoneNumber: '+1 2255550100', phoneType: 'office' }], '+12254907649'),
+    { action: 'added' }
+  );
+});
+
+test('MFA phone write updates an existing mobile method in place instead of adding a second', () => {
+  const existing = [{ id: MOBILE_PHONE_METHOD_ID, phoneNumber: '+1 2255550199', phoneType: 'mobile' }];
+  assert.deepEqual(planMobilePhoneMethodWrite(existing, '+12254907649'), { action: 'updated', methodId: MOBILE_PHONE_METHOD_ID });
+});
+
+test('MFA phone write is a no-op when the mobile method already matches', () => {
+  const existing = [{ id: MOBILE_PHONE_METHOD_ID, phoneNumber: '+1 2254907649', phoneType: 'mobile' }];
+  assert.deepEqual(planMobilePhoneMethodWrite(existing, '+12254907649'), { action: 'unchanged', methodId: MOBILE_PHONE_METHOD_ID });
+});
+
+test('MFA phone endpoint upserts rather than always adding', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'functions', 'userAdmin.ts'), 'utf8');
+  assert.match(source, /setMobilePhoneAuthenticationMethod\(/);
+  assert.doesNotMatch(source, /registerMobilePhoneAuthenticationMethod\(/);
+  const lib = readFileSync(join(__dirname, '..', 'src', 'lib', 'userAdmin.ts'), 'utf8');
+  assert.match(lib, /"PATCH", `\$\{base\}\/\$\{encodeURIComponent\(plan\.methodId!\)\}`/);
 });

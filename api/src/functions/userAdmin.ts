@@ -34,7 +34,7 @@ import {
   listCaPolicies,
   setCaExclusion,
   createTemporaryAccessPass,
-  registerMobilePhoneAuthenticationMethod,
+  setMobilePhoneAuthenticationMethod,
   offboardUser,
   type AutoReplyInput,
   type TapInput,
@@ -116,15 +116,17 @@ app.http("userMfaPhone", {
     if (typeof body.mobilePhone !== "string" || !body.mobilePhone.trim()) {
       throw new BadRequestError("mobilePhone is required for MFA registration.");
     }
-    const method = await registerMobilePhoneAuthenticationMethod(
+    // Adds a mobile MFA method, or updates the existing one in place.
+    const { action, method } = await setMobilePhoneAuthenticationMethod(
       tenantId,
       requireParam(request, "userId"),
       body.mobilePhone
     );
     return {
-      status: 201,
+      status: action === "added" ? 201 : 200,
       jsonBody: {
         registered: true,
+        action,
         methodId: method.id,
         phoneLast4: method.phoneNumber.slice(-4),
         phoneType: method.phoneType,
