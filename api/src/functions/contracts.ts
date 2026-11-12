@@ -177,8 +177,15 @@ app.http("contractsPicklist", {
       if (clean.length > 200 || clean.some((s) => s.length > 200)) throw new BadRequestError(`${key}.values is too long.`);
       return { source: v.source, values: v.source === "list" ? clean : [] };
     };
+    const former = Array.isArray(body.formerLocations) ? body.formerLocations : [];
+    if (former.some((x) => typeof x !== "string")) throw new BadRequestError("formerLocations must be text.");
+    const formerLocations = [...new Set((former as string[]).map((s) => s.trim()).filter(Boolean))];
+    if (formerLocations.length > 200 || formerLocations.some((s) => s.length > 200)) {
+      throw new BadRequestError("formerLocations is too long.");
+    }
     await writeTenantPicklistConfig(tenantId, {
       locations: parseSource("locations"),
+      formerLocations,
       departments: parseSource("departments"),
       updatedAt: new Date().toISOString(),
       updatedById: actor(caller),
@@ -231,9 +238,11 @@ app.http("contractsExtract", {
     const body = await readJsonBody(request).catch(() => ({}) as Record<string, unknown>);
     const renewalOf =
       typeof body.renewalOf === "string" && body.renewalOf ? (await getContract(tenantId, body.renewalOf)).record : null;
+    const amendmentOf =
+      typeof body.amendmentOf === "string" && body.amendmentOf ? (await getContract(tenantId, body.amendmentOf)).record : null;
     const { data, meta } = await getFile(tenantId, request.params.fileId);
     const picklist = await resolvePicklist(tenantId);
-    const result = await extractContractFields(data, meta.contentType, picklist, renewalOf);
+    const result = await extractContractFields(data, meta.contentType, picklist, renewalOf, amendmentOf);
     return { status: 200, jsonBody: result };
   }),
 });
@@ -301,7 +310,7 @@ app.http("contract", {
     if (expectedEtag(body) !== etag) {
       throw new ConflictError("This agreement was changed by someone else. Reload and try again.");
     }
-    const fields = parseContractFields(body, await writablePicklist(tenantId), randomUUID);
+    const fields = parseContractFields(body, await writablePicklist(tenantId), randomUUID, record.locations);
     const changes = changedFields(record, fields);
     const by = actor(caller);
     const updated = withVersion(
@@ -316,22 +325,43 @@ app.http("contract", {
   }),
 });
 
-app.http("contractsRenew", {
-  methods: ["POST", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "tenants/{tenantId}/contracts/{contractId}/renew",
-  handler: withMspWriteAuth(async (request, caller, tenantId) => {
+/**
+ * Attach a later executed document to an agreement on file and save the
+ * fields as reviewed. A renewal starts a new term and reopens an archived
+ * record; an amendment changes the current agreement (sites, pricing, scope)
+ * and leaves its archive state alone. Either way every earlier document stays.
+ */
+function attachHandler(kind: "renewal" | "amendment"): Handler {
+  return async (request, caller, tenantId) => {
     const { record, etag } = await getContract(tenantId, request.params.contractId);
     const body = await readJsonBody(request);
     if (expectedEtag(body) !== etag) {
       throw new ConflictError("This agreement was changed by someone else. Reload and try again.");
     }
-    const doc = await documentFromUpload(tenantId, body.fileId, "renewal");
-    if (!doc) throw new BadRequestError("Upload the renewed agreement first (fileId).");
+    const doc = await documentFromUpload(tenantId, body.fileId, kind);
+    if (!doc) {
+      throw new BadRequestError(`Upload the ${kind === "renewal" ? "renewed agreement" : "amendment"} first (fileId).`);
+    }
     if (record.documents.some((d) => d.id === doc.id)) throw new BadRequestError("That file is already attached.");
-    const fields = parseContractFields(body, await writablePicklist(tenantId), randomUUID);
+    const fields = parseContractFields(body, await writablePicklist(tenantId), randomUUID, record.locations);
     const by = actor(caller);
-    const previousTerm = `Previous term ${record.startDate ?? "?"} to ${record.endDate ?? "?"}; renewed with ${doc.fileName}`;
+    let summary: string;
+    let notes: string;
+    if (kind === "renewal") {
+      summary = "Renewed";
+      notes = `Previous term ${record.startDate ?? "?"} to ${record.endDate ?? "?"}; renewed with ${doc.fileName}`;
+    } else {
+      const changes = changedFields(record, fields);
+      const added = fields.locations.filter((l) => !record.locations.includes(l));
+      const removed = record.locations.filter((l) => !fields.locations.includes(l));
+      summary = "Amended";
+      notes = [
+        `Amendment ${doc.fileName}`,
+        added.length ? `sites added: ${added.join(", ")}` : "",
+        removed.length ? `sites removed: ${removed.join(", ")}` : "",
+        changes.length ? `changed: ${changes.join(", ")}` : "no field changes",
+      ].filter(Boolean).join("; ");
+    }
     const updated = withVersion(
       {
         ...record,
@@ -339,19 +369,32 @@ app.http("contractsRenew", {
         documents: [...record.documents, doc],
         extractedAt: typeof body.extractedAt === "string" ? body.extractedAt : record.extractedAt,
         extractionModel: typeof body.extractionModel === "string" ? body.extractionModel.slice(0, 100) : record.extractionModel,
-        isArchived: false,
-        archivedAt: null,
+        ...(kind === "renewal" ? { isArchived: false, archivedAt: null } : {}),
         updatedById: by,
         updatedAt: new Date().toISOString(),
       },
       by,
-      "Renewed",
-      previousTerm
+      summary,
+      notes
     );
     await saveContract(updated, etag);
     const saved = await getContract(tenantId, record.id);
     return { status: 200, jsonBody: { contract: saved.record, etag: saved.etag } };
-  }),
+  };
+}
+
+app.http("contractsRenew", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/contracts/{contractId}/renew",
+  handler: withMspWriteAuth(attachHandler("renewal")),
+});
+
+app.http("contractsAmend", {
+  methods: ["POST", "OPTIONS"],
+  authLevel: "anonymous",
+  route: "tenants/{tenantId}/contracts/{contractId}/amend",
+  handler: withMspWriteAuth(attachHandler("amendment")),
 });
 
 app.http("contractsArchive", {

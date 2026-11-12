@@ -69,7 +69,19 @@ export const CONTRACT_TAGS: readonly { name: string; color: string }[] = [
 ];
 
 /** Where an agreement lives in the app. Tenant is part of the path so "All Tenants" links resolve. */
-export function contractPath(tenantId: string, id: string, action?: "edit" | "renew"): string {
+/** Every site an agreement covers; older rows without the list fall back to `location`. */
+export function sitesOf(c: { locations?: string[] | null; location?: string | null }): string[] {
+  if (Array.isArray(c.locations) && c.locations.length) return c.locations;
+  return c.location ? [c.location] : [];
+}
+
+/** Sites as one line for tables and cards. */
+export function formatSites(c: { locations?: string[] | null; location?: string | null }): string | null {
+  const sites = sitesOf(c);
+  return sites.length ? sites.join(", ") : null;
+}
+
+export function contractPath(tenantId: string, id: string, action?: "edit" | "renew" | "amend"): string {
   return `/krewereview/${encodeURIComponent(tenantId)}/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
 }
 

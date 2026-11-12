@@ -12,7 +12,7 @@ import { isDemoMode } from "../auth/demoMode";
 import { MOCK_CONTRACT_LIST } from "../mockContracts";
 import { listContracts } from "../../services/contractService";
 import { isGraphError } from "../../services/graphService";
-import { CONTRACT_TAGS } from "../../apps/contracts/contractUtils";
+import { CONTRACT_TAGS, sitesOf } from "../../apps/contracts/contractUtils";
 import type {
   AgreementCategory,
   ContractDashboard,
@@ -81,14 +81,14 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
         (c) =>
           c.title.toLowerCase().includes(q) ||
           c.vendorName.toLowerCase().includes(q) ||
-          (c.location ?? "").toLowerCase().includes(q) ||
+          sitesOf(c).some((l) => l.toLowerCase().includes(q)) ||
           c.tags.some((t) => t.toLowerCase().includes(q))
       );
     }
     if (statusFilter) list = list.filter((c) => c.status === statusFilter);
     if (categoryFilter) list = list.filter((c) => c.agreementCategory === categoryFilter);
     if (vendorFilter) list = list.filter((c) => c.vendorName === vendorFilter);
-    if (locationFilter) list = list.filter((c) => c.location === locationFilter);
+    if (locationFilter) list = list.filter((c) => sitesOf(c).includes(locationFilter));
     if (needsReviewOnly) list = list.filter((c) => c.needsReview);
     if (dueFilter) {
       const now = new Date();
@@ -118,7 +118,7 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
         case "endDate": cmp = (a.endDate || "9999-12-31").localeCompare(b.endDate || "9999-12-31"); break;
         case "status": cmp = a.status.localeCompare(b.status); break;
         case "category": cmp = (a.agreementCategory ?? "").localeCompare(b.agreementCategory ?? ""); break;
-        case "location": cmp = (a.location ?? "~").localeCompare(b.location ?? "~"); break;
+        case "location": cmp = (sitesOf(a).join(", ") || "~").localeCompare(sitesOf(b).join(", ") || "~"); break;
         case "renewalType": cmp = (a.renewalType ?? "").localeCompare(b.renewalType ?? ""); break;
         case "decisionDate":
           cmp = (a.latestRenewalDecisionDate ?? "9999-12-31").localeCompare(b.latestRenewalDecisionDate ?? "9999-12-31");
@@ -133,7 +133,7 @@ export function useContracts(tenantId: string, { includeArchived = false, viewKe
 
   const vendors = useMemo(() => [...new Set(all.map((c) => c.vendorName))].sort(), [all]);
   const locations = useMemo(
-    () => [...new Set(all.map((c) => c.location).filter((l): l is string => !!l))].sort(),
+    () => [...new Set(all.flatMap(sitesOf))].sort(),
     [all]
   );
   const tags: TagItem[] = useMemo(() => CONTRACT_TAGS.map((t) => ({ id: t.name, name: t.name, color: t.color })), []);

@@ -9,7 +9,7 @@ import { toDetail, type ContractRecord } from "./contractService";
 const record: ContractRecord = {
   id: "c1", tenantId: "t1", tenantDisplayName: "Fishman Haygood",
   title: "Copier lease", vendorName: "Acme", counterpartyName: null,
-  agreementCategory: "Lease", location: "FH New Orleans", department: null, status: "Active",
+  agreementCategory: "Lease", locations: ["FH New Orleans"], location: "FH New Orleans", department: null, status: "Active",
   startDate: "2026-01-01", endDate: "2028-12-31", renewalDate: null, renewalType: "AutoRenew",
   noticePeriodDays: 60, renewalTermMonths: 12,
   earliestRenewalDecisionDate: null, latestRenewalDecisionDate: null,
@@ -24,6 +24,18 @@ const record: ContractRecord = {
 };
 
 describe("toDetail", () => {
+  it("keeps every site and mirrors the first into location", () => {
+    const d = toDetail({ ...record, locations: ["FH Baton Rouge", "FH New Orleans"], location: "FH Baton Rouge" });
+    expect(d.locations).toEqual(["FH Baton Rouge", "FH New Orleans"]);
+    expect(d.location).toBe("FH Baton Rouge");
+  });
+
+  it("gives a record saved before multi-site a locations list", () => {
+    const { locations: _gone, ...old } = record;
+    const d = toDetail(old as ContractRecord);
+    expect(d.locations).toEqual(["FH New Orleans"]);
+  });
+
   it("derives the decision window, auto renew, value, and annualized value", () => {
     const d = toDetail(record);
     expect(d.latestRenewalDecisionDate).toBe("2028-11-01");

@@ -46,10 +46,13 @@ export function tenantName(tenantId: string): string {
 
 export function defaultPicklistConfig(name: string): Omit<TenantPicklistConfig, "updatedAt" | "updatedById"> {
   const d = PICKLIST_DEFAULTS.find((x) => x.match.test(name));
-  return d ? { locations: d.locations, departments: d.departments } : { locations: NONE, departments: NONE };
+  return d
+    ? { locations: d.locations, departments: d.departments, formerLocations: [] }
+    : { locations: NONE, departments: NONE, formerLocations: [] };
 }
 
 export interface ResolvedPicklist extends TenantPicklist {
+  formerLocations: string[];
   tenantId: string;
   tenantDisplayName: string;
   locationSource: PicklistSource["source"];
@@ -99,10 +102,16 @@ export async function resolvePicklist(tenantId: string): Promise<ResolvedPicklis
     }
   }
 
+  const locations = cfg.locations.source === "entra" ? entra.locations : [...cfg.locations.values];
+  // A former site that is somehow still current stays current only.
+  const formerLocations = (cfg.formerLocations ?? []).filter(
+    (f) => !locations.some((l) => l.toLowerCase() === f.toLowerCase())
+  );
   return {
     tenantId,
     tenantDisplayName: name,
-    locations: cfg.locations.source === "entra" ? entra.locations : [...cfg.locations.values],
+    locations,
+    formerLocations,
     departments: cfg.departments.source === "entra" ? entra.departments : [...cfg.departments.values],
     locationSource: cfg.locations.source,
     departmentSource: cfg.departments.source,

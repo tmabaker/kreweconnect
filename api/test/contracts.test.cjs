@@ -174,6 +174,72 @@ test('values outside the locked lists are rejected', async () => {
   });
 });
 
+test('an agreement can cover several sites, including a closed one', async () => {
+  const route = 'tenants/{tenantId}/contracts';
+  // Geaux's live list comes from Entra; the closed store lives on the former list.
+  const put = await call('tenants/{tenantId}/contract-picklist', {
+    method: 'PUT',
+    params: { tenantId: GEAUX },
+    body: {
+      locations: { source: 'entra', values: [] },
+      departments: { source: 'entra', values: [] },
+      formerLocations: ['Express Chevrolet Covington', ' Express Chevrolet Covington ', 'Volvo - Baton Rouge'],
+    },
+  });
+  assert.equal(put.status, 200);
+  // A former site that is still current is listed once, as current.
+  assert.deepEqual(put.body.formerLocations, ['Express Chevrolet Covington']);
+
+  const created = await call(route, {
+    method: 'POST',
+    params: { tenantId: GEAUX },
+    body: { ...base, location: undefined, department: 'Sales', locations: ['express chevrolet covington', 'Volvo - Baton Rouge', 'Volvo - Baton Rouge'] },
+  });
+  assert.equal(created.status, 201);
+  const c = created.body.contract;
+  assert.deepEqual(c.locations, ['Express Chevrolet Covington', 'Volvo - Baton Rouge']);
+  assert.equal(c.location, 'Express Chevrolet Covington', 'location mirrors the first site for older readers');
+
+  const unknown = await call(route, { method: 'POST', params: { tenantId: GEAUX }, body: { ...base, location: undefined, department: 'Sales', locations: ['Nowhere Motors'] } });
+  assert.equal(unknown.status, 400);
+  const none = await call(route, { method: 'POST', params: { tenantId: GEAUX }, body: { ...base, location: undefined, department: 'Sales', locations: [] } });
+  assert.equal(none.status, 400);
+
+  // Take the closed store off every list: the agreement still saves with it.
+  await call('tenants/{tenantId}/contract-picklist', {
+    method: 'PUT',
+    params: { tenantId: GEAUX },
+    body: { locations: { source: 'entra', values: [] }, departments: { source: 'entra', values: [] } },
+  });
+  const one = await call('tenants/{tenantId}/contracts/{contractId}', { params: { tenantId: GEAUX, contractId: c.id } });
+  const edit = await call('tenants/{tenantId}/contracts/{contractId}', {
+    method: 'PUT',
+    params: { tenantId: GEAUX, contractId: c.id },
+    body: { ...base, location: undefined, department: 'Sales', locations: c.locations, title: 'Kept', etag: one.body.etag },
+  });
+  assert.equal(edit.status, 200, JSON.stringify(edit.body));
+  assert.deepEqual(edit.body.contract.locations, ['Express Chevrolet Covington', 'Volvo - Baton Rouge']);
+
+  await call('tenants/{tenantId}/contracts/{contractId}', { method: 'DELETE', params: { tenantId: GEAUX, contractId: c.id }, query: { confirm: c.id } });
+});
+
+test('records saved before multi-site read back with a locations list', async () => {
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  const c = BlobServiceClient.fromConnectionString(process.env.CONTRACTS_STORAGE_CONNECTION).getContainerClient('krewereview');
+  const made = (await call('tenants/{tenantId}/contracts', { method: 'POST', params: { tenantId: FH }, body: { ...base, title: 'Legacy shape' } })).body.contract;
+  const path = `contracts/${FH}/${made.id}.json`;
+  const rec = JSON.parse((await c.getBlobClient(path).downloadToBuffer()).toString());
+  delete rec.locations;
+  const old = JSON.stringify(rec);
+  await c.getBlockBlobClient(path).upload(old, Buffer.byteLength(old));
+  store.resetContractStoreForTests();
+  const one = await call('tenants/{tenantId}/contracts/{contractId}', { params: { tenantId: FH, contractId: made.id } });
+  assert.deepEqual(one.body.contract.locations, ['FH New Orleans']);
+  const listed = (await call('tenants/{tenantId}/contracts', { params: { tenantId: FH } })).body.contracts.find((x) => x.id === made.id);
+  assert.deepEqual(listed.locations, ['FH New Orleans']);
+  await call('tenants/{tenantId}/contracts/{contractId}', { method: 'DELETE', params: { tenantId: FH, contractId: made.id }, query: { confirm: made.id } });
+});
+
 test('create, read, edit, archive, restore, and permanently delete', async () => {
   const created = await call('tenants/{tenantId}/contracts', { method: 'POST', params: { tenantId: FH }, body: base });
   assert.equal(created.status, 201);
@@ -279,6 +345,41 @@ test('upload, create from upload, renew, and download the document', async () =>
   assert.equal(renewed.body.contract.documents.length, 2);
   assert.equal(renewed.body.contract.documents[1].kind, 'renewal');
   assert.match(renewed.body.contract.versions.at(-1).changeNotes, /2026-01-01 to 2026-12-31/);
+
+  // An amendment joins the same record: both documents stay, sites combine.
+  const up3 = await call('tenants/{tenantId}/contract-files', {
+    method: 'POST',
+    params: { tenantId: FH },
+    headers: { 'content-type': 'application/pdf', 'x-file-name': 'amendment-1.pdf' },
+    raw: pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.length),
+  });
+  const noFile = await call('tenants/{tenantId}/contracts/{contractId}/amend', {
+    method: 'POST',
+    params: { tenantId: FH, contractId: c.id },
+    body: { ...base, etag: renewed.body.etag },
+  });
+  assert.equal(noFile.status, 400);
+  const amended = await call('tenants/{tenantId}/contracts/{contractId}/amend', {
+    method: 'POST',
+    params: { tenantId: FH, contractId: c.id },
+    body: {
+      ...base, location: undefined, locations: ['FH New Orleans', 'FH Baton Rouge'],
+      startDate: '2027-01-01', endDate: '2027-12-31', fileId: up3.body.file.id, etag: renewed.body.etag,
+    },
+  });
+  assert.equal(amended.status, 200, JSON.stringify(amended.body));
+  assert.deepEqual(amended.body.contract.locations, ['FH New Orleans', 'FH Baton Rouge']);
+  assert.deepEqual(amended.body.contract.documents.map((d) => d.kind), ['original', 'renewal', 'amendment']);
+  const v = amended.body.contract.versions.at(-1);
+  assert.equal(v.summary, 'Amended');
+  assert.match(v.changeNotes, /amendment-1\.pdf/);
+  assert.match(v.changeNotes, /sites added: FH Baton Rouge/);
+  const again = await call('tenants/{tenantId}/contracts/{contractId}/amend', {
+    method: 'POST',
+    params: { tenantId: FH, contractId: c.id },
+    body: { ...base, fileId: up3.body.file.id, etag: amended.body.etag },
+  });
+  assert.equal(again.status, 400, 'the same file cannot be attached twice');
 
   const badType = await call('tenants/{tenantId}/contract-files', {
     method: 'POST',

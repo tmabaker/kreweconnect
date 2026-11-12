@@ -12,7 +12,8 @@ test('schema locks category, tags, and the tenant lists', () => {
   const schema = extractionSchema(picklist);
   assert.ok(schema.properties.agreementCategory.enum.includes('Lease'));
   assert.ok(!schema.properties.agreementCategory.enum.includes('Gym'));
-  assert.deepEqual(schema.properties.location.enum, ['', ...picklist.locations]);
+  assert.equal(schema.properties.locations.type, 'array');
+  assert.deepEqual(schema.properties.locations.items.enum, ['', ...picklist.locations]);
   assert.deepEqual(schema.properties.department.enum, ['']);
   assert.ok(schema.properties.tags.items.enum.includes('Security'));
   assert.deepEqual(schema.required.sort(), Object.keys(schema.properties).sort());
@@ -22,6 +23,11 @@ test('schema locks category, tags, and the tenant lists', () => {
 // The API rejects a schema with more than 16 union-typed parameters
 // ("Schemas contains too many parameters with union types"); every upload
 // failed on that before this limit was respected.
+test('former sites are offered to the reader alongside current ones', () => {
+  const schema = extractionSchema({ ...picklist, formerLocations: ['FH Lafayette'] });
+  assert.deepEqual(schema.properties.locations.items.enum, ['', 'FH Baton Rouge', 'FH New Orleans', 'FH Lafayette']);
+});
+
 test('schema stays within the structured-output union limit', () => {
   let unions = 0;
   const walk = (node) => {
@@ -49,12 +55,12 @@ test('a request carries the document, the schema, and the fallback setting', asy
     return {
       model: 'claude-opus-5-5',
       stop_reason: 'end_turn',
-      content: [{ type: 'text', text: JSON.stringify({ title: 'Lease', location: 'FH New Orleans', endDate: '' }) }],
+      content: [{ type: 'text', text: JSON.stringify({ title: 'Lease', locations: ['FH New Orleans', 'FH Baton Rouge'], endDate: '' }) }],
     };
   };
   try {
     const out = await extractContractFields(Buffer.from('%PDF-1.4'), 'application/pdf', picklist, null);
-    assert.equal(out.fields.location, 'FH New Orleans');
+    assert.deepEqual(out.fields.locations, ['FH New Orleans', 'FH Baton Rouge']);
     assert.equal(out.fields.endDate, null);
     assert.equal(sent.model, 'claude-opus-5-5');
     assert.equal(sent.fallbacks, 'default');

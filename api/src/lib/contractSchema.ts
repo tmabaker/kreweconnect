@@ -100,8 +100,8 @@ export interface ContractDocument {
   fileName: string;
   fileSize: number;
   contentType: string;
-  /** "original" for the first upload, "renewal" for a later executed renewal. */
-  kind: "original" | "renewal" | "supporting";
+  /** "original" for the first upload, "renewal" for a later executed renewal, "amendment" for a change to the agreement on file. */
+  kind: "original" | "renewal" | "amendment" | "supporting";
   uploadedById: string | null;
   uploadedAt: string;
 }
@@ -121,6 +121,9 @@ export interface ContractFields {
   vendorName: string;
   counterpartyName: string | null;
   agreementCategory: AgreementCategory;
+  /** Every site the agreement covers, in the order chosen. */
+  locations: string[];
+  /** The first of `locations`, kept so older readers and exports still work. */
   location: string | null;
   department: string | null;
   status: ContractStatus;
@@ -172,6 +175,18 @@ export interface ContractRecord extends ContractFields {
 export interface TenantPicklist {
   locations: string[];
   departments: string[];
+  /** Sites the tenant no longer operates (closed or sold) that agreements may still name. */
+  formerLocations?: string[];
+}
+
+/** Older records carry only `location`; give them the list form. */
+export function withLocations<T extends { location?: string | null; locations?: string[] }>(record: T): T & { locations: string[]; location: string | null } {
+  const locations = Array.isArray(record.locations)
+    ? record.locations.filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    : record.location
+      ? [record.location]
+      : [];
+  return { ...record, locations, location: locations[0] ?? null };
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -245,6 +260,39 @@ function pickFromTenantList(value: string | null, list: string[], label: string)
 }
 
 /**
+ * The sites an agreement covers. Accepts `locations` (a list) or the older
+ * single `location`. Each value must be on the tenant's current list, its
+ * former list, or already on the record being edited (`keep`), so a site that
+ * closed since the agreement was entered never blocks a save.
+ */
+function pickLocations(body: Record<string, unknown>, picklist: TenantPicklist, keep: string[]): string[] {
+  let raw: string[];
+  if (body.locations !== undefined && body.locations !== null) {
+    raw = stringList(body, "locations", 50);
+    if (raw.some((x) => x.length > 200)) throw new BadRequestError("A location is too long (max 200 characters).");
+  } else {
+    const one = str(body, "location", 200);
+    raw = one ? [one] : [];
+  }
+  const allowed = [...picklist.locations, ...(picklist.formerLocations ?? []), ...keep];
+  if (allowed.length === 0) {
+    if (raw.length) throw new BadRequestError("No location list is set up for this tenant yet.");
+    return [];
+  }
+  if (raw.length === 0 && picklist.locations.length > 0) throw new BadRequestError("At least one location is required.");
+  const out: string[] = [];
+  for (const value of raw) {
+    const match = allowed.find((x) => x.toLowerCase() === value.toLowerCase());
+    if (!match) {
+      const names = [...picklist.locations, ...(picklist.formerLocations ?? [])];
+      throw new BadRequestError(`location "${value}" must be one of: ${names.join(", ")}.`);
+    }
+    if (!out.some((x) => x.toLowerCase() === match.toLowerCase())) out.push(match);
+  }
+  return out;
+}
+
+/**
  * Validate and normalize a create/update body. Throws BadRequestError (400)
  * with a readable message on the first problem. `newId` mints ids for new
  * contacts/obligations.
@@ -252,7 +300,9 @@ function pickFromTenantList(value: string | null, list: string[], label: string)
 export function parseContractFields(
   body: Record<string, unknown>,
   picklist: TenantPicklist,
-  newId: () => string
+  newId: () => string,
+  /** Locations already on the record being edited; always accepted. */
+  keepLocations: string[] = []
 ): ContractFields {
   const title = str(body, "title", 300);
   if (!title) throw new BadRequestError("title is required.");
@@ -260,6 +310,7 @@ export function parseContractFields(
   if (!vendorName) throw new BadRequestError("vendorName is required.");
   const agreementCategory = oneOf(body, "agreementCategory", AGREEMENT_CATEGORIES);
   if (!agreementCategory) throw new BadRequestError("agreementCategory is required.");
+  const locations = pickLocations(body, picklist, keepLocations);
 
   const tags = stringList(body, "tags", CONTRACT_TAGS.length);
   for (const t of tags) {
@@ -309,7 +360,8 @@ export function parseContractFields(
     vendorName,
     counterpartyName: str(body, "counterpartyName", 300),
     agreementCategory,
-    location: pickFromTenantList(str(body, "location", 200), picklist.locations, "location"),
+    locations,
+    location: locations[0] ?? null,
     department: pickFromTenantList(str(body, "department", 200), picklist.departments, "department"),
     status: oneOf(body, "status", CONTRACT_STATUSES) ?? "Draft",
     startDate,

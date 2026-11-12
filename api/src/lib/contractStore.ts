@@ -13,7 +13,7 @@
 
 import { BlobServiceClient, type ContainerClient, RestError } from "@azure/storage-blob";
 import { ConflictError, NotFoundError, ServiceUnavailableError } from "./http";
-import type { ContractRecord } from "./contractSchema";
+import { withLocations, type ContractRecord } from "./contractSchema";
 
 const CONTAINER = "krewereview";
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -194,7 +194,7 @@ export async function listContracts(tenantId: string): Promise<ContractRecord[]>
     }
   }
   snapshots.set(key, snap);
-  return Object.values(snap.entries).map((e) => e.record);
+  return Object.values(snap.entries).map((e) => withLocations(e.record));
 }
 
 /**
@@ -214,7 +214,7 @@ export async function getContract(
   const c = await container(tenantId);
   const found = await readText(c, contractPath(tenantId, id));
   if (!found) throw new NotFoundError("Agreement not found.");
-  return { record: JSON.parse(found.text) as ContractRecord, etag: found.etag };
+  return { record: withLocations(JSON.parse(found.text) as ContractRecord), etag: found.etag };
 }
 
 export async function createContract(record: ContractRecord): Promise<void> {
@@ -292,6 +292,8 @@ export interface PicklistSource {
 
 export interface TenantPicklistConfig {
   locations: PicklistSource;
+  /** Closed or sold sites that agreements may still name. Always a plain list. */
+  formerLocations?: string[];
   departments: PicklistSource;
   updatedAt: string;
   updatedById: string | null;

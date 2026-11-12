@@ -34,6 +34,7 @@ const VIEW = "kr.list";
 import {
   getStatusColor, getStatusLabel, formatCurrency, formatDaysRemaining, CONTRACT_STATUSES, AGREEMENT_CATEGORIES,
   getCategoryLabel, getRenewalTypeLabel, contractPath,
+  formatSites,
 } from "./contractUtils";
 import type { AgreementCategory, ContractStatus } from "../../shared/types";
 
@@ -294,7 +295,7 @@ export function ContractListPage() {
             <Card key={c.id} className={styles.mobileCard} onClick={() => open(c.tenantId, c.id)}>
               <Text weight="semibold" className={styles.mobileTitle}>{c.title}</Text>
               <Text size={200} className={styles.mobileMeta}>
-                {[c.vendorName, getCategoryLabel(c.agreementCategory), c.location].filter(Boolean).join(" · ")}
+                {[c.vendorName, getCategoryLabel(c.agreementCategory), formatSites(c)].filter(Boolean).join(" · ")}
               </Text>
               <div className={styles.mobileBadges}>
                 <Badge appearance="filled" color={getStatusColor(c.status)} size="small">
@@ -356,7 +357,7 @@ export function ContractListPage() {
                   <td className={styles.td}>
                     <Badge appearance="outline" color="informative" size="small">{c.tenantDisplayName}</Badge>
                   </td>
-                  <td className={styles.td}><Text size={200}>{c.location ?? "—"}</Text></td>
+                  <td className={styles.td}><Text size={200}>{formatSites(c) ?? "—"}</Text></td>
                   <td className={styles.td}>
                     <Text weight="semibold">{c.value ? formatCurrency(c.value) : "—"}</Text>
                   </td>
