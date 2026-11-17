@@ -22,7 +22,7 @@ async function post(path, body, key) {
 async function termination() {
   const actor = { upn: 'hr@bayoudemo.example', name: 'HR', role: 'hr' };
   const p = await people.create({ firstName: 'Frank', lastName: 'Parkin', storeId: 'north', status: 'active', workEmail: 'fparkin@bayoudemo.example' }, actor);
-  return workflow.createTermination({ personId: p.id, lastDay: '2026-11-07', terminationType: 'resignation', deviceEndpointName: 'BD-NORTH-PC1' }, actor);
+  return workflow.createTermination({ personId: p.id, separation: 'voluntary', noticeGiven: 'no', rehireEligible: 'yes', reasonNotes: 'Moving out of state.', lastDay: '2026-11-07', terminationType: 'resignation', deviceEndpointName: 'BD-NORTH-PC1' }, actor);
 }
 
 test.beforeEach(() => resetStore(new MemoryStore('')));

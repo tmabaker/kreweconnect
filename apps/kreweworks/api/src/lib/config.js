@@ -35,7 +35,8 @@ const config = {
     it: env.PORTAL_IT_EMAIL || p.mail.it || '',
     // A co-managed client's other IT partner, copied on IT hand-offs.
     itCc: list(env.PORTAL_IT_CC, (p.mail.itCc || []).join(',')),
-    bcc: list(env.PORTAL_MAIL_BCC, '')
+    bcc: list(env.PORTAL_MAIL_BCC, ''),
+    watchers: p.mail.watchers || []
   },
   baseUrl: (env.PORTAL_BASE_URL || p.deploy.baseUrl || '').replace(/\/$/, ''),
   // Shared key NOIT Tech Tools presents (through the KreweConnect API) to record IT work on a request.

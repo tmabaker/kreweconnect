@@ -106,7 +106,7 @@
     api('GET', 'requests/' + encodeURIComponent(id) + '/packet' + (reveal ? '?reveal=1' : '')).then(function (d) {
       var def = d.definition; var sub = d.submission;
       var hdr = head(d.header, def.title, sub ? 'Submitted ' + fmt(sub.submittedAt) + (sub.revealed ? ' (identifiers revealed)' : ' (identifiers masked)') : 'Not submitted yet');
-      var top = '<div class="no-print actions" style="margin-bottom:12px"><a class="btn" href="/#/requests/' + esc(id) + '">Back to request</a><button class="btn btn-primary" onclick="window.print()">Print</button>' + (d.canReveal && !reveal ? '<a class="btn btn-danger" href="/apply.html?view=' + esc(id) + '&reveal=1">Reveal identifiers (logged)</a>' : '') + '</div>';
+      var top = '<div class="no-print actions" style="margin-bottom:12px"><a class="btn" href="/#/requests/' + esc(id) + '">Back to request</a><button class="btn btn-primary" data-print="1">Print</button>' + (d.canReveal && !reveal ? '<a class="btn btn-danger" href="/apply.html?view=' + esc(id) + '&reveal=1">Reveal identifiers (logged)</a>' : '') + '</div>';
       if (!sub) { root.innerHTML = hdr + top + '<div class="alert info">The candidate has not submitted the online packet. Print a blank packet from the request page if they prefer paper.</div>'; return; }
       renderForm({ definition: def, header: d.header }, true, sub);
       root.insertAdjacentHTML('afterbegin', top);
@@ -124,7 +124,7 @@
     api('GET', 'packet/definition').then(function (d) {
       var header = { candidateName: q.get('name') || '', position: q.get('position') || '', store: q.get('store') || '', department: q.get('department') || '', managerName: q.get('manager') || '' };
       renderForm({ definition: d.definition, header: header }, true, null);
-      root.insertAdjacentHTML('afterbegin', '<div class="no-print actions" style="margin-bottom:12px"><a class="btn" href="/">Back</a><button class="btn btn-primary" onclick="window.print()">Print blank packet</button></div>');
+      root.insertAdjacentHTML('afterbegin', '<div class="no-print actions" style="margin-bottom:12px"><a class="btn" href="/">Back</a><button class="btn btn-primary" data-print="1">Print blank packet</button></div>');
       var ms = d.definition.managerSection; var bs = d.definition.backgroundScreen; var extra = '';
       if (ms) extra += '<section class="sheet card"><h2>' + esc(ms.title) + '</h2><div class="grid-3">' + ms.fields.map(function (f) { return '<div class="field"><label>' + esc(f.label) + '</label><div class="pv"><span class="line" style="min-width:140px"></span></div></div>'; }).join('') + '</div><p>Approved: <span class="line"></span> Signature of Manager &nbsp; <span class="line"></span> Printed Name of Manager</p><h3>To be completed by ' + esc(screeningBy(ms)) + '</h3><p>' + screeningChecks(ms).map(function (k) { return esc(SCREEN_LABELS[k] || k) + ' <span class="line" style="min-width:120px"></span>'; }).join(' &nbsp; ') + '</p></section>';
       if (bs) extra += '<section class="sheet card"><h2>' + esc(bs.title) + '</h2><p>' + esc(bs.instruction) + '</p><p>Manager\'s name <span class="line"></span><br>Time called <span class="line"></span><br>Date called <span class="line"></span></p></section>';
@@ -133,3 +133,5 @@
     });
   }
 })();
+// Print buttons use data-print rather than an inline onclick, which the site's security policy blocks.
+document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('[data-print]')) { e.preventDefault(); window.print(); } });

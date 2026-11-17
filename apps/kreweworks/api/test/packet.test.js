@@ -39,7 +39,7 @@ function fullSubmission() {
 test.beforeEach(() => resetStore(new MemoryStore('')));
 
 test('invite, candidate submission, masking, HR reveal, purge at close', async () => {
-  const r = await workflow.createHire({ firstName: 'Jane', lastName: 'Doe', mobile: '2255550100', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example', managerName: 'GM' }, manager);
+  const r = await workflow.createHire({ firstName: 'Jane', lastName: 'Doe', mobile: '2255550100', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example', managerName: 'GM' }, manager);
   assert.equal(packet.inviteStatus(r), 'none');
   let out = await workflow.applyAction(r, 'packet_invite', { candidateEmail: 'jane@example.com', sendEmail: true }, manager);
   const token = out.request.hire.packet.invite.token;
@@ -90,7 +90,7 @@ test('invite, candidate submission, masking, HR reveal, purge at close', async (
 });
 
 test('manager section and background screen call are recorded; pay hidden from IT', async () => {
-  const r = await workflow.createHire({ firstName: 'A', lastName: 'B', mobile: '2255550102', storeId: 'north', department: 'Service', title: 'Porter', managerUpn: 'gm@bayoudemo.example' }, manager);
+  const r = await workflow.createHire({ firstName: 'A', lastName: 'B', mobile: '2255550102', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Service', title: 'Porter', managerUpn: 'gm@bayoudemo.example' }, manager);
   let out = await workflow.applyAction(r, 'manager_section', { rateOfPay: '$15/hr', uniforms: true, employmentType: 'Full-time', workHours: '8-5', workDays: 'Mon-Fri', lunchDeductions: false }, manager);
   assert.equal(out.request.hire.managerSection.rateOfPay, '$15/hr'); assert.equal(out.request.hire.managerSection.uniforms, 'yes');
   assert.equal(workflow.redact(out.request, it).hire.managerSection.rateOfPay, undefined);

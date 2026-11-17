@@ -47,6 +47,8 @@ function compose(r, action, person, actor) {
 
   if (r.type === 'hire') {
     switch (action) {
+      // HR, IT and the manager hear about a hire at later steps; the people copied by rule hear about it now.
+      case 'created': return { to: [], cc: [], watchersOnly: true, subject: `New hire request: ${subjectBase}`, title: 'New hire request', body: `<p>${esc(actor.name)} started a hire request for <b>${esc(name)}</b>.</p><table>${row('Position', r.title)}${row('Department', r.department)}${row(data.vocab.location, storeName(r.storeId))}${row('Direct manager', r.managerName || r.managerUpn)}${row('Target start', fmtDate(r.hire.startDate || r.targetStartDate))}</table>` };
       case 'packet_invite': { const inv = r.hire.packet.invite || {}; if (!inv.sentTo) return null; const url = `${config.baseUrl}/apply.html?t=${inv.token}`;
         const pk = data.packet || {}; const what = pk.inviteSummary || 'contact details, employment history and the consents the position requires';
         return { to: [inv.sentTo], cc: [], subject: `Your ${data.client.name} pre-employment packet`, title: `Welcome from ${storeName(r.storeId)}`, noButton: true, body: `<p>Hello ${esc(p.firstName || '')},</p><p>${esc(r.managerName || 'Your hiring manager')} has asked you to complete the ${esc(data.client.name)} pre-employment packet online for the <b>${esc(r.title)}</b> position at <b>${esc(storeName(r.storeId))}</b>.</p><p><a href="${url}" style="background:${data.branding.primary};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open your packet</a></p><p>The link is personal to you and works until ${esc(fmtDate((inv.expiresAt || '').slice(0, 10)))}. It covers ${esc(what)}. Your Social Security number and date of birth are encrypted and seen only by Human Resources.</p><p>Questions? Contact ${esc(r.managerName || 'your hiring manager')}.</p>` }; }
@@ -81,7 +83,7 @@ function compose(r, action, person, actor) {
   if (r.type === 'termination') {
     const t = r.termination;
     const urgent = t.involuntary ? 'URGENT: ' : '';
-    const detail = `<table>${row('Last day', fmtDate(t.lastDay))}${row('Access ends', t.accessEndAt)}${row('Type', (data.terminationTypes.find(x => x.key === t.terminationType) || {}).label)}${row('Work email', (person && person.workEmail) || '')}${row('Device', t.deviceEndpointName)}${row('Equipment to recover', t.equipmentToRecover)}${row('Mailbox delegate', t.mailboxDelegate)}${row('Forward mail for', t.forwardDays ? `${t.forwardDays} days` : '')}${row('Applications to deactivate', (t.deactivateApps || []).map(k => (data.applications.find(a => a.key === k) || {}).label || k).join(', '))}${row('Manager notes', t.managerNotes)}</table>`;
+    const detail = `<table>${row('Separation', t.separation ? (t.separation === 'involuntary' ? 'Involuntary' : 'Voluntary') : '')}${row('Reason for leaving', (data.terminationTypes.find(x => x.key === t.terminationType) || {}).label)}${row('Date of termination', fmtDate(t.terminationDate))}${row('Last day worked', fmtDate(t.lastDay))}${row('Access ends', t.accessEndAt)}${row('Work email', (person && person.workEmail) || '')}${row('Device', t.deviceEndpointName)}${row('Equipment to recover', t.equipmentToRecover)}${row('Mailbox delegate', t.mailboxDelegate)}${row('Forward mail for', t.forwardDays ? `${t.forwardDays} days` : '')}${row('Applications to deactivate', (t.deactivateApps || []).map(k => (data.applications.find(a => a.key === k) || {}).label || k).join(', '))}${row('Manager notes', t.managerNotes)}</table>`;
     switch (action) {
       case 'created': return { to: hr.concat(it), cc: mgr.concat(itCc), subject: `${urgent}Termination: ${subjectBase}`, title: `${urgent}Termination submitted`, body: `<p>${esc(actor.name)} submitted a termination for <b>${esc(name)}</b>.${t.involuntary ? ' <b>Involuntary: IT should block sign-in at the access end time, before the employee is informed where possible.</b>' : ''}</p>${detail}` };
       case 'it_complete': return { to: hr.concat(mgr), subject: `Access removed: ${subjectBase}`, title: 'IT offboarding complete', body: `<p>Access for <b>${esc(name)}</b> has been removed.</p><table>${data.termination.itChecks.map(c => row(c.label, t.it[c.key] ? 'Yes' : 'No')).join('')}</table>${t.it.notes ? `<p><b>IT note:</b> ${esc(t.it.notes)}</p>` : ''}` };
@@ -92,12 +94,30 @@ function compose(r, action, person, actor) {
   return null;
 }
 
+// Who is copied by rule on this request: by request type and, when a rule names departments, by the
+// request's department (and a change's new department). A confidential hire copies no one until it opens up.
+function watchersFor(r) {
+  if (r.confidential) return [];
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const depts = [r.department, r.change && r.change.to && r.change.to.department].map(norm).filter(Boolean);
+  return (config.mail.watchers || []).filter(w => {
+    const types = Array.isArray(w.types) && w.types.length ? w.types : ['hire', 'change', 'termination'];
+    if (!types.includes(r.type)) return false;
+    if (!Array.isArray(w.departments) || !w.departments.length) return true;
+    return w.departments.map(norm).some(d => depts.includes(d));
+  }).map(w => String(w.email).toLowerCase());
+}
+
 async function send(r, action, person, actor, context) {
   let msg;
   try { msg = compose(r, action, person, actor); } catch (e) { if (context) context.warn('notify compose failed', e); return { sent: false, reason: 'compose failed' }; }
   if (!msg) return { sent: false, reason: 'no notification for this action' };
   const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean).map(s => s.toLowerCase())));
-  const to = uniq(msg.to); const cc = uniq(msg.cc).filter(x => !to.includes(x));
+  // Candidate mail (noButton) never copies staff. Everything else copies the matching watchers.
+  const watching = msg.noButton ? [] : watchersFor(r);
+  let to = uniq(msg.watchersOnly ? watching : msg.to);
+  if (!to.length) return { sent: false, reason: 'no recipients' };
+  const cc = uniq((msg.cc || []).concat(msg.watchersOnly ? [] : watching)).filter(x => !to.includes(x));
   const summary = { to, cc, subject: msg.subject };
   if (!config.mail.enabled) { if (context) context.log('notify (disabled):', JSON.stringify(summary)); return Object.assign({ sent: false, reason: 'mail disabled' }, summary); }
   const message = {
@@ -112,4 +132,4 @@ async function send(r, action, person, actor, context) {
   catch (e) { if (context) context.error('notify send failed', e); return Object.assign({ sent: false, reason: e.message }, summary); }
 }
 
-module.exports = { compose, send, checklistHtml };
+module.exports = { compose, send, checklistHtml, watchersFor };
