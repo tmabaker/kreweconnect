@@ -7,6 +7,7 @@ const { app } = require('@azure/functions');
 const { route, ok, readJson, HttpError } = require('../lib/http');
 const workflow = require('../lib/workflow');
 const config = require('../lib/config');
+const people = require('../lib/people');
 
 function requireServiceKey(request) {
   if (!config.serviceKey) throw new HttpError(503, 'PORTAL_SERVICE_KEY is not set on this portal.');
@@ -23,4 +24,21 @@ app.http('service-techtools-update', { methods: ['POST'], authLevel: 'anonymous'
   if (!r) throw new HttpError(404, 'Request not found.');
   const result = await workflow.recordTechTools(r, await readJson(request));
   return ok({ id: r.id, stage: result.request.stage, checksSet: result.checksSet, eventId: result.event.id });
+}, { anonymous: true }) });
+
+// The read side, for the NOIT fulfillment orchestrator: one request by its id, as IT may see it. HR-only
+// fields (pay, screening notes, termination reasons) are removed by workflow.redact with a non-HR caller,
+// and the packet's protected values stay masked. Nothing is written.
+const SERVICE_CALLER = Object.freeze({ upn: 'service:techtools', name: 'NOIT Tech Tools (service)', role: 'it', can: () => false });
+const PERSON_FIELDS = ['id', 'firstName', 'lastName', 'preferredName', 'displayName', 'workEmail', 'upn', 'storeId', 'title', 'department', 'managerUpn', 'status', 'extension'];
+
+// GET /api/service/requests/{id}
+app.http('service-request-read', { methods: ['GET'], authLevel: 'anonymous', route: 'service/requests/{id}', handler: route(async (request) => {
+  requireServiceKey(request);
+  const r = await workflow.get(request.params.id);
+  if (!r) throw new HttpError(404, 'Request not found.');
+  const p = r.personId ? await people.get(r.personId) : null;
+  const person = p ? Object.fromEntries(PERSON_FIELDS.filter(k => p[k] !== undefined).map(k => [k, p[k]])) : null;
+  const events = (await workflow.events(r.id)).map(e => ({ id: e.id, at: e.at, action: e.action, by: e.byName || e.by, note: e.note }));
+  return ok({ request: workflow.redact(r, SERVICE_CALLER), person, events });
 }, { anonymous: true }) });
