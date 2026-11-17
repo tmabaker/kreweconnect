@@ -33,6 +33,8 @@ async function events(requestId) {
 // Stages from which IT works a confidential hire (before them, IT has nothing to do with it).
 const IT_STAGES = ['it_queue', 'it_in_progress', 'it_complete', 'started', 'closed'];
 
+function actorIsHr(actor) { return !!(actor && typeof actor.can === 'function' && actor.can('hr')); }
+
 function isParty(r, caller) { return r.createdBy === caller.upn || r.managerUpn === caller.upn; }
 
 function visibleTo(r, caller) {
@@ -79,6 +81,43 @@ function checklistComplete(c) {
   return true;
 }
 
+// ---------- pay (hire) ----------
+// Rate of pay and pay structure are asked on every hire. HR and the hiring side see them; IT never does.
+function normalizePay(input) {
+  const rate = clean(input.payRate, 80);
+  const structure = clean(input.payStructure, 80);
+  if (!rate) throw new HttpError(400, 'Rate of pay is required.');
+  if (!data.payStructures.includes(structure)) throw new HttpError(400, `Choose the pay structure: ${data.payStructures.join(', ')}.`);
+  return { rate, structure, notes: clean(input.payNotes, 500) };
+}
+
+// ---------- separation notice (termination) ----------
+// Mirrors the client's paper Separation Notice / Termination Form, plus the IT section.
+function separationFields(input, partial) {
+  const out = {};
+  const pick = (v, allowed) => (allowed.includes(v) ? v : '');
+  const f = data.termination;
+  if (!partial || input.separation !== undefined) {
+    out.separation = pick(input.separation, ['voluntary', 'involuntary']);
+    if (!out.separation && !partial) throw new HttpError(400, 'Choose whether the separation is voluntary or involuntary.');
+  }
+  if (!partial || input.terminationDate !== undefined) out.terminationDate = isoDate(input.terminationDate);
+  if (!partial || input.noticeGiven !== undefined) {
+    out.noticeGiven = pick(input.noticeGiven, ['yes', 'no', 'na']);
+    if (!out.noticeGiven && !partial) throw new HttpError(400, 'Did the employee give notice of resignation? Answer yes, no or not applicable.');
+  }
+  if (!partial || input.noticeLength !== undefined) out.noticeLength = clean(input.noticeLength, 120);
+  if (out.noticeGiven === 'yes' && !out.noticeLength && !partial) throw new HttpError(400, 'Say how much notice the employee gave.');
+  if (f.uniformsQuestion && (!partial || input.uniformsReturned !== undefined)) {
+    out.uniformsReturned = pick(input.uniformsReturned, ['yes', 'no', 'na']);
+    if (!out.uniformsReturned && !partial) throw new HttpError(400, `Answer: ${f.uniformsQuestion}`);
+  }
+  if (!partial || input.employeeSignature !== undefined) out.employeeSignature = pick(input.employeeSignature, ['signed', 'refused', 'unavailable', 'pending']) || (partial ? '' : 'pending');
+  if (!partial || input.otherComments !== undefined) out.otherComments = clean(input.otherComments, 4000);
+  for (const k of Object.keys(out)) if (partial && out[k] === '' && input[k] === undefined) delete out[k];
+  return out;
+}
+
 // ---------- creation ----------
 async function createHire(input, actor) {
   const storeId = clean(input.storeId, 60);
@@ -88,6 +127,7 @@ async function createHire(input, actor) {
   if (!clean(input.managerUpn)) throw new HttpError(400, 'Direct manager is required.');
   const mobile = people.normMobile(input.mobile);
   if (!mobile) throw new HttpError(400, 'A mobile number is required. Temporary credentials are delivered by text message.');
+  const pay = normalizePay(input);
 
   let person = input.personId ? await people.get(input.personId) : null;
   if (person && ['active', 'changing', 'hired', 'terminating'].includes(person.status)) {
@@ -132,11 +172,14 @@ async function createHire(input, actor) {
       checklist: null,
       notice: { sentAt: '', sentBy: '', ticketNote: '' },
       it: { assignedTo: '', upn: '', license: '', endpointName: '', extension: '', credentialDelivered: false, managerCredentialDelivered: false, notes: '', startedAt: '', completedAt: '', completedBy: '' },
-      dayOne: {}
+      dayOne: {},
+      pay
     },
     attachments: [], managerNotes: clean(input.notes, 2000)
   };
   for (const item of data.packetItems) r.hire.packet.items[item.key] = bool((input.packetItems || {})[item.key]);
+  // The packet's manager section asks for the rate of pay too; start it from the hire request so it is entered once.
+  if (pay.rate && packet.def && packet.def.managerSection && packet.def.managerSection.fields.some(f => f.key === 'rateOfPay')) r.hire.managerSection.rateOfPay = `${pay.rate} (${pay.structure})`;
   await save(r);
   person.requestIds = (person.requestIds || []).concat(r.id);
   if (r.confidential) { person.confidential = true; person.confidentialRequestId = r.id; }
@@ -188,9 +231,15 @@ async function createTermination(input, actor) {
   if (person.status === 'terminated') throw new HttpError(409, 'This person is already terminated.');
   const lastDay = isoDate(input.lastDay);
   if (!lastDay) throw new HttpError(400, 'Last day is required.');
-  const terminationType = data.terminationTypes.some(t => t.key === input.terminationType) ? input.terminationType : '';
-  if (!terminationType) throw new HttpError(400, 'Choose the type of departure.');
-  const involuntary = ['termination', 'termination_cause'].includes(terminationType) || bool(input.involuntary);
+  const terminationType = data.terminationTypes.some(t => t.key === input.terminationType && !t.legacy) ? input.terminationType : '';
+  if (!terminationType) throw new HttpError(400, 'Choose the reason for leaving.');
+  const sep = separationFields(input, false);
+  const reasonNotes = clean(input.reasonNotes, 4000);
+  if (!reasonNotes) throw new HttpError(400, 'Explain the events that led to the separation. This is required for every departure, voluntary or involuntary.');
+  const rehireEligible = ['yes', 'no'].includes(input.rehireEligible) ? input.rehireEligible : (actorIsHr(actor) && input.rehireEligible === 'review' ? 'review' : '');
+  if (!rehireEligible) throw new HttpError(400, 'Is the employee eligible for rehire? Answer yes or no.');
+  if (sep.terminationDate && sep.terminationDate < lastDay) throw new HttpError(400, 'The date of termination cannot be before the last day worked.');
+  const involuntary = sep.separation === 'involuntary';
   const r = {
     id: newId('T'), type: 'termination', personId: person.id, stage: 'submitted',
     storeId: person.storeId, department: person.department, title: person.title,
@@ -199,8 +248,11 @@ async function createTermination(input, actor) {
     termination: {
       lastDay, accessEndAt: clean(input.accessEndAt, 30) || (involuntary ? 'immediately' : `${lastDay} end of day`),
       terminationType, involuntary,
-      rehireEligible: ['yes', 'no', 'review'].includes(input.rehireEligible) ? input.rehireEligible : 'review',
-      reasonNotes: clean(input.reasonNotes, 4000),
+      rehireEligible,
+      reasonNotes,
+      ...sep,
+      terminationDate: sep.terminationDate || lastDay,
+      submittedBy: { upn: actor.upn, name: actor.name, at: nowIso() },
       equipmentToRecover: clean(input.equipmentToRecover, 1000), deviceEndpointName: clean(input.deviceEndpointName, 15).toUpperCase(),
       mailboxDelegate: clean(input.mailboxDelegate, 120).toLowerCase(), forwardDays: Math.max(0, Math.min(365, parseInt(input.forwardDays || '30', 10) || 0)),
       deactivateApps: (Array.isArray(input.deactivateApps) ? input.deactivateApps : data.applications.filter(a => !a.always).map(a => a.key)).filter(k => data.applications.some(a => a.key === k)),
@@ -257,7 +309,12 @@ async function applyAction(r, action, payload, actor) {
         packet.createInvite(r, actor, { candidateEmail: (h.packet.invite || {}).candidateEmail });
         break; }
       case 'manager_section':
-        for (const f of packet.def.managerSection.fields) if (payload[f.key] !== undefined) h.managerSection[f.key] = f.type === 'yesno' ? (bool(payload[f.key]) ? 'yes' : 'no') : clean(payload[f.key], 200);
+        for (const f of packet.def.managerSection.fields) {
+          if (payload[f.key] === undefined) continue;
+          // Someone who cannot see the rate (not this hire's manager or filer, not HR) cannot change it either.
+          if (f.key === 'rateOfPay' && !actor.can('hr') && !isParty(r, actor)) continue;
+          h.managerSection[f.key] = f.type === 'yesno' ? (bool(payload[f.key]) ? 'yes' : 'no') : clean(payload[f.key], 200);
+        }
         h.managerSection.approvedBy = actor.upn; h.managerSection.approvedAt = nowIso(); h.managerSection.approvedName = actor.name;
         break;
       case 'cole_called':
@@ -367,10 +424,15 @@ async function applyAction(r, action, payload, actor) {
     const t = r.termination;
     switch (action) {
       case 'edit':
-        for (const k of ['equipmentToRecover', 'mailboxDelegate', 'managerNotes', 'reasonNotes']) if (payload[k] !== undefined) t[k] = clean(payload[k], 2000);
+        for (const k of ['equipmentToRecover', 'mailboxDelegate', 'managerNotes']) if (payload[k] !== undefined) t[k] = clean(payload[k], 2000);
+        if (payload.reasonNotes !== undefined) { const n = clean(payload.reasonNotes, 4000); if (!n) throw new HttpError(400, 'The explanation of events cannot be removed.'); t.reasonNotes = n; }
+        Object.assign(t, separationFields(payload, true));
+        if (payload.separation !== undefined) t.involuntary = t.separation === 'involuntary';
+        if (payload.terminationType && data.terminationTypes.some(x => x.key === payload.terminationType && !x.legacy)) t.terminationType = payload.terminationType;
         if (payload.lastDay) { const d = isoDate(payload.lastDay); if (d) { t.lastDay = d; if (person) await people.applyOutcome(person, { lastDay: d }); } }
         if (payload.accessEndAt !== undefined) t.accessEndAt = clean(payload.accessEndAt, 30);
         if (payload.rehireEligible && ['yes', 'no', 'review'].includes(payload.rehireEligible) && actor.can('hr')) t.rehireEligible = payload.rehireEligible;
+        if (payload.terminationDate) { const d = isoDate(payload.terminationDate); if (d) t.terminationDate = d; }
         break;
       case 'hr_processed':
         for (const c of data.termination.hrChecks) if (payload[c.key] !== undefined) t.hr[c.key] = bool(payload[c.key]);
@@ -477,9 +539,12 @@ function redact(r, caller) {
   if (copy.hire) {
     copy.hire.screening = Object.assign({}, copy.hire.screening, { notes: undefined }); if (copy.hire.decision) copy.hire.decision.reason = undefined;
     if (copy.hire.packet && copy.hire.packet.submission) copy.hire.packet.submission = packet.viewSubmission(copy.hire.packet.submission, caller, false);
-    if (copy.hire.managerSection && !caller.can('manager')) delete copy.hire.managerSection.rateOfPay;
+    if (copy.hire.managerSection && !isParty(r, caller)) delete copy.hire.managerSection.rateOfPay;
   }
-  if (copy.termination) { delete copy.termination.reasonNotes; delete copy.termination.rehireEligible; }
+  if (copy.termination) { delete copy.termination.reasonNotes; delete copy.termination.rehireEligible; delete copy.termination.otherComments; }
+  // Pay is for HR and this hire's own side (its hiring manager and whoever filed it). Never IT, and never
+  // another manager who can see the request, such as a director copied on notifications.
+  if (copy.hire && copy.hire.pay && !isParty(r, caller)) delete copy.hire.pay;
   return copy;
 }
 

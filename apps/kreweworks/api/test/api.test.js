@@ -44,9 +44,9 @@ test('access management and scoped request flow over HTTP', async () => {
   r = await call('PUT', 'access', { upn: 'x@bayoudemo.example', role: 'it' }, 'hrlead@bayoudemo.example');
   assert.equal(r.status, 403);
   // manager out of scope cannot create for another store
-  r = await call('POST', 'requests', { type: 'hire', firstName: 'New', lastName: 'Hire', mobile: '2255550199', storeId: 'south', department: 'Sales', title: 'Sales Associate', managerUpn: 'mgr1@bayoudemo.example' }, 'mgr1@bayoudemo.example');
+  r = await call('POST', 'requests', { type: 'hire', firstName: 'New', lastName: 'Hire', mobile: '2255550199', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'south', department: 'Sales', title: 'Sales Associate', managerUpn: 'mgr1@bayoudemo.example' }, 'mgr1@bayoudemo.example');
   assert.equal(r.status, 403);
-  r = await call('POST', 'requests', { type: 'hire', firstName: 'New', lastName: 'Hire', mobile: '2255550199', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'mgr1@bayoudemo.example' }, 'mgr1@bayoudemo.example');
+  r = await call('POST', 'requests', { type: 'hire', firstName: 'New', lastName: 'Hire', mobile: '2255550199', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'mgr1@bayoudemo.example' }, 'mgr1@bayoudemo.example');
   assert.equal(r.status, 201);
   const id = r.body.request.id;
   r = await call('GET', `requests/${id}`, null, 'mgr1@bayoudemo.example');
@@ -72,7 +72,7 @@ test('access management and scoped request flow over HTTP', async () => {
 
 test('attachments round-trip through the store', async () => {
   await call('PUT', 'access', { upn: 'hrlead@bayoudemo.example', role: 'hr' }, 'tammy@noitgroup.com', '00000000-0000-4000-8000-0000000a0017');
-  let r = await call('POST', 'requests', { type: 'hire', firstName: 'Att', lastName: 'Ach', mobile: '2255550198', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'hrlead@bayoudemo.example' }, 'hrlead@bayoudemo.example');
+  let r = await call('POST', 'requests', { type: 'hire', firstName: 'Att', lastName: 'Ach', mobile: '2255550198', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'hrlead@bayoudemo.example' }, 'hrlead@bayoudemo.example');
   const id = r.body.request.id;
   r = await call('POST', `requests/${id}/attachments`, { name: 'packet.pdf', contentType: 'application/pdf', dataBase64: Buffer.from('%PDF-1.4 test').toString('base64') }, 'hrlead@bayoudemo.example');
   assert.equal(r.status, 201);

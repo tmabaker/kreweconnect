@@ -70,8 +70,7 @@ app.http('requests-create', { methods: ['POST'], authLevel: 'anonymous', route: 
   else throw new HttpError(400, 'type must be hire, change or termination.');
   if (!caller.inScope(r.storeId) && r.createdBy !== caller.upn) throw new HttpError(403, 'Out of scope.');
   const person = await people.get(r.personId);
-  let notification = null;
-  if (type !== 'hire') notification = await notify.send(r, 'created', person, caller, context);
+  const notification = await notify.send(r, 'created', person, caller, context);
   return created({ request: workflow.redact(r, caller), notification });
 }, { roles: ['manager'] }) });
 
@@ -129,7 +128,7 @@ app.http('requests-attach', { methods: ['POST'], authLevel: 'anonymous', route: 
   if (!buf.length || buf.length > config.maxAttachmentBytes) throw new HttpError(413, `Attachment must be between 1 byte and ${Math.round(config.maxAttachmentBytes / 1048576)} MB.`);
   const blobName = `${r.id}/${Date.now()}-${name}`;
   await getStore().putBlob(blobName, buf, body.contentType || 'application/octet-stream');
-  const att = { id: blobName, name, contentType: body.contentType || 'application/octet-stream', size: buf.length, uploadedBy: caller.upn, uploadedAt: new Date().toISOString(), hrOnly: !!body.hrOnly && caller.can('hr') };
+  const att = { id: blobName, name, contentType: body.contentType || 'application/octet-stream', size: buf.length, uploadedBy: caller.upn, uploadedAt: new Date().toISOString(), hrOnly: !!body.hrOnly && (caller.can('hr') || (r.type === 'termination' && (r.createdBy === caller.upn || r.managerUpn === caller.upn))) };
   r.attachments = (r.attachments || []).concat(att);
   await workflow.save(r);
   await workflow.addEvent(r, caller, 'attachment', `Attached ${name}`, { hrOnly: att.hrOnly });

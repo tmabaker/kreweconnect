@@ -30,6 +30,8 @@ const DEFAULT_TERMINATION = {
   ]
 };
 
+const DEFAULT_PAY_STRUCTURES = ['Hourly', 'Salary', 'Commission', 'Salary plus commission', 'Hourly plus commission', 'Draw against commission', 'Flat rate', 'Other'];
+
 function resolvePath() {
   if (process.env.KREWEWORKS_PROFILE_PATH) return process.env.KREWEWORKS_PROFILE_PATH;
   if (fs.existsSync(ACTIVE)) return ACTIVE;
@@ -47,7 +49,11 @@ function normalize(raw, source) {
   p.mail = Object.assign({ itCc: [] }, raw.mail || {});
   p.deploy = Object.assign({}, raw.deploy || {});
   p.tenants = Object.assign({ allowed: [] }, raw.tenants || {});
-  p.termination = Object.assign({}, DEFAULT_TERMINATION, raw.termination || {});
+  p.termination = Object.assign({ uniformsQuestion: '' }, DEFAULT_TERMINATION, raw.termination || {});
+  p.payStructures = Array.isArray(raw.payStructures) && raw.payStructures.length ? raw.payStructures.map(String) : DEFAULT_PAY_STRUCTURES;
+  // People copied on notifications by rule: { name, email, types: [hire|change|termination], departments: [...] }.
+  // No departments means every department.
+  p.mail.watchers = (Array.isArray(p.mail.watchers) ? p.mail.watchers : []).filter(w => w && /@/.test(String(w.email || '')));
   p.features = Object.assign({ confidentialHires: true }, raw.features || {});
   p.workflowHelp = raw.workflowHelp || {};
   p.accessProfiles = raw.accessProfiles || { groups: {} };

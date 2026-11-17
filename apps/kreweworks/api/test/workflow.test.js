@@ -21,7 +21,7 @@ const otherMgr = caller('other@bayoudemo.example', 'manager', ['south']);
 test.beforeEach(() => resetStore(new MemoryStore('')));
 
 test('hire runs end to end with the right roles at each step', async () => {
-  const r = await workflow.createHire({ firstName: 'Jane', lastName: 'Doe', mobile: '225-555-0100', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example', managerName: 'GM' }, manager);
+  const r = await workflow.createHire({ firstName: 'Jane', lastName: 'Doe', mobile: '225-555-0100', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example', managerName: 'GM' }, manager);
   assert.equal(r.stage, 'packet_pending');
   const p0 = await people.get(r.personId); assert.equal(p0.status, 'applicant'); assert.equal(p0.mobile, '+12255550100');
 
@@ -67,7 +67,7 @@ test('hire runs end to end with the right roles at each step', async () => {
 });
 
 test('HR-only data is redacted for managers and IT', async () => {
-  const r = await workflow.createHire({ firstName: 'A', lastName: 'B', mobile: '2255550101', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example' }, manager);
+  const r = await workflow.createHire({ firstName: 'A', lastName: 'B', mobile: '2255550101', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example' }, manager);
   let out = await workflow.applyAction(r, 'packet_sent', {}, manager);
   out = await workflow.applyAction(out.request, 'acknowledge', {}, hr);
   out = await workflow.applyAction(out.request, 'record_screening', { background: 'flag', notes: 'confidential' }, hr);
@@ -81,13 +81,13 @@ test('HR-only data is redacted for managers and IT', async () => {
 });
 
 test('duplicate detection flags a prior not-approved applicant and rehire keeps history', async () => {
-  const r = await workflow.createHire({ firstName: 'Sam', lastName: 'Rehire', mobile: '2255550102', storeId: 'north', department: 'Service', title: 'Porter', managerUpn: 'gm@bayoudemo.example' }, manager);
+  const r = await workflow.createHire({ firstName: 'Sam', lastName: 'Rehire', mobile: '2255550102', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Service', title: 'Porter', managerUpn: 'gm@bayoudemo.example' }, manager);
   let out = await workflow.applyAction(r, 'packet_sent', {}, manager);
   out = await workflow.applyAction(out.request, 'acknowledge', {}, hr);
   out = await workflow.applyAction(out.request, 'decline', {}, hr);
   const dups = await people.findDuplicates({ firstName: 'sam', lastName: 'REHIRE' });
   assert.equal(dups.length, 1); assert.deepEqual(dups[0].reasons, ['same name']);
-  const r2 = await workflow.createHire({ personId: dups[0].person.id, firstName: 'Sam', lastName: 'Rehire', mobile: '2255550102', storeId: 'south', department: 'Service', title: 'Porter', managerUpn: 'other@bayoudemo.example' }, otherMgr);
+  const r2 = await workflow.createHire({ personId: dups[0].person.id, firstName: 'Sam', lastName: 'Rehire', mobile: '2255550102', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'south', department: 'Service', title: 'Porter', managerUpn: 'other@bayoudemo.example' }, otherMgr);
   assert.equal(r2.isRehire, true);
   const p = await people.get(r2.personId);
   assert.equal(p.status, 'applicant'); assert.equal(p.previousEmployment.length, 1); assert.equal(p.previousEmployment[0].status, 'not_approved');
@@ -96,7 +96,7 @@ test('duplicate detection flags a prior not-approved applicant and rehire keeps 
 
 test('termination: involuntary is urgent, IT completion terminates the person, rehire flag is HR-only', async () => {
   const p = await people.create({ firstName: 'Old', lastName: 'Timer', storeId: 'north', department: 'Sales', title: 'Sales Associate', workEmail: 'otimer@bayoudemo.example', status: 'active', managerUpn: 'gm@bayoudemo.example' }, hr);
-  const r = await workflow.createTermination({ personId: p.id, lastDay: '2026-10-02', terminationType: 'termination_cause', rehireEligible: 'no', reasonNotes: 'policy', equipmentToRecover: 'Laptop, key fob' }, manager);
+  const r = await workflow.createTermination({ personId: p.id, separation: 'involuntary', noticeGiven: 'no', lastDay: '2026-10-02', terminationType: 'termination_cause', rehireEligible: 'no', reasonNotes: 'policy', equipmentToRecover: 'Laptop, key fob' }, manager);
   assert.equal(r.priority, 'urgent'); assert.equal(r.termination.accessEndAt, 'immediately');
   assert.equal((await people.get(p.id)).status, 'terminating');
   const redacted = workflow.redact(r, it);
@@ -126,7 +126,7 @@ test('change: transfer applies the new store and title when IT completes', async
 });
 
 test('visibility: managers only see their stores; HR and IT see everything', async () => {
-  const r = await workflow.createHire({ firstName: 'V', lastName: 'W', mobile: '2255550103', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example' }, manager);
+  const r = await workflow.createHire({ firstName: 'V', lastName: 'W', mobile: '2255550103', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example' }, manager);
   assert.equal(workflow.visibleTo(r, manager), true);
   assert.equal(workflow.visibleTo(r, otherMgr), false);
   assert.equal(workflow.visibleTo(r, hr), true);
@@ -150,7 +150,7 @@ test('every stage action references a real target stage', () => {
 test('confidential hire: hidden from other managers and IT until it reaches IT, duplicates do not reveal it', async () => {
   const sameStoreMgr = caller('peer@bayoudemo.example', 'manager', ['north']);
   const wideMgr = caller('regional@bayoudemo.example', 'manager', ['*']);
-  const r = await workflow.createHire({ firstName: 'Quiet', lastName: 'Hire', mobile: '2255550177', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example', confidential: true }, manager);
+  const r = await workflow.createHire({ firstName: 'Quiet', lastName: 'Hire', mobile: '2255550177', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example', confidential: true }, manager);
   assert.equal(r.confidential, true);
   assert.equal((await people.get(r.personId)).confidential, true);
   assert.equal(workflow.visibleTo(r, manager), true);
@@ -174,9 +174,9 @@ test('confidential hire: hidden from other managers and IT until it reaches IT, 
 
 test('termination checklists come from the profile', async () => {
   const profile = require('../src/lib/profile');
-  const r0 = await workflow.createHire({ firstName: 'T', lastName: 'C', mobile: '2255550178', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example' }, manager);
+  const r0 = await workflow.createHire({ firstName: 'T', lastName: 'C', mobile: '2255550178', payRate: '$18.00 per hour', payStructure: 'Hourly', storeId: 'north', department: 'Sales', title: 'Sales Associate', managerUpn: 'gm@bayoudemo.example' }, manager);
   const p = await people.get(r0.personId); p.status = 'active'; await people.save(p);
-  const t = await workflow.createTermination({ personId: p.id, lastDay: '2026-11-01', terminationType: 'resignation' }, manager);
+  const t = await workflow.createTermination({ personId: p.id, separation: 'voluntary', noticeGiven: 'no', rehireEligible: 'yes', reasonNotes: 'Moving out of state.', lastDay: '2026-11-01', terminationType: 'resignation' }, manager);
   assert.deepEqual(Object.keys(t.termination.hr).filter(k => k !== 'notes').sort(), profile.termination.hrChecks.map(c => c.key).sort());
   assert.ok(profile.termination.itChecks.every(c => t.termination.it[c.key] === false));
   assert.deepEqual(t.termination.deactivateApps.sort(), ['crm', 'erp', 'other']);
