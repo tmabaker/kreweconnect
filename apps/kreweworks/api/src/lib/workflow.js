@@ -309,7 +309,12 @@ async function applyAction(r, action, payload, actor) {
         packet.createInvite(r, actor, { candidateEmail: (h.packet.invite || {}).candidateEmail });
         break; }
       case 'manager_section':
-        for (const f of packet.def.managerSection.fields) if (payload[f.key] !== undefined) h.managerSection[f.key] = f.type === 'yesno' ? (bool(payload[f.key]) ? 'yes' : 'no') : clean(payload[f.key], 200);
+        for (const f of packet.def.managerSection.fields) {
+          if (payload[f.key] === undefined) continue;
+          // Someone who cannot see the rate (not this hire's manager or filer, not HR) cannot change it either.
+          if (f.key === 'rateOfPay' && !actor.can('hr') && !isParty(r, actor)) continue;
+          h.managerSection[f.key] = f.type === 'yesno' ? (bool(payload[f.key]) ? 'yes' : 'no') : clean(payload[f.key], 200);
+        }
         h.managerSection.approvedBy = actor.upn; h.managerSection.approvedAt = nowIso(); h.managerSection.approvedName = actor.name;
         break;
       case 'cole_called':
