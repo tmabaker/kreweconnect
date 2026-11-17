@@ -534,11 +534,12 @@ function redact(r, caller) {
   if (copy.hire) {
     copy.hire.screening = Object.assign({}, copy.hire.screening, { notes: undefined }); if (copy.hire.decision) copy.hire.decision.reason = undefined;
     if (copy.hire.packet && copy.hire.packet.submission) copy.hire.packet.submission = packet.viewSubmission(copy.hire.packet.submission, caller, false);
-    if (copy.hire.managerSection && !caller.can('manager')) delete copy.hire.managerSection.rateOfPay;
+    if (copy.hire.managerSection && !isParty(r, caller)) delete copy.hire.managerSection.rateOfPay;
   }
   if (copy.termination) { delete copy.termination.reasonNotes; delete copy.termination.rehireEligible; delete copy.termination.otherComments; }
-  // Pay is for HR and the hiring side (the hiring manager and whoever filed it), never IT.
-  if (copy.hire && copy.hire.pay && !(caller.can('manager') && (caller.role !== 'it'))) delete copy.hire.pay;
+  // Pay is for HR and this hire's own side (its hiring manager and whoever filed it). Never IT, and never
+  // another manager who can see the request, such as a director copied on notifications.
+  if (copy.hire && copy.hire.pay && !isParty(r, caller)) delete copy.hire.pay;
   return copy;
 }
 

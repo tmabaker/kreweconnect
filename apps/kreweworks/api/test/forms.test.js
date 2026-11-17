@@ -42,6 +42,11 @@ test('a hire needs a rate of pay and a pay structure, and IT never sees them', a
   assert.equal(workflow.redact(r, manager).hire.pay.rate, '$18.00 per hour');
   assert.equal(workflow.redact(r, hr).hire.pay.rate, '$18.00 per hour');
   assert.equal(workflow.redact(r, it).hire.pay, undefined);
+  // Another manager who can see the request (a director, an office lead) does not see pay.
+  assert.equal(workflow.redact(r, caller('director@bayoudemo.example', 'manager')).hire.pay, undefined);
+  r.hire.managerSection.rateOfPay = '$18.00 per hour (Hourly)';
+  assert.equal(workflow.redact(r, caller('director@bayoudemo.example', 'manager')).hire.managerSection.rateOfPay, undefined);
+  assert.equal(workflow.redact(r, manager).hire.managerSection.rateOfPay, '$18.00 per hour (Hourly)');
 });
 
 async function person() {
