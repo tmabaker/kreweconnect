@@ -75,3 +75,33 @@ test('the termination link to Tech Tools carries the tenant and endpoint', async
   assert.equal(q.get('endpoint'), 'BD-NORTH-PC1');
   assert.ok(q.get('tenant'));
 });
+
+async function get(path, key) {
+  const headers = {};
+  if (key !== undefined) headers['x-kreweworks-service-key'] = key;
+  const res = await routes.dispatch('GET', new URL(`http://x/api/${path}`), null, headers);
+  return { status: res.status, body: JSON.parse(res.body) };
+}
+
+test('the service read route needs the service key and returns nothing without it', async () => {
+  const r = await termination();
+  assert.equal((await get(`service/requests/${r.id}`)).status, 403);
+  assert.equal((await get(`service/requests/${r.id}`, 'wrong-key-of-same-len')).status, 403);
+  assert.equal((await get('service/requests/T-missing', 'test-service-key')).status, 404);
+});
+
+test('the service read route returns the IT view: no HR-only termination fields, a person allow-list and the timeline', async () => {
+  const r = await termination();
+  const res = await get(`service/requests/${r.id}`, 'test-service-key');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.request.id, r.id);
+  assert.equal(res.body.request.termination.deviceEndpointName, 'BD-NORTH-PC1');
+  assert.equal(res.body.request.termination.reasonNotes, undefined);
+  assert.equal(res.body.request.termination.rehireEligible, undefined);
+  assert.equal(res.body.person.workEmail, 'fparkin@bayoudemo.example');
+  assert.deepEqual(Object.keys(res.body.person).filter(k => !['id', 'firstName', 'lastName', 'preferredName', 'displayName', 'workEmail', 'upn', 'storeId', 'title', 'department', 'managerUpn', 'status', 'extension'].includes(k)), []);
+  assert.ok(Array.isArray(res.body.events) && res.body.events.length >= 1);
+  // Reading changes nothing.
+  assert.deepEqual(await workflow.get(r.id), (await workflow.get(r.id)));
+  assert.equal((await workflow.events(r.id)).length, res.body.events.length);
+});
