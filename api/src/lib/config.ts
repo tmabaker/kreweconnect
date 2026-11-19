@@ -89,6 +89,32 @@ export const config = {
   },
 
   /**
+   * Who a client user should contact to request access to an area they cannot
+   * open. ACCESS_CONTACTS app setting: JSON object of tenant id ->
+   * {"name": "...", "email": "..."}. Kept out of the repo because the repo is
+   * public. Tenants without an entry keep the generic wording.
+   */
+  get accessContacts(): Record<string, { name: string; email: string }> {
+    const out: Record<string, { name: string; email: string }> = {};
+    const raw = process.env.ACCESS_CONTACTS;
+    if (!raw) return out;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const [tid, v] of Object.entries(parsed as Record<string, any>)) {
+          const email = typeof v?.email === "string" ? v.email.trim() : "";
+          if (!/^[^\s@]+@[^\s@]+$/.test(email)) continue;
+          const name = typeof v?.name === "string" && v.name.trim() ? v.name.trim() : email;
+          out[tid.toLowerCase()] = { name, email };
+        }
+      }
+    } catch {
+      // malformed setting: no contacts, generic wording everywhere
+    }
+    return out;
+  },
+
+  /**
    * KreweWorks employee portals, one per client (each client runs its own site).
    * KREWEWORKS_PORTALS app setting: JSON object of tenant id -> portal https URL.
    * Defaults to the pilot tenant's portal, which is already public elsewhere.

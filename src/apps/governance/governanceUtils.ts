@@ -56,6 +56,11 @@ export function parseOptions(options: string | null | undefined): string[] {
   }
 }
 
+/** The governance API refused this caller: not provisioned, or not their company. */
+export function isNoAccess(err: unknown): boolean {
+  return isGovError(err) && (err.statusCode === 403 || err.code === "not_provisioned");
+}
+
 export function errorMessage(err: unknown): string {
   if (isGovError(err)) return err.message;
   return err instanceof Error ? err.message : "Something went wrong.";

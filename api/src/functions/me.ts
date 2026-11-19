@@ -28,6 +28,8 @@ app.http("me", {
         userPrincipalName: caller.userPrincipalName,
         isMspAdmin: caller.isMspAdmin,
         canManageUsers: caller.canManageUsers,
+        // Who to email for access to an area this caller cannot open (null = generic wording).
+        accessContact: config.accessContacts[caller.tenantId.toLowerCase()] ?? null,
       },
     };
   }),

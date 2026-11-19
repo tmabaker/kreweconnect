@@ -16,7 +16,8 @@ import {
 import { Add24Regular, Building24Regular } from "@fluentui/react-icons";
 import { createGovClient, fetchGovClients } from "../../services/governanceService";
 import { detectUserTenantContext } from "../../services/tenantService";
-import { useGovQuery, errorMessage } from "./governanceUtils";
+import { isNoAccess, useGovQuery, errorMessage } from "./governanceUtils";
+import { NoAccessNotice } from "../../shared/components/NoAccessNotice";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px" },
@@ -71,6 +72,8 @@ export function ClientsPage() {
       setSaving(false);
     }
   };
+
+  if (isNoAccess(error)) return <NoAccessNotice area="KREWE Governance" />;
 
   return (
     <div className={styles.page}>
