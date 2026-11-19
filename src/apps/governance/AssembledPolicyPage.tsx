@@ -18,7 +18,8 @@ import {
   Print24Regular,
 } from "@fluentui/react-icons";
 import { acknowledgeAssembled, fetchAssembled } from "../../services/governanceService";
-import { useGovQuery, formatDateTime, errorMessage } from "./governanceUtils";
+import { isNoAccess, useGovQuery, formatDateTime, errorMessage } from "./governanceUtils";
+import { NoAccessNotice } from "../../shared/components/NoAccessNotice";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px", maxWidth: "1000px" },
@@ -67,6 +68,7 @@ export function AssembledPolicyPage() {
   };
 
   if (loading) return <Spinner label="Loading policy document…" />;
+  if (isNoAccess(error)) return <NoAccessNotice area="KREWE Governance" />;
   if (error) {
     return (
       <MessageBar intent="error">

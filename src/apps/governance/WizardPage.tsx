@@ -30,7 +30,8 @@ import {
   type GovWizardQuestion,
 } from "../../services/governanceService";
 import { detectUserTenantContext } from "../../services/tenantService";
-import { useGovQuery, parseOptions, errorMessage } from "./governanceUtils";
+import { isNoAccess, useGovQuery, parseOptions, errorMessage } from "./governanceUtils";
+import { NoAccessNotice } from "../../shared/components/NoAccessNotice";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px", maxWidth: "820px" },
@@ -186,6 +187,8 @@ export function WizardPage() {
   };
 
   const selectedClient = (clients ?? []).find((c) => c.id === clientId);
+
+  if (isNoAccess(clientsError) || isNoAccess(wizardError)) return <NoAccessNotice area="KREWE Governance" />;
 
   return (
     <div className={styles.page}>

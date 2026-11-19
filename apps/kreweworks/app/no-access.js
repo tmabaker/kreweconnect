@@ -7,6 +7,11 @@
     if (h.branding && h.branding.logo) document.getElementById('logo').src = h.branding.logo;
     document.getElementById('logo').alt = h.client;
     document.getElementById('who').textContent = 'This portal is open to hiring managers, HR and IT at ' + h.client + ' by invitation.';
+    var ac = h.contacts && h.contacts.access;
+    if (ac && ac.email) {
+      document.getElementById('ask').innerHTML = 'To request access, email ' + esc(ac.name || ac.email) + ' at <a href="mailto:' + esc(ac.email) + '">' + esc(ac.email) + '</a>. Once added, sign out and back in.';
+      return;
+    }
     var ask = [];
     if (h.contacts && h.contacts.hr) ask.push('HR (<a href="mailto:' + esc(h.contacts.hr) + '">' + esc(h.contacts.hr) + '</a>)');
     if (h.contacts && h.contacts.helpdesk) ask.push('the support desk (<a href="mailto:' + esc(h.contacts.helpdesk) + '">' + esc(h.contacts.helpdesk) + '</a>)');

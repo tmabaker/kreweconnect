@@ -8,7 +8,7 @@ const graph = require('../lib/graph');
 const model = require('../lib/model');
 const data = require('../lib/profile');
 
-app.http('health', { methods: ['GET'], authLevel: 'anonymous', route: 'health', handler: route(async () => ok({ ok: true, product: 'KreweWorks', client: data.client.name, branding: { logo: data.branding.logo }, contacts: { hr: config.mail.hr, helpdesk: (data.client.helpdesk || {}).email || '' }, storage: config.storageConnection ? 'azure' : 'memory', graph: graph.configured(), mail: config.mail.enabled, time: new Date().toISOString() }), { anonymous: true }) });
+app.http('health', { methods: ['GET'], authLevel: 'anonymous', route: 'health', handler: route(async () => ok({ ok: true, product: 'KreweWorks', client: data.client.name, branding: { logo: data.branding.logo }, contacts: { hr: config.mail.hr, helpdesk: (data.client.helpdesk || {}).email || '', access: data.client.accessContact || null }, storage: config.storageConnection ? 'azure' : 'memory', graph: graph.configured(), mail: config.mail.enabled, time: new Date().toISOString() }), { anonymous: true }) });
 
 // Static Web Apps posts the signed-in identity here right after login and stores the returned roles in the auth cookie.
 app.http('roles', { methods: ['POST'], authLevel: 'anonymous', route: 'roles', handler: route(async (request, context) => {

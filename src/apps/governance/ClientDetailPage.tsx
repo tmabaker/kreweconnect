@@ -30,7 +30,8 @@ import {
   updateGovClient,
 } from "../../services/governanceService";
 import { detectUserTenantContext } from "../../services/tenantService";
-import { useGovQuery, formatDateTime, errorMessage } from "./governanceUtils";
+import { isNoAccess, useGovQuery, formatDateTime, errorMessage } from "./governanceUtils";
+import { NoAccessNotice } from "../../shared/components/NoAccessNotice";
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: "20px", maxWidth: "1000px" },
@@ -112,6 +113,7 @@ export function ClientDetailPage() {
   };
 
   if (loadingClients) return <Spinner label="Loading client…" />;
+  if (isNoAccess(clientsError)) return <NoAccessNotice area="KREWE Governance" />;
   if (clientsError) {
     return (
       <MessageBar intent="error">

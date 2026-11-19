@@ -95,32 +95,32 @@ function App() {
             <Routes>
               <Route element={<AppShell />}>
                 {/* MSP-admin-only landing, and where sign-in returns. Clients are redirected to the directory. */}
-                <Route path="/kreweconnect" element={<MspAdminRoute><DashboardPage /></MspAdminRoute>} />
+                <Route path="/kreweconnect" element={<MspAdminRoute redirect><DashboardPage /></MspAdminRoute>} />
                 {/* KreweConnect — available to clients (their own tenant only). */}
                 <Route path="/kreweconnect/directory" element={<DirectoryPage />} />
                 <Route path="/kreweconnect/directory/:id" element={<EmployeeDetailPage />} />
                 <Route path="/kreweconnect/org-chart" element={<OrgChartPage />} />
                 {/* KreweReview / Contracts + Settings — MSP-admin only. */}
                 <Route element={<CompactArea><Outlet /></CompactArea>}>
-                  <Route path="/krewereview" element={<MspAdminRoute><ContractsPage /></MspAdminRoute>} />
-                  <Route path="/krewereview/all" element={<MspAdminRoute><ContractListPage /></MspAdminRoute>} />
-                  <Route path="/krewereview/new" element={<MspAdminRoute><ContractFormPage mode="new" /></MspAdminRoute>} />
-                  <Route path="/krewereview/renewals" element={<MspAdminRoute><RenewalsPage /></MspAdminRoute>} />
-                  <Route path="/krewereview/lists" element={<MspAdminRoute><PicklistsPage /></MspAdminRoute>} />
-                  <Route path="/krewereview/:tenantId/:id" element={<MspAdminRoute><ContractDetailPage /></MspAdminRoute>} />
-                  <Route path="/krewereview/:tenantId/:id/edit" element={<MspAdminRoute><ContractFormPage mode="edit" /></MspAdminRoute>} />
-                  <Route path="/krewereview/:tenantId/:id/renew" element={<MspAdminRoute><ContractFormPage mode="renew" /></MspAdminRoute>} />
-                  <Route path="/krewereview/:tenantId/:id/amend" element={<MspAdminRoute><ContractFormPage mode="amend" /></MspAdminRoute>} />
+                  <Route path="/krewereview" element={<MspAdminRoute area="KreweReview"><ContractsPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/all" element={<MspAdminRoute area="KreweReview"><ContractListPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/new" element={<MspAdminRoute area="KreweReview"><ContractFormPage mode="new" /></MspAdminRoute>} />
+                  <Route path="/krewereview/renewals" element={<MspAdminRoute area="KreweReview"><RenewalsPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/lists" element={<MspAdminRoute area="KreweReview"><PicklistsPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id" element={<MspAdminRoute area="KreweReview"><ContractDetailPage /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id/edit" element={<MspAdminRoute area="KreweReview"><ContractFormPage mode="edit" /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id/renew" element={<MspAdminRoute area="KreweReview"><ContractFormPage mode="renew" /></MspAdminRoute>} />
+                  <Route path="/krewereview/:tenantId/:id/amend" element={<MspAdminRoute area="KreweReview"><ContractFormPage mode="amend" /></MspAdminRoute>} />
                 </Route>
-                <Route path="/settings" element={<MspAdminRoute><SettingsPage /></MspAdminRoute>} />
+                <Route path="/settings" element={<MspAdminRoute area="Settings"><SettingsPage /></MspAdminRoute>} />
                 {/* KREWE Governance — library management is MSP-only; the wizard,
                     client profile, and assembled viewer are client-reachable
                     (the API scopes them to the caller's own company). */}
-                <Route path="/krewegovernance" element={<MspAdminRoute><GovernancePage /></MspAdminRoute>} />
-                <Route path="/krewegovernance/policies/new" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
-                <Route path="/krewegovernance/policies/:id" element={<MspAdminRoute><PolicyDetailPage /></MspAdminRoute>} />
-                <Route path="/krewegovernance/policies/:id/edit" element={<MspAdminRoute><PolicyFormPage /></MspAdminRoute>} />
-                <Route path="/krewegovernance/policies/:id/variables" element={<MspAdminRoute><PolicyVariablesPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance" element={<MspAdminRoute area="KREWE Governance"><GovernancePage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/new" element={<MspAdminRoute area="KREWE Governance"><PolicyFormPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id" element={<MspAdminRoute area="KREWE Governance"><PolicyDetailPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id/edit" element={<MspAdminRoute area="KREWE Governance"><PolicyFormPage /></MspAdminRoute>} />
+                <Route path="/krewegovernance/policies/:id/variables" element={<MspAdminRoute area="KREWE Governance"><PolicyVariablesPage /></MspAdminRoute>} />
                 <Route path="/krewegovernance/policies/:id/wizard" element={<WizardPage />} />
                 <Route path="/krewegovernance/clients" element={<GovClientsPage />} />
                 <Route path="/krewegovernance/clients/:id" element={<GovClientDetailPage />} />

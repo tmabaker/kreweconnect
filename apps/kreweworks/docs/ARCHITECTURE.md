@@ -23,7 +23,7 @@
 
 | Key | Purpose |
 |---|---|
-| `client` | `slug`, `name`, `tenantId`, `primaryDomain`, `helpdesk {name,email,phone}`, `hr {email}`, `operatedBy` |
+| `client` | `slug`, `name`, `tenantId`, `primaryDomain`, `helpdesk {name,email,phone}`, `hr {email}`, `operatedBy`, optional `accessContact {name,email}` (shown on the no-access page as the one person to email for access) |
 | `tenants.allowed` | Entra tenant ids allowed to sign in (client plus MSP) |
 | `vocab` | `location` / `locations` (Store, Office, Vessel…), `hrSystem` (Netchex, Paylocity…), `portalName` |
 | `branding` | `logo` (path under the app), `primary`, `primaryDark`, `accent`, `subtitle` |

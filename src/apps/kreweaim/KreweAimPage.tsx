@@ -27,6 +27,7 @@ import {
 } from "@fluentui/react-icons";
 import { isDemoMode } from "../../shared/auth/demoMode";
 import { Fleur } from "../../shared/components/AimMark";
+import { AccessRequestText } from "../../shared/components/NoAccessNotice";
 import {
   askCoach,
   fetchMyAim,
@@ -210,7 +211,7 @@ export function KreweAimPage() {
     );
   }
 
-  const statusCard = (enrolled: boolean, title: string, body: string) => (
+  const statusCard = (enrolled: boolean, title: string, body: ReactNode) => (
     <Card>
       <div className={styles.status}>
         <span className={`${styles.mark} ${enrolled ? "" : styles.markOff}`}>
@@ -238,7 +239,7 @@ export function KreweAimPage() {
     return (
       <div className={styles.page}>
         {header}
-        {statusCard(false, "You're not enrolled yet", "KreweAIM is assigned by your IT admin or NOIT Group. Ask them if you would like to join.")}
+        {statusCard(false, "You're not enrolled yet", <AccessRequestText fallback="KreweAIM is assigned by your IT admin or NOIT Group. Ask them if you would like to join." />)}
       </div>
     );
   }
